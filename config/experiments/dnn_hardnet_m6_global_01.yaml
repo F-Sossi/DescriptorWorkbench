@@ -1,0 +1,52 @@
+experiment:
+  name: "dnn_hardnet_m6_global_01_independent"
+  description: "HardNet m=6.0, global norm mean=0.0 std=1.0"
+  version: "1.0"
+  author: "researcher"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: ["i_dome", "v_wall"]
+
+keypoints:
+  generator: "sift"
+  max_features: 1500
+  source: "independent_detection"
+
+descriptors:
+  - name: "hardnet_m6_global01"
+    type: "dnn_patch"
+    pooling: "none"
+    use_color: false
+    dnn:
+      model: "../models/proper_hardnet_opset11.onnx"
+      input_size: 32
+      support_multiplier: 6.0
+      rotate_to_upright: true
+      mean: 0.0
+      std: 1.0
+      per_patch_standardize: false
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+output:
+  results_path: "results/"
+  save_keypoints: false
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+database:
+  enabled: true
+  connection: "sqlite:///experiments.db"
+

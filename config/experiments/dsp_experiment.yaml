@@ -1,0 +1,49 @@
+experiment:
+  name: "domain_size_pooling_test"
+  description: "Test domain size pooling with different scales"
+  version: "1.0"
+  author: "researcher"
+
+dataset:
+  type: "hpatches"
+  path: "data/hpatches/"
+  scenes: ["i_ajuntament"]  # Single scene for testing
+
+keypoints:
+  generator: "sift"
+  max_features: 2000
+
+descriptors:
+  - name: "sift_no_pooling"
+    type: "sift"
+    pooling: "none"
+
+  - name: "sift_dsp_2scales"
+    type: "sift"
+    pooling: "domain_size_pooling"
+    scales: [1.0, 1.5]
+    normalize_before_pooling: false
+    normalize_after_pooling: true
+
+  - name: "sift_dsp_3scales"
+    type: "sift"
+    pooling: "domain_size_pooling"
+    scales: [1.0, 1.5, 2.0]
+    normalize_before_pooling: false
+    normalize_after_pooling: true
+
+evaluation:
+  matching:
+    method: "brute_force"
+    threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+
+output:
+  results_path: "results/"
+  save_visualizations: true
+
+database:
+  enabled: false

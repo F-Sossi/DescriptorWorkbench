@@ -1,0 +1,32 @@
+# Experiment Configuration Template for Analysis
+experiment:
+  name: "My Descriptor Comparison"
+  description: "Comparing SIFT, RGBSIFT, and other descriptors"
+
+analysis:
+  # Metrics to focus on
+  primary_metrics:
+    - "precision"
+    - "recall"
+    - "mean_average_precision"
+
+  # Visualization preferences
+  plots:
+    - "precision_recall_curve"
+    - "distribution_histograms"
+    - "comparative_bar_charts"
+    - "correlation_heatmap"
+
+  # Report sections to include
+  report_sections:
+    - "executive_summary"
+    - "detailed_metrics"
+    - "visual_analysis"
+    - "recommendations"
+
+# Output preferences
+output:
+  formats: ["html", "pdf", "json"]
+  include_raw_data: true
+  plot_format: "png"
+  plot_dpi: 300

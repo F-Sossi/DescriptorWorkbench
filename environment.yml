@@ -1,0 +1,44 @@
+name: descriptor-compare
+channels:
+  - conda-forge
+  - pytorch
+dependencies:
+  # Core development tools
+  - cmake>=3.16
+  - cxx-compiler
+  - make
+  - git
+
+  # Core libraries for computer vision
+  - opencv
+  - boost-cpp
+
+  # Threading library
+  - tbb-devel
+
+  # Python environment for potential CNN descriptors
+  - python=3.11
+  - numpy
+  - matplotlib
+  - pybind11
+
+  # Deep learning frameworks (for future CNN descriptor integration)
+  - pytorch
+  - torchvision
+
+  # Data analysis and visualization
+  - pandas
+  - seaborn
+  - jupyter
+  - scikit-learn
+
+  # Build tools
+  - pkg-config
+
+  # Documentation
+  - sphinx
+
+  # pip packages for additional tools
+  - pip
+  - pip:
+    - conan  # Fallback package manager

@@ -1,0 +1,158 @@
+# Build directories for different environments
+cmake-build-*/
+build/
+build-*/
+out/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Python virtual environments
+venv/
+env/
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Conan package manager
+.conan/
+conan.lock
+conanbuild.sh
+conanrun.sh
+deactivate_conanbuild.sh
+deactivate_conanrun.sh
+
+# Docker related
+.dockerignore
+docker-compose.override.yml
+
+# Operating system files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.#*
+
+# Log files
+*.log
+AGENTS.md
+CLAUDE.md
+
+# Core dumps
+core.*
+
+# Configuration files (keep structure, ignore content)
+!config_files/
+config_files/*
+!config_files/.gitkeep
+!config_files/example_*
+
+# Reference keypoints (generated/downloaded)
+!reference_keypoints/
+reference_keypoints/*
+!reference_keypoints/.gitkeep
+
+# Dataset directory (HPatches - downloaded by setup.py)
+!data/
+data/*
+!data/.gitkeep
+!data/README.md
+
+# Results directory (experimental outputs)
+!results/
+results/*
+!results/.gitkeep
+
+# Models directory (for future CNN descriptors)
+!models/
+models/*
+!models/.gitkeep
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.make
+install_manifest.txt
+CTestTestfile.cmake
+_deps/
+
+# Visual Studio / Windows specific
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.vs/
+x64/
+x86/
+Debug/
+Release/
+*.exe
+*.dll
+*.pdb
+
+# Xcode / macOS specific
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
+
+# Package managers
+vcpkg_installed/
+packages/
+
+# Documentation build
+docs/_build/
+site/
+
+# Test outputs
+test_results/
+coverage/
+
+# Profiling data
+*.prof
+gmon.out
+perf.data*
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# JetBrains specific
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/usage.statistics.xml
+.idea/**/dictionaries
+.idea/**/shelf
+.idea/**/contentModel.xml
+.idea/**/dataSources/
+.idea/**/dataSources.ids
+.idea/**/dataSources.local.xml
+.idea/**/sqlDataSources.xml
+.idea/**/dynamic.xml
+.idea/**/uiDesigner.xml
+.idea/**/dbnavigator.xml
+/stages/
+/z_oldfiles/
+/.claude/
+/docs/StatusDocs/

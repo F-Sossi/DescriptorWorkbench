@@ -1,0 +1,11 @@
+[requires]
+sqlite3/3.43.2
+hdf5/1.14.3
+yaml-cpp/0.8.0
+
+[generators]
+CMakeDeps
+CMakeToolchain
+
+[options]
+hdf5/*:shared=True

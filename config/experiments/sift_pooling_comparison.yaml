@@ -1,0 +1,85 @@
+experiment:
+  name: "sift_pooling_comparison"
+  description: "Compare pooling strategies on SIFT - None vs Domain Size Pooling vs Stacking"
+  version: "1.0"
+  author: "researcher"
+  note: "Tests how different pooling strategies affect SIFT descriptor performance"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # Use all available scenes
+
+keypoints:
+  generator: "sift"
+  max_features: 2000
+  contrast_threshold: 0.04
+  edge_threshold: 10.0
+
+descriptors:
+  # Baseline: No pooling (we know this gives 31.7%)
+  - name: "sift_no_pooling"
+    type: "sift"
+    pooling: "none"
+    normalize_before_pooling: false
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: false
+    
+  # Domain Size Pooling: Should improve multi-scale matching
+  - name: "sift_domain_size_pooling"
+    type: "sift"
+    pooling: "domain_size_pooling"
+    normalize_before_pooling: false
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: false
+    
+  # Stacking: Should improve robustness by combining descriptors
+  - name: "sift_stacking"
+    type: "sift"
+    pooling: "stacking"
+    normalize_before_pooling: false
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: false
+    
+  # Test with L1 norm for comparison
+  - name: "sift_no_pooling_l1"
+    type: "sift"
+    pooling: "none"
+    normalize_before_pooling: false
+    normalize_after_pooling: true
+    norm_type: 1  # L1
+    use_color: false
+    
+  - name: "sift_domain_size_pooling_l1"
+    type: "sift"
+    pooling: "domain_size_pooling"
+    normalize_before_pooling: false
+    normalize_after_pooling: true
+    norm_type: 1  # L1
+    use_color: false
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+output:
+  results_path: "results/"
+  save_keypoints: false
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+database:
+  enabled: true
+  connection: "sqlite:///experiments.db"

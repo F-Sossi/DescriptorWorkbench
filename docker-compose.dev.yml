@@ -1,0 +1,33 @@
+services:
+  descriptor-dev:
+    build:
+      context: .
+      target: development
+      dockerfile: Dockerfile
+      args:
+        USER_ID: ${UID:-1000}
+        GROUP_ID: ${GID:-1000}
+
+    volumes:
+      # Mount your source code
+      - .:/workspace
+      # Mount X11 socket for GUI applications (for analysis visualizations)
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+
+    environment:
+      # X11 forwarding for analysis and visualization
+      - DISPLAY=${DISPLAY}
+
+    # Keep container running for development
+    command: tail -f /dev/null
+
+    stdin_open: true
+    tty: true
+
+    # Usage (user-safe, no permission conflicts):
+    # export UID=$(id -u) && export GID=$(id -g)  # Set user IDs for Docker
+    # docker-compose -f docker-compose.dev.yml up -d
+    # docker-compose -f docker-compose.dev.yml exec descriptor-dev bash
+    # cd build && cmake .. -DBUILD_DATABASE=ON && make -j$(nproc)
+    # ./experiment_runner ../config/experiments/sift_baseline.yaml
+    # Files created in container will match your host user permissions!

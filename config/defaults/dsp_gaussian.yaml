@@ -1,0 +1,46 @@
+experiment:
+  name: "sift_dsp_gaussian"
+  description: "SIFT with domain size pooling (gaussian weighting)"
+  version: "1.0"
+  author: "researcher"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+
+keypoints:
+  generator: "sift"
+  max_features: 2000
+  source: "homography_projection"
+
+descriptors:
+  - name: "sift_dsp_gauss"
+    type: "sift"
+    pooling: "domain_size_pooling"
+    scales: [ 0.85, 1.0, 1.3 ]
+    scale_weighting: "gaussian"
+    scale_weight_sigma: 0.15
+    normalize_after_pooling: true
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+output:
+  results_path: "results/"
+  save_keypoints: false
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: true
+
+database:
+  enabled: true
+  connection: "sqlite:///experiments.db"
+
