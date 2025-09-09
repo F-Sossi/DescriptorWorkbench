@@ -308,10 +308,13 @@ bool DatabaseManager::recordExperiment(const ExperimentResults& results) const {
     if (!isEnabled()) return true; // Success if disabled
 
     const auto sql = R"(
-        INSERT INTO results (experiment_id, mean_average_precision, precision_at_1,
-                           precision_at_5, recall_at_1, recall_at_5, total_matches,
-                           total_keypoints, processing_time_ms, timestamp, metadata)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        INSERT INTO results (experiment_id, true_map_macro, true_map_micro, 
+                           true_map_macro_with_zeros, true_map_micro_with_zeros,
+                           precision_at_1, precision_at_5, recall_at_1, recall_at_5, 
+                           mean_average_precision, legacy_mean_precision,
+                           total_matches, total_keypoints, processing_time_ms, 
+                           timestamp, metadata)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
     )";
 
     sqlite3_stmt* stmt;
@@ -328,18 +331,23 @@ bool DatabaseManager::recordExperiment(const ExperimentResults& results) const {
     }
     std::string metadata_str = metadata_ss.str();
 
-    // Bind parameters
+    // Bind parameters (16 total now)
     sqlite3_bind_int(stmt, 1, results.experiment_id);
-    sqlite3_bind_double(stmt, 2, results.mean_average_precision);
-    sqlite3_bind_double(stmt, 3, results.precision_at_1);
-    sqlite3_bind_double(stmt, 4, results.precision_at_5);
-    sqlite3_bind_double(stmt, 5, results.recall_at_1);
-    sqlite3_bind_double(stmt, 6, results.recall_at_5);
-    sqlite3_bind_int(stmt, 7, results.total_matches);
-    sqlite3_bind_int(stmt, 8, results.total_keypoints);
-    sqlite3_bind_double(stmt, 9, results.processing_time_ms);
-    sqlite3_bind_text(stmt, 10, impl_->getCurrentTimestamp().c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_text(stmt, 11, metadata_str.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_double(stmt, 2, results.true_map_macro);
+    sqlite3_bind_double(stmt, 3, results.true_map_micro);
+    sqlite3_bind_double(stmt, 4, results.true_map_macro_with_zeros);
+    sqlite3_bind_double(stmt, 5, results.true_map_micro_with_zeros);
+    sqlite3_bind_double(stmt, 6, results.precision_at_1);
+    sqlite3_bind_double(stmt, 7, results.precision_at_5);
+    sqlite3_bind_double(stmt, 8, results.recall_at_1);
+    sqlite3_bind_double(stmt, 9, results.recall_at_5);
+    sqlite3_bind_double(stmt, 10, results.mean_average_precision);
+    sqlite3_bind_double(stmt, 11, results.legacy_mean_precision);
+    sqlite3_bind_int(stmt, 12, results.total_matches);
+    sqlite3_bind_int(stmt, 13, results.total_keypoints);
+    sqlite3_bind_double(stmt, 14, results.processing_time_ms);
+    sqlite3_bind_text(stmt, 15, impl_->getCurrentTimestamp().c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 16, metadata_str.c_str(), -1, SQLITE_STATIC);
 
     rc = sqlite3_step(stmt);
     const bool success = (rc == SQLITE_DONE);

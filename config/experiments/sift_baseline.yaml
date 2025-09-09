@@ -15,7 +15,7 @@ keypoints:
   contrast_threshold: 0.04
   edge_threshold: 10.0
   source: "homography_projection"  # NEW: "homography_projection" or "independent_detection"
-  keypoint_set_name: "sift_unlimited_independent"  # Optional: specific keypoint set to use
+  keypoint_set_name: "sift_homography_projection"  # Use the homography projection keypoint set
   use_locked_keypoints: false  # LEGACY: for backward compatibility
 
 descriptors:

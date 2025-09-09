@@ -1,0 +1,93 @@
+experiment:
+  name: "dspsift_systematic_analysis"
+  description: "Systematic analysis of DSPSIFT (Domain-Size Pooled SIFT) modifications - Color and Normalization effects"
+  version: "1.0"
+  author: "researcher"
+  note: "Tests DSPSIFT performance variations - inherently includes domain-size pooling, so tests color and normalization"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # Use all available scenes
+
+keypoints:
+  generator: "sift"
+  max_features: 2000
+  contrast_threshold: 0.04
+  edge_threshold: 10.0
+  source: "homography_projection"
+  keypoint_set_name: "homography_projection_systematic"
+
+descriptors:
+  # ===== BASELINE: Traditional DSPSIFT =====
+  - name: "dspsift_baseline_grayscale_dsp_l2"
+    type: "dspsift"
+    pooling: "domain_size_pooling"  # DSPSIFT inherently uses DSP
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: false
+    
+  # ===== COLOR EFFECTS (DSP, L2 norm) =====
+  - name: "dspsift_baseline_color_dsp_l2"
+    type: "dspsift"
+    pooling: "domain_size_pooling"
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: true
+    
+  # ===== NORMALIZATION EFFECTS (Grayscale, DSP) =====
+  - name: "dspsift_baseline_grayscale_dsp_l1"
+    type: "dspsift"
+    pooling: "domain_size_pooling"
+    normalize_after_pooling: true
+    norm_type: 1  # L1
+    use_color: false
+    
+  # ===== COMBINED EFFECTS =====
+  # Color + L1 norm
+  - name: "dspsift_color_dsp_l1"
+    type: "dspsift"
+    pooling: "domain_size_pooling"
+    normalize_after_pooling: true
+    norm_type: 1  # L1
+    use_color: true
+    
+  # ===== ALTERNATIVE POOLING (experimental) =====
+  # Test stacking on top of DSPSIFT
+  - name: "dspsift_grayscale_stacking_l2"
+    type: "dspsift"
+    pooling: "stacking"
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: false
+    
+  # Color + Stacking
+  - name: "dspsift_color_stacking_l2"
+    type: "dspsift"
+    pooling: "stacking"
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: true
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+output:
+  results_path: "results/"
+  save_keypoints: false
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+database:
+  enabled: true
+  connection: "sqlite:///experiments.db"

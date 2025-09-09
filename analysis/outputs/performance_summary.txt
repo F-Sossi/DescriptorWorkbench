@@ -1,0 +1,22 @@
+DESCRIPTOR PERFORMANCE ANALYSIS SUMMARY
+==================================================
+
+BASE DESCRIPTOR PERFORMANCE:
+                mean_average_precision                 precision_at_1                 precision_at_5               
+                                  mean       std count           mean       std count           mean      std count
+base_descriptor                                                                                                    
+SIFT                          0.363122  0.004768     4        0.27607  0.004837     4       0.460427  0.00513     4
+
+POOLING STRATEGY PERFORMANCE:
+              macro_map            micro_map            precision_at_1            precision_at_5           
+                   mean  std count      mean  std count           mean  std count           mean  std count
+pooling_clean                                                                                              
+DSP            0.370274  NaN     1  0.372369  NaN     1       0.283325  NaN     1       0.468123  NaN     1
+None           0.360764  0.0     2  0.362258  0.0     2       0.273670  0.0     2       0.457875  0.0     2
+Stacking       0.360687  NaN     1  0.362208  NaN     1       0.273614  NaN     1       0.457838  NaN     1
+
+COLOR USAGE PERFORMANCE:
+           mean_average_precision                 precision_at_1                 precision_at_5               
+                             mean       std count           mean       std count           mean      std count
+uses_color                                                                                                    
+False                    0.363122  0.004768     4        0.27607  0.004837     4       0.460427  0.00513     4

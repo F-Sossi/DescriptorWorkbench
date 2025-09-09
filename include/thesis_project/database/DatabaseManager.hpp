@@ -277,11 +277,20 @@ struct ExperimentResults {
     int experiment_id = -1;
     std::string descriptor_type;
     std::string dataset_name;
-    double mean_average_precision = 0.0;
+    // Primary MAP metrics (IR-style)
+    double true_map_macro = 0.0;           // Primary: Scene-balanced mAP
+    double true_map_micro = 0.0;           // Overall mAP
+    double true_map_macro_with_zeros = 0.0; // Conservative: includes R=0 queries
+    double true_map_micro_with_zeros = 0.0; // Conservative: includes R=0 queries
+    // Precision@K metrics
     double precision_at_1 = 0.0;
     double precision_at_5 = 0.0;
     double recall_at_1 = 0.0;
     double recall_at_5 = 0.0;
+    // Legacy/compatibility
+    double mean_average_precision = 0.0;   // Now derived from true_map_macro
+    double legacy_mean_precision = 0.0;    // Original arithmetic mean for backward compatibility
+    // Counts and timing
     int total_matches = 0;
     int total_keypoints = 0;
     double processing_time_ms = 0.0;

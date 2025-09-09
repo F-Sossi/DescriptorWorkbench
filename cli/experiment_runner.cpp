@@ -373,10 +373,22 @@ int main(int argc, char** argv) {
                 results.descriptor_type = desc_config.name;
                 results.dataset_name = yaml_config.dataset.path;
                 results.processing_time_ms = duration.count();
-                // Use true IR-style mAP instead of broken legacy metric
+                
+                // PRIMARY IR-style mAP metrics (NEW: stored as first-class columns)
+                results.true_map_macro = experiment_metrics.true_map_macro_by_scene;
+                results.true_map_micro = experiment_metrics.true_map_micro;
+                results.true_map_macro_with_zeros = experiment_metrics.true_map_macro_by_scene_including_zeros;
+                results.true_map_micro_with_zeros = experiment_metrics.true_map_micro_including_zeros;
+                
+                // Primary MAP metric: prefer macro (scene-balanced) when available, fallback to micro
                 results.mean_average_precision = experiment_metrics.true_map_macro_by_scene > 0.0 ? 
                                                 experiment_metrics.true_map_macro_by_scene :
                                                 experiment_metrics.true_map_micro;
+                
+                // Legacy precision for backward compatibility (stored in legacy_mean_precision column)
+                results.legacy_mean_precision = experiment_metrics.mean_precision;
+                
+                // Standard metrics
                 results.precision_at_1 = experiment_metrics.precision_at_1;
                 results.precision_at_5 = experiment_metrics.precision_at_5;
                 results.recall_at_1 = experiment_metrics.recall_at_1;
@@ -396,12 +408,7 @@ int main(int argc, char** argv) {
                     results.metadata["images_per_sec"] = std::to_string(profile.total_images / total_sec);
                     results.metadata["kps_per_sec"] = std::to_string(profile.total_kps / total_sec);
                 }
-                // True IR-style mAP metrics (conditional - excluding R=0)
-                results.metadata["true_map_micro"] = std::to_string(experiment_metrics.true_map_micro);
-                results.metadata["true_map_macro_by_scene"] = std::to_string(experiment_metrics.true_map_macro_by_scene);
-                // True IR-style mAP metrics (punitive - including R=0 as AP=0)
-                results.metadata["true_map_micro_with_zeros"] = std::to_string(experiment_metrics.true_map_micro_including_zeros);
-                results.metadata["true_map_macro_with_zeros"] = std::to_string(experiment_metrics.true_map_macro_by_scene_including_zeros);
+                // NOTE: True IR-style mAP metrics are now stored as primary columns, not metadata
                 // Query statistics
                 results.metadata["total_queries_processed"] = std::to_string(experiment_metrics.total_queries_processed);
                 results.metadata["total_queries_excluded"] = std::to_string(experiment_metrics.total_queries_excluded);

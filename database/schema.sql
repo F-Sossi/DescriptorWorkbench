@@ -1,5 +1,14 @@
 -- Database schema for descriptor research experiments
 -- This matches the schema defined in DatabaseManager.cpp
+--
+-- SCHEMA VERSION: v2.0 (September 2025)
+-- MAJOR UPGRADE: True IR-style mAP metrics promoted to first-class columns
+-- 
+-- Migration notes:
+-- - true_map_macro/micro are now primary evaluation metrics  
+-- - legacy_mean_precision preserves backward compatibility
+-- - mean_average_precision serves as primary display metric
+-- - Use migrate_database.py to upgrade existing databases
 
 CREATE TABLE IF NOT EXISTS experiments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -15,16 +24,25 @@ CREATE TABLE IF NOT EXISTS experiments (
 CREATE TABLE IF NOT EXISTS results (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     experiment_id INTEGER,
-    mean_average_precision REAL,
+    -- PRIMARY IR-style mAP metrics (NEW: v2.0 schema upgrade)
+    true_map_macro REAL,                    -- Scene-balanced mAP (primary metric)
+    true_map_micro REAL,                    -- Overall mAP weighted by query count
+    true_map_macro_with_zeros REAL,         -- Conservative: includes R=0 queries as AP=0
+    true_map_micro_with_zeros REAL,         -- Conservative: includes R=0 queries as AP=0  
+    -- Legacy/compatibility metrics
+    mean_average_precision REAL,            -- Primary display metric (uses true_map_macro when available)
+    legacy_mean_precision REAL,             -- Original arithmetic mean for backward compatibility
+    -- Standard retrieval metrics
     precision_at_1 REAL,
     precision_at_5 REAL,
     recall_at_1 REAL,
     recall_at_5 REAL,
+    -- Experiment metadata
     total_matches INTEGER,
     total_keypoints INTEGER,
     processing_time_ms REAL,
     timestamp TEXT NOT NULL,
-    metadata TEXT,
+    metadata TEXT,                          -- Additional metrics and profiling data
     FOREIGN KEY(experiment_id) REFERENCES experiments(id)
 );
 

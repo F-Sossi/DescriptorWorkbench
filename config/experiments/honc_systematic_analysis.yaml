@@ -1,9 +1,9 @@
 experiment:
-  name: "sift_pooling_comparison"
-  description: "Compare pooling strategies on SIFT - None vs Domain Size Pooling vs Stacking"
+  name: "honc_systematic_analysis"
+  description: "Systematic analysis of HoNC (Histogram of Normalized Colors) modifications - Pooling and Normalization effects"
   version: "1.0"
   author: "researcher"
-  note: "Tests how different pooling strategies affect SIFT descriptor performance"
+  note: "Tests how pooling and normalization modifications affect HoNC performance - inherently color-based descriptor"
 
 dataset:
   type: "hpatches"
@@ -16,52 +16,56 @@ keypoints:
   contrast_threshold: 0.04
   edge_threshold: 10.0
   source: "homography_projection"
-  keypoint_set_name: "sift_homography_projection"
+  keypoint_set_name: "homography_projection_systematic"
 
 descriptors:
-  # Baseline: No pooling (we know this gives 31.7%)
-  - name: "sift_no_pooling"
-    type: "sift"
+  # ===== BASELINE: Traditional HoNC =====
+  - name: "honc_baseline_color_none_l2"
+    type: "honc"
     pooling: "none"
-    normalize_before_pooling: false
     normalize_after_pooling: true
     norm_type: 4  # L2
-    use_color: false
+    use_color: true  # HoNC is inherently color-based
     
-  # Domain Size Pooling: Should improve multi-scale matching
-  - name: "sift_domain_size_pooling"
-    type: "sift"
+  # ===== POOLING EFFECTS (Color, L2 norm) =====
+  - name: "honc_color_dsp_l2"
+    type: "honc"
     pooling: "domain_size_pooling"
-    normalize_before_pooling: false
     normalize_after_pooling: true
     norm_type: 4  # L2
-    use_color: false
+    use_color: true
     
-  # Stacking: Should improve robustness by combining descriptors
-  - name: "sift_stacking"
-    type: "sift"
+  - name: "honc_color_stacking_l2"
+    type: "honc"
     pooling: "stacking"
-    normalize_before_pooling: false
     normalize_after_pooling: true
     norm_type: 4  # L2
-    use_color: false
+    use_color: true
     
-  # Test with L1 norm for comparison
-  - name: "sift_no_pooling_l1"
-    type: "sift"
+  # ===== NORMALIZATION EFFECTS (Color, No pooling) =====
+  - name: "honc_baseline_color_none_l1"
+    type: "honc"
     pooling: "none"
-    normalize_before_pooling: false
     normalize_after_pooling: true
     norm_type: 1  # L1
-    use_color: false
+    use_color: true
     
-  - name: "sift_domain_size_pooling_l1"
-    type: "sift"
+  # ===== COMBINED EFFECTS =====
+  # DSP + L1 norm
+  - name: "honc_color_dsp_l1"
+    type: "honc"
     pooling: "domain_size_pooling"
-    normalize_before_pooling: false
     normalize_after_pooling: true
     norm_type: 1  # L1
-    use_color: false
+    use_color: true
+    
+  # Stacking + L1 norm
+  - name: "honc_color_stacking_l1"
+    type: "honc"
+    pooling: "stacking"
+    normalize_after_pooling: true
+    norm_type: 1  # L1
+    use_color: true
 
 evaluation:
   matching:

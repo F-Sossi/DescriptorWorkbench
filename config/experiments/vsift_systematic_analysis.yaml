@@ -1,0 +1,115 @@
+experiment:
+  name: "vsift_systematic_analysis"
+  description: "Systematic analysis of vSIFT (Vanilla SIFT) modifications - Pooling, Color, and Normalization effects"
+  version: "1.0"
+  author: "researcher"
+  note: "Tests how modifications affect vSIFT performance - vanilla implementation of SIFT algorithm"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # Use all available scenes
+
+keypoints:
+  generator: "sift"
+  max_features: 2000
+  contrast_threshold: 0.04
+  edge_threshold: 10.0
+  source: "homography_projection"
+  keypoint_set_name: "homography_projection_systematic"
+
+descriptors:
+  # ===== BASELINE: Traditional vSIFT =====
+  - name: "vsift_baseline_grayscale_none_l2"
+    type: "vsift"
+    pooling: "none"
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: false
+    
+  # ===== POOLING EFFECTS (Grayscale, L2 norm) =====
+  - name: "vsift_grayscale_dsp_l2"
+    type: "vsift"
+    pooling: "domain_size_pooling"
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: false
+    
+  - name: "vsift_grayscale_stacking_l2"
+    type: "vsift"
+    pooling: "stacking"
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: false
+    
+  # ===== COLOR EFFECTS (No pooling, L2 norm) =====
+  - name: "vsift_baseline_color_none_l2"
+    type: "vsift"
+    pooling: "none"
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: true
+    
+  # ===== NORMALIZATION EFFECTS (Grayscale, No pooling) =====
+  - name: "vsift_baseline_grayscale_none_l1"
+    type: "vsift"
+    pooling: "none"
+    normalize_after_pooling: true
+    norm_type: 1  # L1
+    use_color: false
+    
+  # ===== COMBINED EFFECTS =====
+  # Color + DSP
+  - name: "vsift_color_dsp_l2"
+    type: "vsift"
+    pooling: "domain_size_pooling"
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: true
+    
+  # Color + Stacking
+  - name: "vsift_color_stacking_l2"
+    type: "vsift"
+    pooling: "stacking"
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: true
+    
+  # DSP + L1 norm
+  - name: "vsift_grayscale_dsp_l1"
+    type: "vsift"
+    pooling: "domain_size_pooling"
+    normalize_after_pooling: true
+    norm_type: 1  # L1
+    use_color: false
+    
+  # Stacking + L1 norm
+  - name: "vsift_grayscale_stacking_l1"
+    type: "vsift"
+    pooling: "stacking"
+    normalize_after_pooling: true
+    norm_type: 1  # L1
+    use_color: false
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+output:
+  results_path: "results/"
+  save_keypoints: false
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+database:
+  enabled: true
+  connection: "sqlite:///experiments.db"

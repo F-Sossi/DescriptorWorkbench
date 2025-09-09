@@ -5,13 +5,25 @@ matplotlib>=3.5.0
 seaborn>=0.11.0
 scikit-learn>=1.1.0
 
-# Optional: Jupyter notebook support
+# Jupyter notebook support
 jupyter>=1.0.0
 jupyterlab>=3.0.0
+ipython>=8.0.0
+notebook>=6.4.0
 
-# Optional: Advanced plotting
+# Interactive plotting and advanced visualization
 plotly>=5.0.0
 bokeh>=2.4.0
+ipywidgets>=7.6.0
 
-# Data processing
+# Statistical analysis and data processing
 scipy>=1.9.0
+statsmodels>=0.13.0
+
+# Database connectivity
+sqlite3  # Built-in with Python
+
+# Additional utilities
+pathlib  # Built-in with Python 3.4+
+warnings  # Built-in with Python
+itertools  # Built-in with Python
