@@ -8,16 +8,20 @@
 # Expected experiments: ~41 descriptor configurations
 
 echo "=========================================="
-echo "🚀 OVERNIGHT DESCRIPTOR ANALYSIS STARTING"
+echo "OVERNIGHT DESCRIPTOR ANALYSIS STARTING"
 echo "=========================================="
 
+# Resolve repository root (directory of this script)
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Configuration
-BUILD_DIR="./build"
-CONFIG_DIR="./config/experiments"
-LOG_DIR="./logs"
+BUILD_DIR="$REPO_ROOT/build"
+CONFIG_DIR="$REPO_ROOT/config/experiments"
+# IMPORTANT: Binaries expect DB and relative paths from CWD=build
 DB_FILE="$BUILD_DIR/experiments.db"
 
-# Create logs directory
+# Create logs directory 
+LOG_DIR="$REPO_ROOT/logs"
 mkdir -p "$LOG_DIR"
 
 # Get timestamp for this batch
@@ -31,21 +35,20 @@ log() {
 
 # Function to run experiment with error handling
 run_experiment() {
-    local config_file="$1"
-    local experiment_name=$(basename "$config_file" .yaml)
+    local config_file="$1"        # absolute path to YAML
+    local experiment_name
+    experiment_name=$(basename "$config_file" .yaml)
     local exp_log="$LOG_DIR/${experiment_name}_$BATCH_TIMESTAMP.log"
-    
-    log "🔄 Starting experiment: $experiment_name"
+
+    log " Starting experiment: $experiment_name"
     echo "======================================" >> "$exp_log"
     echo "EXPERIMENT: $experiment_name" >> "$exp_log"
     echo "CONFIG: $config_file" >> "$exp_log"
     echo "START TIME: $(date)" >> "$exp_log"
     echo "======================================" >> "$exp_log"
-    
-    # Change to build directory and run experiment
-    cd "$BUILD_DIR" || { log "❌ Failed to change to build directory"; return 1; }
-    
-    if ./experiment_runner "../$config_file" >> "$exp_log" 2>&1; then
+
+    # Run from build directory so relative paths in YAML/DB align
+    if (cd "$BUILD_DIR" && ./experiment_runner "$config_file") >> "$exp_log" 2>&1; then
         log "✅ Completed experiment: $experiment_name"
         echo "SUCCESS: $(date)" >> "$exp_log"
         return 0
@@ -77,17 +80,24 @@ if [ ! -d "$BUILD_DIR" ]; then
 fi
 
 # Check if experiment_runner exists
-if [ ! -f "$BUILD_DIR/experiment_runner" ]; then
-    log "❌ experiment_runner not found in $BUILD_DIR"
-    log "💡 Please run: cmake --build $BUILD_DIR -j\$(nproc)"
+if [ ! -x "$BUILD_DIR/experiment_runner" ]; then
+    log "❌ experiment_runner not found or not executable: $BUILD_DIR/experiment_runner"
+    log " Please build: cmake -S $REPO_ROOT -B $BUILD_DIR && cmake --build $BUILD_DIR -j\$(nproc)"
+    exit 1
+fi
+
+# Check if keypoint_manager exists (used for keypoint generation)
+if [ ! -x "$BUILD_DIR/keypoint_manager" ]; then
+    log "❌ keypoint_manager not found or not executable: $BUILD_DIR/keypoint_manager"
+    log " Please build: cmake -S $REPO_ROOT -B $BUILD_DIR && cmake --build $BUILD_DIR -j\$(nproc)"
     exit 1
 fi
 
 # Check disk space (require at least 2GB free)
 AVAILABLE_SPACE=$(df "$BUILD_DIR" | awk 'NR==2{print $4}')
 if [ "$AVAILABLE_SPACE" -lt 2000000 ]; then
-    log "⚠️  Low disk space: $(($AVAILABLE_SPACE/1024))MB available"
-    log "💡 Recommend at least 2GB free space"
+    log " Low disk space: $(($AVAILABLE_SPACE/1024))MB available"
+    log "Recommend at least 2GB free space"
 fi
 
 # Show initial database state
@@ -97,31 +107,39 @@ show_db_stats
 if [ -f "$DB_FILE" ]; then
     BACKUP_FILE="${DB_FILE}.backup_$BATCH_TIMESTAMP"
     cp "$DB_FILE" "$BACKUP_FILE"
-    log "💾 Created database backup: $BACKUP_FILE"
+    log " Created database backup: $BACKUP_FILE"
 fi
 
 # Generate keypoint sets for experiments
-log "🔑 Generating keypoint sets..."
+log " Generating keypoint sets..."
 
 # Check if keypoint sets already exist
 KEYPOINT_COUNT=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM locked_keypoints;" 2>/dev/null || echo "0")
 if [ "$KEYPOINT_COUNT" -gt 0 ]; then
-    log "📍 Found $KEYPOINT_COUNT existing keypoints in database"
-    log "💡 Skipping keypoint generation (use 'rm $DB_FILE' to regenerate)"
+    log " Found $KEYPOINT_COUNT existing keypoints in database"
+    log " Skipping keypoint generation (use 'rm $DB_FILE' to regenerate)"
 else
-    log "🔄 Generating homography projection keypoints (controlled evaluation)..."
-    if ./keypoint_manager generate-projected ../data/ "homography_projection_systematic" >> "$BATCH_LOG" 2>&1; then
-        log "✅ Generated homography projection keypoints"
+    log " Generating homography projection keypoints (controlled evaluation)..."
+    (cd "$BUILD_DIR" && ./keypoint_manager generate-projected ../data "homography_projection_systematic") >> "$BATCH_LOG" 2>&1
+    
+    # Check if keypoints were actually generated
+    HOMOG_KEYPOINTS=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM locked_keypoints WHERE keypoint_set_id = (SELECT id FROM keypoint_sets WHERE name = 'homography_projection_systematic');" 2>/dev/null || echo "0")
+    if [ "$HOMOG_KEYPOINTS" -gt 0 ]; then
+        log "✅ Generated $HOMOG_KEYPOINTS homography projection keypoints"
     else
-        log "❌ Failed to generate homography projection keypoints"
+        log "❌ Failed to generate homography projection keypoints (check $BATCH_LOG)"
         exit 1
     fi
     
-    log "🔄 Generating independent detection keypoints (realistic evaluation)..."
-    if ./keypoint_manager generate-independent ../data/ "independent_detection_systematic" >> "$BATCH_LOG" 2>&1; then
-        log "✅ Generated independent detection keypoints"
+    log " Generating independent detection keypoints (realistic evaluation)..."
+    (cd "$BUILD_DIR" && ./keypoint_manager generate-independent ../data "independent_detection_systematic") >> "$BATCH_LOG" 2>&1
+    
+    # Check if keypoints were actually generated
+    INDEP_KEYPOINTS=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM locked_keypoints WHERE keypoint_set_id = (SELECT id FROM keypoint_sets WHERE name = 'independent_detection_systematic');" 2>/dev/null || echo "0")
+    if [ "$INDEP_KEYPOINTS" -gt 0 ]; then
+        log "✅ Generated $INDEP_KEYPOINTS independent detection keypoints"
     else
-        log "❌ Failed to generate independent detection keypoints"
+        log "❌ Failed to generate independent detection keypoints (check $BATCH_LOG)"
         exit 1
     fi
     
@@ -155,26 +173,30 @@ for config in "${EXPERIMENT_CONFIGS[@]}"; do
         else
             FAILED_EXPERIMENTS=$((FAILED_EXPERIMENTS + 1))
         fi
-        
+
         # Show progress
-        log "📈 Progress: $SUCCESSFUL_EXPERIMENTS successful, $FAILED_EXPERIMENTS failed, $((TOTAL_EXPERIMENTS - SUCCESSFUL_EXPERIMENTS - FAILED_EXPERIMENTS)) remaining"
-        
+        log "📈 Progress: $SUCCESSFUL_EXPERIMENTS successful, $FAILED_EXPERIMENTS failed"
+
         # Brief pause between experiments
         sleep 5
     else
-        log "⚠️  Config file not found: $config"
+        log "Error:  Config file not found: $config"
     fi
 done
 
 # Final statistics
 log "=========================================="
-log "🎯 OVERNIGHT ANALYSIS COMPLETE!"
+log " OVERNIGHT ANALYSIS COMPLETE!"
 log "=========================================="
 log "📊 Final Results:"
 log "   • Total experiment sets: $TOTAL_EXPERIMENTS"
 log "   • Successful: $SUCCESSFUL_EXPERIMENTS"
 log "   • Failed: $FAILED_EXPERIMENTS"
-log "   • Success rate: $(($SUCCESSFUL_EXPERIMENTS * 100 / $TOTAL_EXPERIMENTS))%"
+if [ "$TOTAL_EXPERIMENTS" -gt 0 ]; then
+    log "   • Success rate: $(($SUCCESSFUL_EXPERIMENTS * 100 / $TOTAL_EXPERIMENTS))%"
+else
+    log "   • Success rate: N/A (no experiments found)"
+fi
 
 # Show final database state
 show_db_stats
@@ -199,8 +221,8 @@ fi
 
 # Cleanup and recommendations
 log ""
-log "📁 Log files saved to: $LOG_DIR"
-log "💾 Database location: $DB_FILE"
+log " Log files saved to: $LOG_DIR"
+log " Database location: $DB_FILE"
 if [ -f "$BACKUP_FILE" ]; then
     log "🔄 Backup available: $BACKUP_FILE"
 fi
@@ -213,10 +235,10 @@ log "   3. Generate reports: ./analysis_runner"
 
 if [ $FAILED_EXPERIMENTS -gt 0 ]; then
     log ""
-    log "⚠️  Some experiments failed - check individual logs in $LOG_DIR"
+    log "  Some experiments failed - check individual logs in $LOG_DIR"
     exit 1
 else
     log ""
-    log "🎉 All experiments completed successfully!"
+    log "All experiments completed successfully!"
     exit 0
 fi
