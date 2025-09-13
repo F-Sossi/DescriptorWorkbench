@@ -50,12 +50,15 @@ CREATE TABLE IF NOT EXISTS results (
 CREATE TABLE IF NOT EXISTS keypoint_sets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,  -- e.g., "homography_projection_default", "independent_detection_v1"
-    generator_type TEXT NOT NULL,  -- e.g., "SIFT", "ORB", "AKAZE"
-    generation_method TEXT NOT NULL,  -- "homography_projection" or "independent_detection"  
+    generator_type TEXT NOT NULL,  -- e.g., "SIFT", "ORB", "AKAZE", "Harris"
+    generation_method TEXT NOT NULL,  -- "homography_projection", "independent_detection", "non_overlapping_detection"
     max_features INTEGER,
     dataset_path TEXT,
     description TEXT,
     boundary_filter_px INTEGER DEFAULT 40,
+    -- Non-overlapping constraint support (NEW: for CNN optimization)
+    overlap_filtering BOOLEAN DEFAULT FALSE,  -- Whether non-overlapping constraint was applied
+    min_distance REAL DEFAULT 0.0,          -- Minimum distance in pixels (0 = no constraint)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -100,6 +103,8 @@ CREATE TABLE IF NOT EXISTS descriptors (
 
 -- Indexes for efficient keypoint set queries  
 CREATE INDEX IF NOT EXISTS idx_keypoint_sets_method ON keypoint_sets(generation_method);
+CREATE INDEX IF NOT EXISTS idx_keypoint_sets_generator ON keypoint_sets(generator_type);
+CREATE INDEX IF NOT EXISTS idx_keypoint_sets_overlap ON keypoint_sets(overlap_filtering);
 CREATE INDEX IF NOT EXISTS idx_locked_keypoints_set ON locked_keypoints(keypoint_set_id);
 CREATE INDEX IF NOT EXISTS idx_locked_keypoints_scene ON locked_keypoints(keypoint_set_id, scene_name, image_name);
 

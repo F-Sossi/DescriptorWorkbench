@@ -159,6 +159,29 @@ public:
                          int boundary_filter_px = 40) const;
 
     /**
+     * @brief Create a new keypoint set with overlap filtering support
+     * @param name Unique name for the keypoint set
+     * @param generator_type Type of detector used (e.g., "SIFT", "Harris", "ORB")
+     * @param generation_method Method used ("homography_projection", "independent_detection", "non_overlapping_detection")
+     * @param max_features Maximum number of features to retain
+     * @param dataset_path Path to the dataset used
+     * @param description Human-readable description
+     * @param boundary_filter_px Boundary filter applied in pixels
+     * @param overlap_filtering Whether non-overlapping constraint was applied
+     * @param min_distance Minimum distance between keypoints (0.0 if no constraint)
+     * @return keypoint_set_id if successful, -1 on error
+     */
+    int createKeypointSetWithOverlap(const std::string& name,
+                                   const std::string& generator_type,
+                                   const std::string& generation_method,
+                                   int max_features = 2000,
+                                   const std::string& dataset_path = "",
+                                   const std::string& description = "",
+                                   int boundary_filter_px = 40,
+                                   bool overlap_filtering = false,
+                                   float min_distance = 0.0f) const;
+
+    /**
      * @brief Store locked-in keypoints for a specific keypoint set
      * @param keypoint_set_id ID of the keypoint set
      * @param scene_name Name of the scene (e.g., "i_dome", "v_wall")

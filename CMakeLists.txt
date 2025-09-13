@@ -419,6 +419,19 @@ if(TARGET test_descriptor_factory_gtest)
     target_include_directories(test_descriptor_factory_gtest PRIVATE src include keypoints descriptor_compare ${OpenCV_INCLUDE_DIRS})
 endif()
 
+# Google Test keypoint generator tests (Interface upgrade completion)
+create_gtest_if_exists("tests/unit/keypoints/test_keypoint_generators.cpp" "test_keypoint_generators_gtest")
+if(TARGET test_keypoint_generators_gtest)
+    target_sources(test_keypoint_generators_gtest PRIVATE 
+        src/core/keypoints/detectors/SIFTKeypointGenerator.cpp
+        src/core/keypoints/detectors/HarrisKeypointGenerator.cpp
+        src/core/keypoints/detectors/ORBKeypointGenerator.cpp
+        src/core/keypoints/detectors/NonOverlappingKeypointGenerator.cpp
+        src/core/keypoints/KeypointGeneratorFactory.cpp)
+    target_link_libraries(test_keypoint_generators_gtest ${OpenCV_LIBRARIES})
+    target_include_directories(test_keypoint_generators_gtest PRIVATE src include ${OpenCV_INCLUDE_DIRS})
+endif()
+
 ## Removed: Stage 7 integration and bridge tests (legacy)
 
 ## Removed: YAML loader + bridge tests (legacy ConfigurationBridge)
@@ -646,6 +659,11 @@ if(BUILD_KEYPOINT_MANAGER AND BUILD_DATABASE)
         add_executable(keypoint_manager
                        cli/keypoint_manager.cpp
                        src/core/keypoints/locked_in_keypoints.cpp
+                       src/core/keypoints/KeypointGeneratorFactory.cpp
+                       src/core/keypoints/detectors/SIFTKeypointGenerator.cpp
+                       src/core/keypoints/detectors/HarrisKeypointGenerator.cpp
+                       src/core/keypoints/detectors/ORBKeypointGenerator.cpp
+                       src/core/keypoints/detectors/NonOverlappingKeypointGenerator.cpp
                        src/core/processing/processor_utils.cpp
                        src/core/pooling/NoPooling.cpp
                        src/core/pooling/DomainSizePooling.cpp

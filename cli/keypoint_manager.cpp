@@ -1,5 +1,6 @@
 #include "thesis_project/database/DatabaseManager.hpp"
 #include "src/core/keypoints/locked_in_keypoints.hpp"
+#include "src/core/keypoints/KeypointGeneratorFactory.hpp"
 #include "src/core/processing/processor_utils.hpp"
 #include "thesis_project/logging.hpp"
 #include <iostream>
@@ -27,6 +28,9 @@ int main(int argc, char** argv) {
         std::cout << "    generate-projected <data_folder> [name]   - Generate keypoints using homography projection (controlled)" << std::endl;
         std::cout << "    generate-independent <data_folder> [name] - Generate keypoints using independent detection (realistic)" << std::endl;
         std::cout << "    generate <data_folder>                    - Legacy: Generate homography projected keypoints" << std::endl;
+        std::cout << "  Advanced Detector Generation:" << std::endl;
+        std::cout << "    generate-detector <data_folder> <detector> [name]                    - Generate keypoints using specific detector (sift|harris|orb)" << std::endl;
+        std::cout << "    generate-non-overlapping <data_folder> <detector> <min_distance> [name] - Generate non-overlapping keypoints" << std::endl;
         std::cout << "  Import/Export:" << std::endl;
         std::cout << "    import-csv <csv_folder> [set_name]        - Import keypoints from CSV files" << std::endl;
         std::cout << "    export-csv <output_folder> [set_id]       - Export keypoints from DB to CSV" << std::endl;
@@ -34,6 +38,7 @@ int main(int argc, char** argv) {
         std::cout << "    list-sets                                 - List all available keypoint sets" << std::endl;
         std::cout << "    list-scenes [set_id]                      - List scenes in database (optionally for specific set)" << std::endl;
         std::cout << "    count <scene> <image> [set_id]            - Count keypoints for specific scene/image" << std::endl;
+        std::cout << "    list-detectors                            - List supported detector types" << std::endl;
         return 1;
     }
 
@@ -112,8 +117,8 @@ int main(int argc, char** argv) {
         std::string data_folder = argv[2];
         std::string set_name = (argc == 4) ? argv[3] : "homography_projection_" + std::to_string(std::time(nullptr));
         
-        LOG_INFO("🔄 Generating homography projected keypoints from: " + data_folder);
-        LOG_INFO("📝 Keypoint set name: " + set_name);
+        LOG_INFO("Generating homography projected keypoints from: " + data_folder);
+        LOG_INFO("Keypoint set name: " + set_name);
         
         namespace fs = boost::filesystem;
         if (!fs::exists(data_folder) || !fs::is_directory(data_folder)) {
@@ -360,7 +365,7 @@ int main(int argc, char** argv) {
             }
         }
         
-        LOG_INFO("🎉 Export complete! Total keypoints exported: " + std::to_string(total_exported));
+        LOG_INFO("Export complete! Total keypoints exported: " + std::to_string(total_exported));
 
     } else if (command == "list-sets") {
         auto sets = db.getAvailableKeypointSets();
@@ -399,6 +404,208 @@ int main(int argc, char** argv) {
         std::string image = argv[3];
         auto keypoints = db.getLockedKeypoints(scene, image);
         std::cout << "🔢 Keypoints for " << scene << "/" << image << ": " << keypoints.size() << std::endl;
+
+    } else if (command == "generate-detector") {
+        if (argc < 4 || argc > 5) {
+            std::cerr << "Usage: " << argv[0] << " generate-detector <data_folder> <detector> [name]" << std::endl;
+            std::cerr << "  Detectors: sift, harris, orb" << std::endl;
+            std::cerr << "  Example: " << argv[0] << " generate-detector ../data harris harris_keypoints" << std::endl;
+            return 1;
+        }
+        
+        std::string data_folder = argv[2];
+        std::string detector_str = argv[3];
+        std::string set_name = (argc == 5) ? argv[4] : (detector_str + "_keypoints_" + std::to_string(std::time(nullptr)));
+        
+        try {
+            // Parse detector type
+            KeypointGenerator detector_type = KeypointGeneratorFactory::parseDetectorType(detector_str);
+            
+            LOG_INFO("🔍 Generating keypoints using " + detector_str + " detector");
+            LOG_INFO("📁 Data folder: " + data_folder);
+            LOG_INFO("📝 Keypoint set name: " + set_name);
+            
+            namespace fs = boost::filesystem;
+            if (!fs::exists(data_folder) || !fs::is_directory(data_folder)) {
+                std::cerr << "❌ Data folder does not exist: " + data_folder << std::endl;
+                return 1;
+            }
+
+            // Create keypoint set
+            int set_id = db.createKeypointSet(
+                set_name,
+                detector_str, 
+                "independent_detection",
+                2000,
+                data_folder,
+                detector_str + " detector with independent detection and 40px boundary filtering",
+                40
+            );
+            
+            if (set_id == -1) {
+                std::cerr << "❌ Failed to create keypoint set: " + set_name << std::endl;
+                return 1;
+            }
+            
+            LOG_INFO("✅ Created keypoint set with ID: " + std::to_string(set_id));
+            
+            // Create detector
+            auto detector = KeypointGeneratorFactory::create(detector_type, false, 0.0f);
+            KeypointParams params;
+            params.max_features = 2000;
+            
+            int total_keypoints = 0;
+
+            // Process each scene
+            for (const auto& scene_entry : fs::directory_iterator(data_folder)) {
+                if (!fs::is_directory(scene_entry)) continue;
+                
+                std::string scene_name = scene_entry.path().filename().string();
+                LOG_INFO("📁 Processing scene: " + scene_name);
+                
+                // Process each image independently (1.ppm to 6.ppm)
+                for (int i = 1; i <= 6; ++i) {
+                    fs::path image_path = scene_entry.path() / (std::to_string(i) + ".ppm");
+                    if (!fs::exists(image_path)) {
+                        std::cerr << "❌ Image not found: " << image_path.string() << std::endl;
+                        continue;
+                    }
+                    
+                    cv::Mat image = cv::imread(image_path.string(), cv::IMREAD_GRAYSCALE);
+                    if (image.empty()) {
+                        std::cerr << "❌ Could not load image: " << image_path.string() << std::endl;
+                        continue;
+                    }
+                    
+                    // Detect keypoints using the specified detector
+                    std::vector<cv::KeyPoint> keypoints = detector->detect(image, params);
+                    
+                    // Store keypoints for this image
+                    std::string image_name = std::to_string(i) + ".ppm";
+                    if (db.storeLockedKeypointsForSet(set_id, scene_name, image_name, keypoints)) {
+                        total_keypoints += keypoints.size();
+                        LOG_INFO("  ✅ " + scene_name + "/" + image_name + ": " + std::to_string(keypoints.size()) + " keypoints");
+                    } else {
+                        LOG_ERROR("  ❌ Failed to store keypoints for " + scene_name + "/" + image_name);
+                    }
+                }
+            }
+            
+            LOG_INFO("🎉 Generation complete! " + detector_str + " keypoints stored in set: " + set_name);
+            LOG_INFO("📊 Total keypoints generated: " + std::to_string(total_keypoints));
+            
+        } catch (const std::exception& e) {
+            LOG_ERROR("❌ Error: " + std::string(e.what()));
+            return 1;
+        }
+
+    } else if (command == "generate-non-overlapping") {
+        if (argc < 5 || argc > 6) {
+            std::cerr << "Usage: " << argv[0] << " generate-non-overlapping <data_folder> <detector> <min_distance> [name]" << std::endl;
+            std::cerr << "  Detectors: sift, harris, orb" << std::endl;
+            std::cerr << "  Example: " << argv[0] << " generate-non-overlapping ../data sift 32.0 cnn_optimized_keypoints" << std::endl;
+            return 1;
+        }
+        
+        std::string data_folder = argv[2];
+        std::string detector_str = argv[3];
+        float min_distance = std::stof(argv[4]);
+        std::string set_name = (argc == 6) ? argv[5] : (detector_str + "_non_overlapping_" + std::to_string(std::time(nullptr)));
+        
+        try {
+            // Parse detector type
+            KeypointGenerator detector_type = KeypointGeneratorFactory::parseDetectorType(detector_str);
+            
+            LOG_INFO("🔍 Generating non-overlapping keypoints using " + detector_str + " detector");
+            LOG_INFO("📁 Data folder: " + data_folder);
+            LOG_INFO("📏 Minimum distance: " + std::to_string(min_distance) + "px");
+            LOG_INFO("📝 Keypoint set name: " + set_name);
+            
+            namespace fs = boost::filesystem;
+            if (!fs::exists(data_folder) || !fs::is_directory(data_folder)) {
+                std::cerr << "❌ Data folder does not exist: " + data_folder << std::endl;
+                return 1;
+            }
+
+            // Create keypoint set with overlap constraint tracking
+            int set_id = db.createKeypointSetWithOverlap(
+                set_name,
+                detector_str, 
+                "non_overlapping_detection",
+                2000,
+                data_folder,
+                detector_str + " detector with non-overlapping constraint (min_distance=" + std::to_string(min_distance) + "px)",
+                40,
+                true,  // overlap_filtering = true
+                min_distance
+            );
+            
+            if (set_id == -1) {
+                std::cerr << "❌ Failed to create keypoint set: " + set_name << std::endl;
+                return 1;
+            }
+            
+            LOG_INFO("✅ Created keypoint set with ID: " + std::to_string(set_id));
+            
+            // Create detector with non-overlapping constraint
+            auto detector = KeypointGeneratorFactory::create(detector_type, true, min_distance);
+            KeypointParams params;
+            params.max_features = 2000;
+            
+            int total_keypoints = 0;
+
+            // Process each scene
+            for (const auto& scene_entry : fs::directory_iterator(data_folder)) {
+                if (!fs::is_directory(scene_entry)) continue;
+                
+                std::string scene_name = scene_entry.path().filename().string();
+                LOG_INFO("📁 Processing scene: " + scene_name);
+                
+                // Process each image independently (1.ppm to 6.ppm)
+                for (int i = 1; i <= 6; ++i) {
+                    fs::path image_path = scene_entry.path() / (std::to_string(i) + ".ppm");
+                    if (!fs::exists(image_path)) {
+                        std::cerr << "❌ Image not found: " << image_path.string() << std::endl;
+                        continue;
+                    }
+                    
+                    cv::Mat image = cv::imread(image_path.string(), cv::IMREAD_GRAYSCALE);
+                    if (image.empty()) {
+                        std::cerr << "❌ Could not load image: " << image_path.string() << std::endl;
+                        continue;
+                    }
+                    
+                    // Detect non-overlapping keypoints
+                    std::vector<cv::KeyPoint> keypoints = detector->detectNonOverlapping(image, min_distance, params);
+                    
+                    // Store keypoints for this image
+                    std::string image_name = std::to_string(i) + ".ppm";
+                    if (db.storeLockedKeypointsForSet(set_id, scene_name, image_name, keypoints)) {
+                        total_keypoints += keypoints.size();
+                        LOG_INFO("  ✅ " + scene_name + "/" + image_name + ": " + std::to_string(keypoints.size()) + " keypoints");
+                    } else {
+                        LOG_ERROR("  ❌ Failed to store keypoints for " + scene_name + "/" + image_name);
+                    }
+                }
+            }
+            
+            LOG_INFO("🎉 Generation complete! Non-overlapping " + detector_str + " keypoints stored in set: " + set_name);
+            LOG_INFO("📊 Total keypoints generated: " + std::to_string(total_keypoints));
+            
+        } catch (const std::exception& e) {
+            LOG_ERROR("❌ Error: " + std::string(e.what()));
+            return 1;
+        }
+
+    } else if (command == "list-detectors") {
+        auto detectors = KeypointGeneratorFactory::getSupportedDetectors();
+        std::cout << "🔧 Supported detectors (" << detectors.size() << "):" << std::endl;
+        for (const auto& detector : detectors) {
+            float recommended_distance = KeypointGeneratorFactory::getRecommendedMinDistance(
+                KeypointGeneratorFactory::parseDetectorType(detector), 32);
+            std::cout << "  📍 " << detector << " (recommended min_distance for 32px patches: " 
+                      << recommended_distance << "px)" << std::endl;
+        }
 
     } else {
         std::cerr << "❌ Unknown command: " << command << std::endl;

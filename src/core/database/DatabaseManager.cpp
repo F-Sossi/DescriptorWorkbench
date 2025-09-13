@@ -97,6 +97,8 @@ public:
                 dataset_path TEXT,
                 description TEXT,
                 boundary_filter_px INTEGER DEFAULT 40,
+                overlap_filtering BOOLEAN DEFAULT FALSE,
+                min_distance REAL DEFAULT 0.0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         )";
@@ -143,6 +145,8 @@ public:
 
         const auto create_keypoint_indexes = R"(
             CREATE INDEX IF NOT EXISTS idx_keypoint_sets_method ON keypoint_sets(generation_method);
+            CREATE INDEX IF NOT EXISTS idx_keypoint_sets_generator ON keypoint_sets(generator_type);
+            CREATE INDEX IF NOT EXISTS idx_keypoint_sets_overlap ON keypoint_sets(overlap_filtering);
             CREATE INDEX IF NOT EXISTS idx_locked_keypoints_set ON locked_keypoints(keypoint_set_id);
             CREATE INDEX IF NOT EXISTS idx_locked_keypoints_scene ON locked_keypoints(keypoint_set_id, scene_name, image_name);
         )";
@@ -855,6 +859,50 @@ int DatabaseManager::createKeypointSet(const std::string& name,
 
     if (rc != SQLITE_DONE) {
         std::cerr << "Failed to insert keypoint set: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return -1;
+    }
+
+    return static_cast<int>(sqlite3_last_insert_rowid(impl_->db));
+}
+
+int DatabaseManager::createKeypointSetWithOverlap(const std::string& name,
+                                                 const std::string& generator_type,
+                                                 const std::string& generation_method,
+                                                 int max_features,
+                                                 const std::string& dataset_path,
+                                                 const std::string& description,
+                                                 int boundary_filter_px,
+                                                 bool overlap_filtering,
+                                                 float min_distance) const {
+    if (!impl_->enabled || !impl_->db) return -1;
+
+    const auto sql = R"(
+        INSERT INTO keypoint_sets (name, generator_type, generation_method, max_features, dataset_path, description, boundary_filter_px, overlap_filtering, min_distance)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    )";
+
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare keypoint set insert with overlap: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return -1;
+    }
+
+    sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, generator_type.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, generation_method.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 4, max_features);
+    sqlite3_bind_text(stmt, 5, dataset_path.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 6, description.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 7, boundary_filter_px);
+    sqlite3_bind_int(stmt, 8, overlap_filtering ? 1 : 0);
+    sqlite3_bind_double(stmt, 9, static_cast<double>(min_distance));
+
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        std::cerr << "Failed to insert keypoint set with overlap: " << sqlite3_errmsg(impl_->db) << std::endl;
         return -1;
     }
 

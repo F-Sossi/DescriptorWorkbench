@@ -1,0 +1,52 @@
+experiment:
+  name: "hardnet_dnn_non_overlapping_threshold09"
+  description: "HardNet DNN with non-overlapping keypoints and 0.9 Lowe ratio threshold"
+  version: "1.0"
+  author: "researcher"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: ["i_dome", "v_wall"]
+
+keypoints:
+  generator: "sift"
+  max_features: 1500
+  source: "independent_detection"
+  keypoint_set_name: "hardnet_cnn_optimized_keypoints"    # Use our non-overlapping keypoints
+
+descriptors:
+  - name: "hardnet_dnn_threshold09"
+    type: "dnn_patch"
+    pooling: "none"
+    use_color: false
+    dnn:
+      model: "../models/proper_hardnet_opset11.onnx"
+      input_size: 32
+      support_multiplier: 5.0
+      rotate_to_upright: true
+      mean: 0.0
+      std: 1.0
+      per_patch_standardize: true
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.9    # More lenient threshold like HardNet paper
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+output:
+  results_path: "results/"
+  save_keypoints: false
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+database:
+  enabled: true
+  connection: "sqlite:///experiments.db"
