@@ -361,6 +361,9 @@ namespace config {
         if (str == "dnn_patch") return DescriptorType::DNN_PATCH;
         if (str == "vgg") return DescriptorType::VGG;
         if (str == "dspsift") return DescriptorType::DSPSIFT;
+        if (str == "libtorch_hardnet") return DescriptorType::LIBTORCH_HARDNET;
+        if (str == "libtorch_sosnet") return DescriptorType::LIBTORCH_SOSNET;
+        if (str == "libtorch_l2net") return DescriptorType::LIBTORCH_L2NET;
         throw std::runtime_error("Unknown descriptor type: " + str);
     }
     

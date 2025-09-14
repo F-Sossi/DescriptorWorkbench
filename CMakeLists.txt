@@ -4,11 +4,40 @@ project(descriptor_compare)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Set CUDA architectures early (before any find_package calls that might use CUDA)
+# RTX 4090 has compute capability 8.9
+if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES "89")
+endif()
+
+# Set CUDA compiler path if not already set
+if(NOT DEFINED CMAKE_CUDA_COMPILER)
+    if(EXISTS "/opt/cuda/bin/nvcc")
+        set(CMAKE_CUDA_COMPILER "/opt/cuda/bin/nvcc")
+    endif()
+endif()
+
+# CUDA compatibility with newer GCC versions
+if(DEFINED CMAKE_CUDA_COMPILER)
+    # Force CUDA to use GCC 14 instead of the default GCC 15
+    set(CMAKE_CUDA_HOST_COMPILER "/usr/bin/gcc-14")
+
+    # Use C++17 (same as main project)
+    set(CMAKE_CUDA_STANDARD 17)
+    set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+
+    # Suppress deprecated GPU target warnings
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Wno-deprecated-gpu-targets")
+
+    message(STATUS "CUDA configured to use GCC 14 for compatibility")
+endif()
+
 # Build options
 option(USE_CONAN "Use Conan for dependency management" OFF)
 option(BUILD_PYTHON_BRIDGE "Build Python bridge for CNN descriptors" OFF)
 option(USE_SYSTEM_PACKAGES "Prefer system packages over Conan" ON)
 option(BUILD_DATABASE "Build database integration" ON)
+option(BUILD_LIBTORCH "Build LibTorch CNN descriptor support" ON)
 
 # Compiler flags
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -120,6 +149,27 @@ if(GTEST_FOUND AND GTEST_MAIN_FOUND)
     set(GTEST_INCLUDE_DIRS ${GTEST_INCLUDE_DIRS})
 else()
     message(STATUS "Google Test not found - legacy tests will continue to use manual main() functions")
+endif()
+
+# LibTorch - for CNN descriptor support
+if(BUILD_LIBTORCH)
+    # Set LibTorch root path for AUR installation
+    set(CMAKE_PREFIX_PATH "/opt/libtorch;${CMAKE_PREFIX_PATH}")
+
+    find_package(Torch QUIET)
+    if(Torch_FOUND)
+        message(STATUS "LibTorch found - enabling CNN descriptors")
+        message(STATUS "LibTorch version: ${TORCH_VERSION}")
+        message(STATUS "CUDA available: ${TORCH_CUDA_AVAILABLE}")
+        set(BUILD_LIBTORCH_DESCRIPTORS ON)
+    else()
+        message(STATUS "LibTorch not found - CNN descriptors disabled")
+        message(STATUS "To enable: install libtorch or libtorch-cuda from AUR")
+        set(BUILD_LIBTORCH_DESCRIPTORS OFF)
+    endif()
+else()
+    message(STATUS "LibTorch support disabled (use -DBUILD_LIBTORCH=ON to enable)")
+    set(BUILD_LIBTORCH_DESCRIPTORS OFF)
 endif()
 
 # Include directories
@@ -584,6 +634,16 @@ if(BUILD_EXPERIMENT_CLI)
         target_sources(experiment_runner PRIVATE src/core/descriptor/extractors/wrappers/PseudoDNNWrapper.cpp)
         # VGG wrapper (requires OpenCV contrib xfeatures2d)
         target_sources(experiment_runner PRIVATE src/core/descriptor/extractors/wrappers/VGGWrapper.cpp)
+
+        # LibTorch wrapper (if available)
+        if(BUILD_LIBTORCH_DESCRIPTORS)
+            target_sources(experiment_runner PRIVATE
+                src/core/descriptor/extractors/wrappers/LibTorchWrapper.cpp
+                src/core/descriptor/extractors/wrappers/LibTorchFactory.cpp)
+            target_link_libraries(experiment_runner ${TORCH_LIBRARIES})
+            target_compile_definitions(experiment_runner PRIVATE BUILD_LIBTORCH_DESCRIPTORS=1)
+            message(STATUS "LibTorch wrapper added to experiment_runner")
+        endif()
         
         target_compile_features(experiment_runner PRIVATE cxx_std_17)
         

@@ -54,6 +54,9 @@ namespace thesis_project {
         DSPSIFT,               ///< Domain-Size Pooled SIFT (professor's implementation)
         VGG,                   ///< VGG descriptor from OpenCV xfeatures2d (non-pooled)
         DNN_PATCH,             ///< ONNX-backed patch descriptor via cv::dnn
+        LIBTORCH_HARDNET,      ///< LibTorch HardNet CNN descriptor
+        LIBTORCH_SOSNET,       ///< LibTorch SOSNet CNN descriptor
+        LIBTORCH_L2NET,        ///< LibTorch L2-Net CNN descriptor
         NONE                   ///< No descriptor
     };
 
@@ -191,7 +194,9 @@ namespace thesis_project {
             case DescriptorType::DSPSIFT: return "dspsift";
             case DescriptorType::VGG: return "vgg";
             case DescriptorType::DNN_PATCH: return "dnn_patch";
-            // Note: DNN_PATCH will be represented as "dnn_patch" if added.
+            case DescriptorType::LIBTORCH_HARDNET: return "libtorch_hardnet";
+            case DescriptorType::LIBTORCH_SOSNET: return "libtorch_sosnet";
+            case DescriptorType::LIBTORCH_L2NET: return "libtorch_l2net";
             case DescriptorType::NONE: return "none";
             default: return "unknown";
         }

@@ -7,6 +7,9 @@
 #include "../extractors/wrappers/DNNPatchWrapper.hpp"
 #include "../extractors/wrappers/PseudoDNNWrapper.hpp"
 #include "../extractors/wrappers/VGGWrapper.hpp"
+#ifdef BUILD_LIBTORCH_DESCRIPTORS
+#include "../extractors/wrappers/LibTorchFactory.hpp"
+#endif
 #include <stdexcept>
 
 namespace thesis_project {
@@ -80,6 +83,14 @@ std::unique_ptr<IDescriptorExtractor> DescriptorFactory::create(thesis_project::
             return std::make_unique<wrappers::DSPSIFTWrapper>();
         case thesis_project::DescriptorType::VGG:
             return std::make_unique<wrappers::VGGWrapper>();
+#ifdef BUILD_LIBTORCH_DESCRIPTORS
+        case thesis_project::DescriptorType::LIBTORCH_HARDNET:
+            return wrappers::createLibTorchHardNet();
+        case thesis_project::DescriptorType::LIBTORCH_SOSNET:
+            return wrappers::createLibTorchSOSNet();
+        case thesis_project::DescriptorType::LIBTORCH_L2NET:
+            return wrappers::createLibTorchL2Net();
+#endif
         // DNNPatch created via DescriptorConfig params (model path required) elsewhere
         default:
             throw std::runtime_error("Unsupported descriptor type in factory (new-config)");
@@ -94,6 +105,11 @@ bool DescriptorFactory::isSupported(thesis_project::DescriptorType type) {
         case thesis_project::DescriptorType::vSIFT:
         case thesis_project::DescriptorType::DSPSIFT:
         case thesis_project::DescriptorType::VGG:
+#ifdef BUILD_LIBTORCH_DESCRIPTORS
+        case thesis_project::DescriptorType::LIBTORCH_HARDNET:
+        case thesis_project::DescriptorType::LIBTORCH_SOSNET:
+        case thesis_project::DescriptorType::LIBTORCH_L2NET:
+#endif
             return true;
         default:
             return false;
