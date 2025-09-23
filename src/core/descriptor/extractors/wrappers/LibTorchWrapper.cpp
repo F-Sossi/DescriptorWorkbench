@@ -15,7 +15,8 @@ LibTorchWrapper::LibTorchWrapper(const std::string& model_path,
                                  float mean,
                                  float std,
                                  bool per_patch_standardize,
-                                 int descriptor_size)
+                                 int descriptor_size,
+                                 int resize_method)
     : device_(torch::kCPU),
       input_size_(input_size),
       support_mult_(support_multiplier),
@@ -23,7 +24,8 @@ LibTorchWrapper::LibTorchWrapper(const std::string& model_path,
       mean_(mean),
       std_(std),
       per_patch_standardize_(per_patch_standardize),
-      descriptor_size_(descriptor_size) {
+      descriptor_size_(descriptor_size),
+      resize_method_(resize_method) {
 
     try {
         // Load the model
@@ -98,48 +100,31 @@ cv::Mat LibTorchWrapper::extract(const cv::Mat& imageBgrOrGray,
 }
 
 torch::Tensor LibTorchWrapper::makePatch(const cv::Mat& imageGray, const cv::KeyPoint& kp) const {
-    // Calculate patch size based on keypoint size and support multiplier
-    float patch_size = kp.size * support_mult_;
-    if (patch_size <= 0) {
-        patch_size = input_size_;
-    }
+    // Direct 32×32 extraction (test reverting from HPatches protocol)
+    const int CNN_INPUT_SIZE = input_size_;  // 32
 
-    // Extract oriented patch
-    cv::Mat patch;
-    cv::Point2f center(kp.pt.x, kp.pt.y);
+    // Calculate support window and scale for direct 32×32 extraction
+    float kpSize = std::max(kp.size, 1.0f);  // Guard against zero/negative keypoint size
+    float support_window = support_mult_ * kpSize;  // Real-world size of patch
+    double scale = static_cast<double>(CNN_INPUT_SIZE) / static_cast<double>(support_window);
 
-    if (rotate_upright_ && kp.angle != -1) {
-        // Create rotation matrix to undo keypoint angle (make it upright)
-        cv::Mat rotation_matrix = cv::getRotationMatrix2D(center, -kp.angle, patch_size / input_size_);
+    // Determine rotation angle (undo keypoint angle to make patch upright)
+    float angle_deg = (rotate_upright_ && kp.angle >= 0.0f) ? -kp.angle : 0.0f;
 
-        // Extract patch with rotation and scaling
-        cv::Mat rotated;
-        cv::warpAffine(imageGray, rotated, rotation_matrix, cv::Size(input_size_, input_size_));
-        patch = rotated;
-    } else {
-        // Simple centered extraction without rotation
-        float half_size = patch_size * 0.5f;
-        cv::Rect roi(
-            static_cast<int>(center.x - half_size),
-            static_cast<int>(center.y - half_size),
-            static_cast<int>(patch_size),
-            static_cast<int>(patch_size)
-        );
+    // Build transformation matrix: rotate about keypoint, scale, then translate to center
+    cv::Mat M = cv::getRotationMatrix2D(kp.pt, angle_deg, scale);
 
-        // Ensure ROI is within image bounds
-        roi &= cv::Rect(0, 0, imageGray.cols, imageGray.rows);
+    // Translate so that keypoint maps to patch center (32/2, 32/2)
+    M.at<double>(0, 2) += (CNN_INPUT_SIZE * 0.5 - kp.pt.x * scale);
+    M.at<double>(1, 2) += (CNN_INPUT_SIZE * 0.5 - kp.pt.y * scale);
 
-        if (roi.width > 0 && roi.height > 0) {
-            cv::Mat cropped = imageGray(roi);
-            cv::resize(cropped, patch, cv::Size(input_size_, input_size_));
-        } else {
-            // Fallback: create empty patch
-            patch = cv::Mat::zeros(input_size_, input_size_, CV_8UC1);
-        }
-    }
+    // Direct 32×32 extraction
+    cv::Mat cnn_patch;
+    cv::warpAffine(imageGray, cnn_patch, M, cv::Size(CNN_INPUT_SIZE, CNN_INPUT_SIZE),
+                   cv::INTER_LINEAR, cv::BORDER_REPLICATE);
 
     // Convert to tensor
-    return matToTensor(patch);
+    return matToTensor(cnn_patch);
 }
 
 torch::Tensor LibTorchWrapper::matToTensor(const cv::Mat& patch) const {

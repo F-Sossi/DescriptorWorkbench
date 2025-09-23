@@ -58,8 +58,8 @@ std::vector<cv::KeyPoint> HarrisKeypointGenerator::detect(
         keypoints.push_back(kp);
     }
     
-    // Apply boundary filtering
-    keypoints = applyBoundaryFilter(keypoints, gray_image.size(), 40);
+    // Apply boundary filtering for HPatches compliance (65px patches need ~35px margin)
+    keypoints = applyBoundaryFilter(keypoints, gray_image.size(), 35);
     
     // Apply keypoint limit from params
     if (params.max_features > 0 && keypoints.size() > static_cast<size_t>(params.max_features)) {

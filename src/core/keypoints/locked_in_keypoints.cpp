@@ -12,7 +12,7 @@
 
 namespace fs = boost::filesystem;
 
-constexpr int BORDER = 40;
+constexpr int BORDER = 35;  // HPatches compliance: 65px patches need ~35px margin
 
 void LockedInKeypoints::generateLockedInKeypoints(const std::string& dataFolderPath, const std::string& referenceKeypointsBaseFolder) {
     if (!fs::exists(dataFolderPath) || !fs::is_directory(dataFolderPath)) {

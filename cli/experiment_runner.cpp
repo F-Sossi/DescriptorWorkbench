@@ -8,6 +8,7 @@
 #include "src/core/metrics/ExperimentMetrics.hpp"
 #include "src/core/metrics/TrueAveragePrecision.hpp"
 #include "thesis_project/types.hpp"
+#include "src/core/config/experiment_config.hpp"  // For MatchingStrategy enum
 #ifdef BUILD_DATABASE
 #include "thesis_project/database/DatabaseManager.hpp"
 #endif
@@ -18,6 +19,16 @@
 #include <fstream>
 
 using namespace thesis_project;
+
+// Convert modern MatchingMethod to legacy MatchingStrategy for factory
+MatchingStrategy toMatchingStrategy(thesis_project::MatchingMethod method) {
+    switch (method) {
+        case thesis_project::MatchingMethod::BRUTE_FORCE: return BRUTE_FORCE;
+        case thesis_project::MatchingMethod::FLANN: return FLANN;
+        case thesis_project::MatchingMethod::RATIO_TEST: return RATIO_TEST;
+        default: return BRUTE_FORCE; // Safe fallback
+    }
+}
 
 struct ProfilingSummary {
     double detect_ms = 0.0;
@@ -85,8 +96,9 @@ static ::ExperimentMetrics processDirectoryNew(
             extractor = thesis_project::factories::DescriptorFactory::create(desc_config.type);
         }
         auto pooling = thesis_project::pooling::PoolingFactory::createFromConfig(desc_config);
-        // Matching: use brute-force L2 with cross-check (current default)
-        auto matcher = thesis_project::matching::MatchingFactory::createStrategy(BRUTE_FORCE);
+        // Matching: use method from YAML configuration
+        MatchingStrategy strategy = toMatchingStrategy(yaml_config.evaluation.params.matching_method);
+        auto matcher = thesis_project::matching::MatchingFactory::createStrategy(strategy);
 
         // Profiling accumulators
         double detect_ms = 0.0;

@@ -22,12 +22,13 @@ public:
     // Primary constructor
     LibTorchWrapper(const std::string& model_path,
                     int input_size = 32,
-                    float support_multiplier = 6.0f,
+                    float support_multiplier = 5.0f,
                     bool rotate_to_upright = true,
                     float mean = 0.0f,
                     float std = 1.0f,
-                    bool per_patch_standardize = false,
-                    int descriptor_size = 128);
+                    bool per_patch_standardize = true,
+                    int descriptor_size = 128,
+                    int resize_method = cv::INTER_AREA);
 
     // Main API: extract descriptors for keypoints in 'image'
     cv::Mat extract(const cv::Mat& imageBgrOrGray,
@@ -62,6 +63,7 @@ private:
     bool  per_patch_standardize_  = false; // z-score each patch individually
 
     int   descriptor_size_        = 128;   // expected output dimension
+    int   resize_method_          = cv::INTER_AREA;  // OpenCV resize interpolation method
 
     // Tuning knob for batching
     int   default_batch_size_     = 512;

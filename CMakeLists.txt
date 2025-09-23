@@ -621,6 +621,7 @@ if(BUILD_EXPERIMENT_CLI)
                        src/core/pooling/StackingPooling.cpp
                        src/core/pooling/PoolingFactory.cpp
                        src/core/matching/BruteForceMatching.cpp
+                       src/core/matching/RatioTestMatching.cpp
                        src/core/matching/MatchingFactory.cpp
                        src/core/metrics/TrueAveragePrecision.cpp
                        src/core/descriptor/factories/DescriptorFactory.cpp
@@ -730,6 +731,7 @@ if(BUILD_KEYPOINT_MANAGER AND BUILD_DATABASE)
                        src/core/pooling/StackingPooling.cpp
                        src/core/pooling/PoolingFactory.cpp
                        src/core/matching/BruteForceMatching.cpp
+                       src/core/matching/RatioTestMatching.cpp
                        src/core/matching/MatchingFactory.cpp
                        src/core/descriptor/factories/DescriptorFactory.cpp
                        src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp

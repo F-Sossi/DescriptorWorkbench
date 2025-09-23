@@ -385,6 +385,7 @@ namespace config {
     MatchingMethod YAMLConfigLoader::stringToMatchingMethod(const std::string& str) {
         if (str == "brute_force") return MatchingMethod::BRUTE_FORCE;
         if (str == "flann") return MatchingMethod::FLANN;
+        if (str == "ratio_test") return MatchingMethod::RATIO_TEST;
         throw std::runtime_error("Unknown matching method: " + str);
     }
     

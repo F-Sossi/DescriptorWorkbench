@@ -108,7 +108,8 @@ namespace thesis_project {
      */
     enum class MatchingMethod {
         BRUTE_FORCE,
-        FLANN
+        FLANN,
+        RATIO_TEST
     };
 
     /**
@@ -248,6 +249,7 @@ namespace thesis_project {
         switch (method) {
             case MatchingMethod::BRUTE_FORCE: return "brute_force";
             case MatchingMethod::FLANN: return "flann";
+            case MatchingMethod::RATIO_TEST: return "ratio_test";
             default: return "unknown";
         }
     }
@@ -260,6 +262,7 @@ namespace thesis_project {
             default: return "unknown";
         }
     }
+
 
     // ================================
     // DSP SCALE WEIGHTING

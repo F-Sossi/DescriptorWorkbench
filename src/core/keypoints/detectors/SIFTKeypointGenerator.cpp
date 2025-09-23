@@ -41,8 +41,8 @@ std::vector<cv::KeyPoint> SIFTKeypointGenerator::detect(
     std::vector<cv::KeyPoint> keypoints;
     detector_->detect(gray_image, keypoints);
     
-    // Apply boundary filtering (40px border like existing implementation)
-    keypoints = applyBoundaryFilter(keypoints, gray_image.size(), 40);
+    // Apply boundary filtering for HPatches compliance (65px patches need ~35px margin)
+    keypoints = applyBoundaryFilter(keypoints, gray_image.size(), 35);
     
     // Apply keypoint limit from params
     if (params.max_features > 0 && keypoints.size() > static_cast<size_t>(params.max_features)) {

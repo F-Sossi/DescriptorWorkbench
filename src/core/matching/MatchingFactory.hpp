@@ -17,10 +17,10 @@ namespace thesis_project::matching {
  * 
  * Supported strategies:
  * - BruteForce: Simple brute-force matching with cross-check
- * 
+ * - RatioTest: Lowe's ratio test (SNN) for robust matching
+ *
  * Future strategies could include:
  * - FLANN: Fast approximate matching
- * - RatioTest: Lowe's ratio test for better quality
  * - Hybrid: Combining multiple strategies
  */
 class MatchingFactory {
