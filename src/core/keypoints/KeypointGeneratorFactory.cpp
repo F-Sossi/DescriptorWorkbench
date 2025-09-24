@@ -3,6 +3,7 @@
 #include "detectors/HarrisKeypointGenerator.hpp"
 #include "detectors/ORBKeypointGenerator.hpp"
 #include "detectors/NonOverlappingKeypointGenerator.hpp"
+#include "generators/KeynetDetector.hpp"
 #include <stdexcept>
 #include <algorithm>
 
@@ -27,10 +28,14 @@ std::unique_ptr<IKeypointGenerator> KeypointGeneratorFactory::create(
         case KeypointGenerator::ORB:
             detector = createORB();
             break;
-            
+
+        case KeypointGenerator::KEYNET:
+            detector = createKeyNet();
+            break;
+
         case KeypointGenerator::LOCKED_IN:
             throw std::invalid_argument("LOCKED_IN detector type should be handled separately");
-            
+
         default:
             throw std::invalid_argument("Unsupported detector type: " + std::to_string(static_cast<int>(type)));
     }
@@ -64,6 +69,10 @@ std::unique_ptr<IKeypointGenerator> KeypointGeneratorFactory::createORB() {
     return std::make_unique<ORBKeypointGenerator>();
 }
 
+std::unique_ptr<IKeypointGenerator> KeypointGeneratorFactory::createKeyNet() {
+    return std::make_unique<KeynetDetector>();
+}
+
 std::unique_ptr<IKeypointGenerator> KeypointGeneratorFactory::makeNonOverlapping(
     std::unique_ptr<IKeypointGenerator> base_detector,
     float min_distance
@@ -88,6 +97,8 @@ KeypointGenerator KeypointGeneratorFactory::parseDetectorType(const std::string&
         return KeypointGenerator::HARRIS;
     } else if (lower_str == "orb") {
         return KeypointGenerator::ORB;
+    } else if (lower_str == "keynet") {
+        return KeypointGenerator::KEYNET;
     } else if (lower_str == "locked_in") {
         return KeypointGenerator::LOCKED_IN;
     } else {
@@ -96,7 +107,7 @@ KeypointGenerator KeypointGeneratorFactory::parseDetectorType(const std::string&
 }
 
 std::vector<std::string> KeypointGeneratorFactory::getSupportedDetectors() {
-    return {"sift", "harris", "orb"};
+    return {"sift", "harris", "orb", "keynet"};
 }
 
 bool KeypointGeneratorFactory::isSupported(KeypointGenerator type) {
@@ -104,6 +115,7 @@ bool KeypointGeneratorFactory::isSupported(KeypointGenerator type) {
         case KeypointGenerator::SIFT:
         case KeypointGenerator::HARRIS:
         case KeypointGenerator::ORB:
+        case KeypointGenerator::KEYNET:
             return true;
         case KeypointGenerator::LOCKED_IN:
             return false; // Handled separately
@@ -127,7 +139,11 @@ float KeypointGeneratorFactory::getRecommendedMinDistance(
         case KeypointGenerator::ORB:
             // ORB uses 31x31 patches by default
             return static_cast<float>(std::max(descriptor_patch_size, 31));
-            
+
+        case KeypointGenerator::KEYNET:
+            // KeyNet is designed for CNN descriptors with typical patch sizes
+            return static_cast<float>(descriptor_patch_size);
+
         default:
             return static_cast<float>(descriptor_patch_size);
     }

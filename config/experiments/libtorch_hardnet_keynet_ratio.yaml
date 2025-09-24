@@ -1,0 +1,47 @@
+experiment:
+  name: "libtorch_hardnet_keynet_ratio"
+  description: "LibTorch HardNet descriptor evaluated on KeyNet keypoints with ratio-test matching"
+  version: "1.0"
+  author: "researcher"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # Empty = use all scenes
+
+keypoints:
+  generator: "keynet"
+  max_features: 2000
+  source: "independent_detection"
+  keypoint_set_name: "keynet_reference4"
+
+descriptors:
+  - name: "libtorch_hardnet_keynet_ratio"
+    type: "libtorch_hardnet"
+    pooling: "none"
+    normalize_after_pooling: true
+
+  # Could add SOSNet variant later if needed
+
+evaluation:
+  matching:
+    method: "ratio_test"
+    ratio_threshold: 0.8
+    norm: "l2"
+    cross_check: false
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+output:
+  results_path: "results/"
+  save_keypoints: false
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+database:
+  enabled: true
+  connection: "sqlite:///experiments.db"

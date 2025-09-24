@@ -725,6 +725,7 @@ if(BUILD_KEYPOINT_MANAGER AND BUILD_DATABASE)
                        src/core/keypoints/detectors/HarrisKeypointGenerator.cpp
                        src/core/keypoints/detectors/ORBKeypointGenerator.cpp
                        src/core/keypoints/detectors/NonOverlappingKeypointGenerator.cpp
+                       src/core/keypoints/generators/KeynetDetector.cpp
                        src/core/processing/processor_utils.cpp
                        src/core/pooling/NoPooling.cpp
                        src/core/pooling/DomainSizePooling.cpp

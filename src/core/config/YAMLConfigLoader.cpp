@@ -378,6 +378,7 @@ namespace config {
         if (str == "sift") return KeypointGenerator::SIFT;
         if (str == "harris") return KeypointGenerator::HARRIS;
         if (str == "orb") return KeypointGenerator::ORB;
+        if (str == "keynet") return KeypointGenerator::KEYNET;
         if (str == "locked_in") return KeypointGenerator::LOCKED_IN;
         throw std::runtime_error("Unknown keypoint generator: " + str);
     }

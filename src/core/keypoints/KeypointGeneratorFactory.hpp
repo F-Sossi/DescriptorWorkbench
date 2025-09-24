@@ -32,7 +32,7 @@ public:
     
     /**
      * @brief Create a keypoint generator from string name
-     * @param detector_name Name of detector ("sift", "harris", "orb")
+     * @param detector_name Name of detector ("sift", "harris", "orb", "keynet")
      * @param non_overlapping Whether to apply non-overlapping constraint
      * @param min_distance Minimum distance for non-overlapping
      * @return Unique pointer to the created detector
@@ -61,7 +61,13 @@ public:
      * @return Unique pointer to ORB detector
      */
     static std::unique_ptr<IKeypointGenerator> createORB();
-    
+
+    /**
+     * @brief Create a KeyNet detector with default parameters
+     * @return Unique pointer to KeyNet detector
+     */
+    static std::unique_ptr<IKeypointGenerator> createKeyNet();
+
     /**
      * @brief Wrap any detector with non-overlapping constraint
      * @param base_detector Base detector to wrap
@@ -76,7 +82,7 @@ public:
     
     /**
      * @brief Parse detector type from string
-     * @param detector_str String representation ("sift", "harris", "orb")
+     * @param detector_str String representation ("sift", "harris", "orb", "keynet")
      * @return KeypointGenerator enum value
      * @throws std::invalid_argument if string is not recognized
      */

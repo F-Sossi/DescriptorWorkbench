@@ -92,6 +92,7 @@ namespace thesis_project {
         SIFT,
         HARRIS,
         ORB,
+        KEYNET,    // Kornia KeyNet learned detector
         LOCKED_IN  // For using pre-computed keypoints
     };
 
@@ -226,6 +227,7 @@ namespace thesis_project {
             case KeypointGenerator::SIFT: return "sift";
             case KeypointGenerator::HARRIS: return "harris";
             case KeypointGenerator::ORB: return "orb";
+            case KeypointGenerator::KEYNET: return "keynet";
             case KeypointGenerator::LOCKED_IN: return "locked_in";
             default: return "unknown";
         }

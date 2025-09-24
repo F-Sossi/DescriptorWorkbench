@@ -1,39 +1,33 @@
 experiment:
-  name: "dnn_hardnet_baseline_m6_all"
-  description: "HardNet m=6.0, per-patch std, all scenes"
+  name: "libtorch_sosnet_keynet_ratio"
+  description: "LibTorch SOSNet descriptor evaluated on KeyNet keypoints with ratio-test matching"
   version: "1.0"
   author: "researcher"
 
 dataset:
   type: "hpatches"
   path: "../data/"
-  scenes: []
+  scenes: []  # All scenes
 
 keypoints:
-  generator: "sift"
+  generator: "keynet"
   max_features: 2000
   source: "independent_detection"
+  keypoint_set_name: "keynet_reference4"
 
 descriptors:
-  - name: "hardnet_m6"
-    type: "dnn_patch"
+  - name: "libtorch_sosnet_keynet_ratio"
+    type: "libtorch_sosnet"
     pooling: "none"
-    use_color: false
-    dnn:
-      model: "../models/proper_hardnet_opset11.onnx"
-      input_size: 32
-      support_multiplier: 6.0
-      rotate_to_upright: true
-      mean: 0.0
-      std: 1.0
-      per_patch_standardize: true
+    normalize_after_pooling: true
 
 evaluation:
   matching:
-    method: "brute_force"
+    method: "ratio_test"
+    ratio_threshold: 0.8
     norm: "l2"
-    cross_check: true
-    threshold: 0.8
+    cross_check: false
+
   validation:
     method: "homography"
     threshold: 0.05
@@ -49,4 +43,3 @@ output:
 database:
   enabled: true
   connection: "sqlite:///experiments.db"
-
