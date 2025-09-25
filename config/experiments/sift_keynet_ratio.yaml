@@ -1,13 +1,13 @@
 experiment:
-  name: "libtorch_hardnet_keynet_ratio"
-  description: "LibTorch HardNet descriptor evaluated on KeyNet keypoints with ratio-test matching"
+  name: "sift_keynet_ratio"
+  description: "SIFT descriptor evaluated on Kornia KeyNet keypoints with ratio-test matching"
   version: "1.0"
   author: "researcher"
 
 dataset:
   type: "hpatches"
   path: "../data/"
-  scenes: []  # Empty = use all scenes
+  scenes: []
 
 keypoints:
   generator: "keynet"
@@ -16,12 +16,10 @@ keypoints:
   keypoint_set_name: "keynet_kornia_shared"
 
 descriptors:
-  - name: "libtorch_hardnet_keynet_ratio"
-    type: "libtorch_hardnet"
+  - name: "sift_keynet_ratio"
+    type: "sift"
     pooling: "none"
-    normalize_after_pooling: true
-
-  # Could add SOSNet variant later if needed
+    normalize_after_pooling: false
 
 evaluation:
   matching:

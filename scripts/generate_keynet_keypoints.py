@@ -1,378 +1,423 @@
 #!/usr/bin/env python3
 """
-KeyNet Keypoint Generation Script
+Generate KeyNet keypoints with Kornia and store them in experiments.db.
 
-This script generates keypoints using Kornia's KeyNet detector and stores them
-in the database for comparison with SIFT-generated keypoints.
-
-The hypothesis is that CNN descriptors (HardNet, SOSNet) perform better with
-KeyNet keypoints than SIFT keypoints, since they were trained together.
+Features:
+- Independent per-image detection (default) or homography-projected set to mirror locked SIFT flow.
+- Configurable keypoint set naming/description for storage in keypoint_sets table.
+- Optional overwrite flag to clear existing entries before regeneration.
+- Re-usable single-image mode for the C++ KeynetDetector bridge.
 """
 
-import sys
-import os
+from __future__ import annotations
+
+import argparse
+import csv
 import sqlite3
-import numpy as np
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable, List, Optional, Tuple
+
 import cv2
+import numpy as np
 import torch
 import kornia as K
 import kornia.feature as KF
-from pathlib import Path
-from typing import List, Tuple, Dict
-import argparse
-import csv
 
 try:
     from tqdm import tqdm
-except ImportError:  # pragma: no cover - CLI fallback when tqdm missing
-    def tqdm(iterable, **kwargs):
+except ImportError:  # pragma: no cover - fallback when tqdm missing
+    def tqdm(iterable: Iterable, **_: object) -> Iterable:
         return iterable
 
-# Add project root to path
-project_root = Path(__file__).parent.parent
-sys.path.append(str(project_root))
 
-class KeyNetKeypointGenerator:
-    """Generate keypoints using Kornia's KeyNet detector"""
+# Add project root so we can import repository modules if needed
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.append(str(PROJECT_ROOT))
 
-    def __init__(self, max_keypoints: int = 2000, device: str = "auto"):
-        """
-        Initialize KeyNet detector
 
-        Args:
-            max_keypoints: Maximum number of keypoints to detect
-            device: Device to run on ("auto", "cuda", "cpu")
-        """
-        if device == "auto":
-            self.device = K.utils.get_cuda_device_if_available()
-        else:
-            self.device = torch.device(device)
+@dataclass
+class DBSetConfig:
+    name: str
+    generator_type: str = "keynet"
+    generation_method: str = "independent_detection"
+    max_features: int = 2000
+    dataset_path: str = "../data/"
+    description: str = "KeyNet detector (Kornia)"
+    boundary_filter_px: int = 40
+    overlap_filtering: bool = False
+    min_distance: float = 0.0
 
-        print(f"Using device: {self.device}")
-
-        # Initialize KeyNet detector via multi-resolution wrapper to control count
-        self.keynet = KF.MultiResolutionDetector(
-            model=KF.KeyNet(),
-            num_features=max_keypoints
-        ).eval().to(self.device)
-        self.max_keypoints = max_keypoints
-
-        print(f"KeyNet detector initialized with max_keypoints={max_keypoints}")
-
-    def detect_keypoints(self, image_path: str) -> List[cv2.KeyPoint]:
-        """
-        Detect keypoints in an image using KeyNet
-
-        Args:
-            image_path: Path to the image file
-
-        Returns:
-            List of OpenCV KeyPoint objects
-        """
-        # Load and preprocess image
-        image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
-        if image is None:
-            raise ValueError(f"Could not load image: {image_path}")
-
-        # Convert to PyTorch tensor [1, 1, H, W]
-        image_tensor = K.image_to_tensor(image, keepdim=False).float() / 255.0
-
-        if image_tensor.dim() == 2:
-            image_tensor = image_tensor.unsqueeze(0).unsqueeze(0)
-        elif image_tensor.dim() == 3:
-            image_tensor = image_tensor.unsqueeze(0)
-        elif image_tensor.dim() > 4:
-            # Squeeze superfluous singleton dims produced by Kornia
-            while image_tensor.dim() > 4 and image_tensor.size(0) == 1:
-                image_tensor = image_tensor.squeeze(0)
-            if image_tensor.dim() == 3:
-                image_tensor = image_tensor.unsqueeze(0)
-
-        if image_tensor.dim() != 4:
-            raise ValueError(f"Unexpected tensor shape after conversion: {image_tensor.shape}")
-
-        image_tensor = image_tensor.to(self.device)
-
-        # Detect keypoints using KeyNet
-        with torch.no_grad():
-            lafs, responses = self.keynet(image_tensor)
-
-        # Convert LAFs (Local Affine Frames) to OpenCV KeyPoints
-        keypoints = self._lafs_to_keypoints(lafs.cpu(), responses.cpu())
-
-        return keypoints
-
-    def _lafs_to_keypoints(self, lafs: torch.Tensor, responses: torch.Tensor) -> List[cv2.KeyPoint]:
-        """
-        Convert Kornia LAFs to OpenCV KeyPoints
-
-        Args:
-            lafs: Local Affine Frames [1, N, 2, 3]
-            responses: Response values [1, N, 1]
-
-        Returns:
-            List of OpenCV KeyPoint objects
-        """
-        keypoints = []
-
-        # Extract from batch dimension
-        lafs = lafs[0]  # [N, 2, 3]
-        responses = responses[0].squeeze(-1)  # [N]
-
-        for i in range(lafs.shape[0]):
-            # Extract position (translation part of affine transform)
-            x = float(lafs[i, 0, 2])
-            y = float(lafs[i, 1, 2])
-
-            # Extract scale (from affine transform matrix)
-            # Scale is the norm of the first column of the 2x2 part
-            scale_x = torch.norm(lafs[i, :, 0]).item()
-            scale_y = torch.norm(lafs[i, :, 1]).item()
-            size = (scale_x + scale_y) / 2.0 * 2.0  # Convert to OpenCV size convention
-
-            # Extract angle (rotation)
-            angle = torch.atan2(lafs[i, 1, 0], lafs[i, 0, 0]).item() * 180.0 / np.pi
-
-            # Create KeyPoint
-            response = float(responses[i])
-            kp = cv2.KeyPoint(x=x, y=y, size=size, angle=angle, response=response,
-                            octave=0, class_id=-1)
-            keypoints.append(kp)
-
-        return keypoints
 
 class DatabaseManager:
-    """Manage database operations for keypoint storage"""
+    """Helper for inserting keypoints into experiments.db."""
 
-    def __init__(self, db_path: str = "experiments.db"):
-        """Initialize database connection"""
+    def __init__(self, db_path: Path, config: DBSetConfig, overwrite: bool) -> None:
         self.db_path = db_path
-        self._create_keypoint_set()
+        self.config = config
+        self.set_id = self._ensure_keypoint_set(overwrite)
+        if overwrite:
+            self.clear_keypoints()
 
-    def _create_keypoint_set(self):
-        """Create keypoint set entry for KeyNet keypoints"""
+    def _ensure_keypoint_set(self, overwrite: bool) -> int:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id FROM keypoint_sets WHERE name = ?",
+                (self.config.name,),
+            )
+            row = cursor.fetchone()
+            if row and not overwrite:
+                print(f"Using existing keypoint set '{self.config.name}' (id={row[0]})")
+                return int(row[0])
 
-            # Check if keypoint set already exists
-            cursor.execute("SELECT id FROM keypoint_sets WHERE name = ?", ("keynet_detector_keypoints",))
-            result = cursor.fetchone()
+            if row and overwrite:
+                set_id = int(row[0])
+                cursor.execute(
+                    "UPDATE keypoint_sets SET generator_type=?, generation_method=?, max_features=?, "
+                    "dataset_path=?, description=?, boundary_filter_px=?, overlap_filtering=?, min_distance=? "
+                    "WHERE id=?",
+                    (
+                        self.config.generator_type,
+                        self.config.generation_method,
+                        self.config.max_features,
+                        self.config.dataset_path,
+                        self.config.description,
+                        self.config.boundary_filter_px,
+                        1 if self.config.overlap_filtering else 0,
+                        self.config.min_distance,
+                        set_id,
+                    ),
+                )
+                return set_id
 
-            if result:
-                self.keypoint_set_id = result[0]
-                print(f"Using existing keypoint set ID: {self.keypoint_set_id}")
-            else:
-                # Create new keypoint set
-                cursor.execute("""
-                    INSERT INTO keypoint_sets (
-                        name, generator_type, generation_method, max_features,
-                        dataset_path, description, boundary_filter_px, overlap_filtering, min_distance
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    "keynet_detector_keypoints",
-                    "keynet",
-                    "learned_detection",
-                    2000,
-                    "../data/",
-                    "KeyNet learned keypoint detector with homography transformation",
-                    40,  # Same boundary filtering as SIFT
-                    False,  # No overlap filtering for KeyNet
-                    0.0
-                ))
-                self.keypoint_set_id = cursor.lastrowid
-                print(f"Created new keypoint set ID: {self.keypoint_set_id}")
+            cursor.execute(
+                """
+                INSERT INTO keypoint_sets (
+                    name, generator_type, generation_method, max_features,
+                    dataset_path, description, boundary_filter_px, overlap_filtering, min_distance
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    self.config.name,
+                    self.config.generator_type,
+                    self.config.generation_method,
+                    self.config.max_features,
+                    self.config.dataset_path,
+                    self.config.description,
+                    self.config.boundary_filter_px,
+                    1 if self.config.overlap_filtering else 0,
+                    self.config.min_distance,
+                ),
+            )
+            set_id = cursor.lastrowid
+            print(f"Created keypoint set '{self.config.name}' (id={set_id})")
+            return int(set_id)
 
-    def clear_keypoints(self):
-        """Clear existing KeyNet keypoints"""
+    def clear_keypoints(self) -> None:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM locked_keypoints WHERE keypoint_set_id = ?",
-                         (self.keypoint_set_id,))
-            print(f"Cleared existing keypoints for set {self.keypoint_set_id}")
+            cursor.execute(
+                "DELETE FROM locked_keypoints WHERE keypoint_set_id = ?",
+                (self.set_id,),
+            )
+        print(f"Cleared keypoints for set id {self.set_id}")
 
-    def store_keypoints(self, scene_name: str, image_name: str, keypoints: List[cv2.KeyPoint]):
-        """Store keypoints in database"""
+    def store_keypoints(
+        self, scene_name: str, image_name: str, keypoints: List[cv2.KeyPoint]
+    ) -> int:
+        if not keypoints:
+            return 0
+
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-
-            # Prepare batch insert data
-            keypoint_data = []
-            for kp in keypoints:
-                keypoint_data.append((
-                    self.keypoint_set_id, scene_name, image_name,
-                    float(kp.pt[0]), float(kp.pt[1]), float(kp.size), float(kp.angle),
-                    float(kp.response), int(kp.octave), int(kp.class_id), True
-                ))
-
-            # Batch insert
-            cursor.executemany("""
+            payload = [
+                (
+                    self.set_id,
+                    scene_name,
+                    image_name,
+                    float(kp.pt[0]),
+                    float(kp.pt[1]),
+                    float(kp.size),
+                    float(kp.angle),
+                    float(kp.response),
+                    int(kp.octave),
+                    int(kp.class_id),
+                    True,
+                )
+                for kp in keypoints
+            ]
+            cursor.executemany(
+                """
                 INSERT OR REPLACE INTO locked_keypoints (
                     keypoint_set_id, scene_name, image_name, x, y, size, angle,
                     response, octave, class_id, valid_bounds
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, keypoint_data)
+                """,
+                payload,
+            )
+        return len(keypoints)
 
-            return len(keypoint_data)
 
-def load_homography(homography_path: str) -> np.ndarray:
-    """Load homography matrix from file"""
-    try:
-        H = np.loadtxt(homography_path)
-        if H.shape != (3, 3):
-            raise ValueError(f"Invalid homography shape: {H.shape}")
-        return H
-    except Exception as e:
-        print(f"Warning: Could not load homography {homography_path}: {e}")
-        return np.eye(3)  # Return identity matrix as fallback
+class KeyNetKeypointGenerator:
+    def __init__(self, max_keypoints: int = 2000, device: str = "auto") -> None:
+        if device == "auto":
+            torch_device = K.utils.get_cuda_device_if_available()
+        else:
+            torch_device = torch.device(device)
+        self.device = torch_device
+        print(f"Using device: {self.device}")
 
-def apply_homography_to_keypoints(keypoints: List[cv2.KeyPoint], H: np.ndarray) -> List[cv2.KeyPoint]:
-    """Apply homography transformation to keypoints"""
-    if len(keypoints) == 0:
-        return []
+        self.detector = KF.KeyNetDetector(
+            num_features=max_keypoints,
+            pretrained=True,
+        ).to(self.device).eval()
+        self.max_keypoints = max_keypoints
+        print(f"KeyNet detector initialized with max_keypoints={max_keypoints}")
 
-    # Extract points
-    points = np.array([[kp.pt[0], kp.pt[1]] for kp in keypoints], dtype=np.float32)
-    points = points.reshape(-1, 1, 2)
+    def detect(self, image_path: Path) -> Tuple[List[cv2.KeyPoint], np.ndarray]:
+        image = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
+        if image is None:
+            raise ValueError(f"Could not load image: {image_path}")
 
-    # Apply homography
-    transformed_points = cv2.perspectiveTransform(points, H)
-    transformed_points = transformed_points.reshape(-1, 2)
+        tensor = K.image_to_tensor(image, keepdim=False).float() / 255.0
+        tensor = tensor.to(self.device)
 
-    # Create new keypoints with transformed positions
-    transformed_keypoints = []
-    for i, kp in enumerate(keypoints):
-        new_kp = cv2.KeyPoint(
-            x=float(transformed_points[i][0]),
-            y=float(transformed_points[i][1]),
-            size=kp.size,
-            angle=kp.angle,
-            response=kp.response,
-            octave=kp.octave,
-            class_id=kp.class_id
-        )
-        transformed_keypoints.append(new_kp)
+        with torch.no_grad():
+            lafs, responses = self.detector(tensor)
 
-    return transformed_keypoints
+        keypoints = self._lafs_to_keypoints(lafs.cpu(), responses.cpu())
+        return keypoints, image
 
-def filter_boundary_keypoints(keypoints: List[cv2.KeyPoint], image_shape: Tuple[int, int],
-                            border: int = 40) -> List[cv2.KeyPoint]:
-    """Filter out keypoints too close to image boundaries"""
-    height, width = image_shape[:2]
-    filtered = []
+    def _lafs_to_keypoints(
+        self, lafs: torch.Tensor, responses: torch.Tensor
+    ) -> List[cv2.KeyPoint]:
+        keypoints: List[cv2.KeyPoint] = []
+        lafs = lafs[0]
+        responses = responses[0].squeeze(-1)
 
-    for kp in keypoints:
-        if (border <= kp.pt[0] <= width - border and
-            border <= kp.pt[1] <= height - border):
-            filtered.append(kp)
+        for laf, response in zip(lafs, responses):
+            x = float(laf[0, 2])
+            y = float(laf[1, 2])
+            scale_x = torch.norm(laf[:, 0]).item()
+            scale_y = torch.norm(laf[:, 1]).item()
+            size = (scale_x + scale_y) / 2.0 * 2.0
+            angle = torch.atan2(laf[1, 0], laf[0, 0]).item() * 180.0 / np.pi
+            kp = cv2.KeyPoint(x, y, size, angle)
+            kp.response = float(response)
+            kp.octave = 0
+            kp.class_id = -1
+            keypoints.append(kp)
 
+        return keypoints
+
+
+# -----------------------------------------------------------------------------
+# Processing helpers
+# -----------------------------------------------------------------------------
+
+def filter_boundary_keypoints(
+    keypoints: List[cv2.KeyPoint],
+    image_shape: Tuple[int, int],
+    border: int,
+) -> List[cv2.KeyPoint]:
+    h, w = image_shape
+    filtered = [
+        kp
+        for kp in keypoints
+        if border <= kp.pt[0] <= (w - border) and border <= kp.pt[1] <= (h - border)
+    ]
     return filtered
 
-def write_keypoints_to_csv(output_path: str, keypoints: List[cv2.KeyPoint]) -> None:
-    """Write keypoints to CSV in the expected format"""
-    with open(output_path, "w", newline="") as csvfile:
+
+def top_n_by_response(keypoints: List[cv2.KeyPoint], limit: int) -> List[cv2.KeyPoint]:
+    if limit <= 0 or len(keypoints) <= limit:
+        return keypoints
+    keypoints.sort(key=lambda kp: kp.response, reverse=True)
+    return keypoints[:limit]
+
+
+def process_scene_independent(
+    generator: KeyNetKeypointGenerator,
+    scene_dir: Path,
+    border: int,
+    max_keypoints: int,
+    db: DatabaseManager,
+) -> Tuple[int, int]:
+    stored = 0
+    total = 0
+    for image_path in sorted(scene_dir.glob("*.ppm")):
+        keypoints, image = generator.detect(image_path)
+        keypoints = filter_boundary_keypoints(keypoints, image.shape, border)
+        keypoints = top_n_by_response(keypoints, max_keypoints)
+        count = db.store_keypoints(scene_dir.name, image_path.name, keypoints)
+        stored += count
+        total += 1
+    return stored, total
+
+
+def load_homography(path: Path) -> np.ndarray:
+    try:
+        H = np.loadtxt(str(path))
+        if H.shape != (3, 3):
+            raise ValueError("Invalid homography shape")
+        return H
+    except Exception as exc:  # pragma: no cover - defensive
+        raise ValueError(f"Could not load homography {path}: {exc}")
+
+
+def apply_homography_to_keypoints(
+    keypoints: List[cv2.KeyPoint], H: np.ndarray
+) -> List[cv2.KeyPoint]:
+    if not keypoints:
+        return []
+
+    pts = np.array([[kp.pt[0], kp.pt[1]] for kp in keypoints], dtype=np.float32)
+    transformed = cv2.perspectiveTransform(pts.reshape(-1, 1, 2), H).reshape(-1, 2)
+
+    projected: List[cv2.KeyPoint] = []
+    for kp, (x, y) in zip(keypoints, transformed):
+        new_kp = cv2.KeyPoint(float(x), float(y), kp.size, kp.angle)
+        new_kp.response = kp.response
+        new_kp.octave = kp.octave
+        new_kp.class_id = kp.class_id
+        projected.append(new_kp)
+    return projected
+
+
+def process_scene_projected(
+    generator: KeyNetKeypointGenerator,
+    scene_dir: Path,
+    border: int,
+    max_keypoints: int,
+    db: DatabaseManager,
+) -> Tuple[int, int]:
+    reference_path = scene_dir / "1.ppm"
+    if not reference_path.exists():
+        raise FileNotFoundError(f"Reference image missing: {reference_path}")
+
+    ref_keypoints, ref_image = generator.detect(reference_path)
+    ref_keypoints = filter_boundary_keypoints(ref_keypoints, ref_image.shape, border)
+    ref_keypoints = top_n_by_response(ref_keypoints, max_keypoints)
+
+    stored = db.store_keypoints(scene_dir.name, "1.ppm", ref_keypoints)
+    total_images = 1
+
+    for idx in range(2, 7):
+        image_path = scene_dir / f"{idx}.ppm"
+        if not image_path.exists():
+            continue
+
+        H_path = scene_dir / f"H_1_{idx}"
+        if not H_path.exists():
+            continue
+
+        H = load_homography(H_path)
+        transformed = apply_homography_to_keypoints(ref_keypoints, H)
+
+        image = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
+        transformed = filter_boundary_keypoints(transformed, image.shape, border)
+        count = db.store_keypoints(scene_dir.name, image_path.name, transformed)
+        stored += count
+        total_images += 1
+
+    return stored, total_images
+
+
+# -----------------------------------------------------------------------------
+# CLI operations
+# -----------------------------------------------------------------------------
+
+def run_single_image_mode(args: argparse.Namespace) -> int:
+    if not args.input or not args.output:
+        print("Error: --input and --output required for single-image mode", file=sys.stderr)
+        return 2
+
+    generator = KeyNetKeypointGenerator(max_keypoints=args.max_keypoints, device=args.device)
+    keypoints, _ = generator.detect(Path(args.input))
+    keypoints = top_n_by_response(keypoints, args.max_keypoints)
+
+    with open(args.output, "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(["x", "y", "size", "angle", "response"])
         for kp in keypoints:
             writer.writerow([kp.pt[0], kp.pt[1], kp.size, kp.angle, kp.response])
 
-
-def run_single_image_mode(args: argparse.Namespace) -> int:
-    if not args.input or not args.output:
-        print("Error: --input and --output are required for single-image mode")
-        return 2
-
-    generator = KeyNetKeypointGenerator(max_keypoints=args.max_keypoints, device=args.device)
-
-    try:
-        keypoints = generator.detect_keypoints(args.input)
-        write_keypoints_to_csv(args.output, keypoints)
-        print(f"Detected {len(keypoints)} keypoints and wrote them to {args.output}")
-        return 0
-    except Exception as exc:
-        print(f"KeyNet detection error: {exc}", file=sys.stderr)
-        return 1
-
-
-def run_dataset_mode(args: argparse.Namespace) -> int:
-    generator = KeyNetKeypointGenerator(max_keypoints=args.max_keypoints, device=args.device)
-    db = DatabaseManager(args.db_path)
-
-    if args.clear:
-        db.clear_keypoints()
-
-    data_dir = Path(args.data_dir)
-    if not data_dir.exists():
-        print(f"Error: Data directory {data_dir} does not exist")
-        return 1
-
-    scene_dirs = [d for d in data_dir.iterdir() if d.is_dir()]
-    total_keypoints = 0
-    total_scenes = 0
-
-    print(f"Processing {len(scene_dirs)} scenes...")
-
-    for scene_dir in tqdm(scene_dirs, desc="Processing scenes"):
-        scene_name = scene_dir.name
-
-        ref_image_path = scene_dir / "1.ppm"
-        if not ref_image_path.exists():
-            print(f"Warning: Reference image not found: {ref_image_path}")
-            continue
-
-        try:
-            ref_keypoints = generator.detect_keypoints(str(ref_image_path))
-            ref_image = cv2.imread(str(ref_image_path), cv2.IMREAD_GRAYSCALE)
-            ref_keypoints = filter_boundary_keypoints(ref_keypoints, ref_image.shape)
-
-            stored = db.store_keypoints(scene_name, "1.ppm", ref_keypoints)
-            total_keypoints += stored
-
-            for i in range(2, 7):
-                target_image_path = scene_dir / f"{i}.ppm"
-                homography_path = scene_dir / f"H_1_{i}"
-
-                if not target_image_path.exists():
-                    continue
-
-                H = load_homography(str(homography_path))
-                transformed_keypoints = apply_homography_to_keypoints(ref_keypoints, H)
-
-                target_image = cv2.imread(str(target_image_path), cv2.IMREAD_GRAYSCALE)
-                transformed_keypoints = filter_boundary_keypoints(transformed_keypoints, target_image.shape)
-
-                stored = db.store_keypoints(scene_name, f"{i}.ppm", transformed_keypoints)
-                total_keypoints += stored
-
-            total_scenes += 1
-
-        except Exception as exc:
-            print(f"Error processing scene {scene_name}: {exc}")
-            continue
-
-    print("\n✅ KeyNet keypoint generation complete!")
-    print(f"📊 Processed: {total_scenes} scenes")
-    print(f"🎯 Generated: {total_keypoints:,} keypoints")
-    print("💾 Stored in keypoint set: keynet_detector_keypoints")
-    print("\n🔬 Ready to test CNN descriptors with KeyNet keypoints!")
+    print(f"Detected {len(keypoints)} keypoints -> {args.output}")
     return 0
 
 
-def main():
-    parser = argparse.ArgumentParser(description="KeyNet keypoint generation")
+def run_dataset_mode(args: argparse.Namespace) -> int:
+    data_root = Path(args.data_dir).resolve()
+    if not data_root.exists():
+        print(f"Error: data directory does not exist: {data_root}", file=sys.stderr)
+        return 1
+
+    config = DBSetConfig(
+        name=args.set_name,
+        generator_type="keynet",
+        generation_method="independent_detection" if args.mode == "independent" else "homography_projection",
+        max_features=args.max_keypoints,
+        dataset_path=str(data_root),
+        description=args.description,
+        boundary_filter_px=args.border,
+        overlap_filtering=False,
+        min_distance=0.0,
+    )
+
+    db = DatabaseManager(Path(args.db_path), config, overwrite=args.overwrite)
+    generator = KeyNetKeypointGenerator(max_keypoints=args.max_keypoints, device=args.device)
+
+    total_keypoints = 0
+    total_images = 0
+    scenes = sorted([d for d in data_root.iterdir() if d.is_dir()])
+    if args.scenes:
+        filter_set = set(args.scenes)
+        scenes = [d for d in scenes if d.name in filter_set]
+    print(f"Processing {len(scenes)} scenes...")
+
+    for scene_dir in tqdm(scenes, desc="Scenes"):
+        if args.mode == "independent":
+            stored, count = process_scene_independent(generator, scene_dir, args.border, args.max_keypoints, db)
+        else:
+            stored, count = process_scene_projected(generator, scene_dir, args.border, args.max_keypoints, db)
+        total_keypoints += stored
+        total_images += count
+
+    print("\n✅ KeyNet keypoint generation complete")
+    print(f"Scenes processed: {len(scenes)}")
+    print(f"Images processed: {total_images}")
+    print(f"Keypoints stored: {total_keypoints}")
+    print(f"Database set name: {args.set_name}")
+    return 0
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Generate KeyNet keypoints with Kornia")
     parser.add_argument("--data_dir", default="../data", help="HPatches dataset directory (dataset mode)")
-    parser.add_argument("--db_path", default="experiments.db", help="Database path (dataset mode)")
+    parser.add_argument("--db_path", default="experiments.db", help="Path to experiments.db")
     parser.add_argument("--max_keypoints", type=int, default=2000, help="Maximum keypoints per image")
     parser.add_argument("--device", default="auto", choices=["auto", "cuda", "cpu"], help="Device to use")
-    parser.add_argument("--clear", action="store_true", help="Clear existing keypoints (dataset mode)")
+    parser.add_argument("--mode", choices=["independent", "projected"], default="independent", help="Detection strategy")
+    parser.add_argument("--border", type=int, default=40, help="Boundary filter in pixels")
+    parser.add_argument("--set-name", default="keynet_detector_keypoints", help="Destination keypoint set name")
+    parser.add_argument("--description", default="KeyNet detector (Kornia, independent detection)", help="Keypoint set description")
+    parser.add_argument("--overwrite", action="store_true", help="Clear existing entries for this set before writing")
+    parser.add_argument("--scenes", nargs="*", help="Optional subset of scenes to process")
     parser.add_argument("--input", help="Single image input path (single-image mode)")
-    parser.add_argument("--output", help="Single image output CSV path (single-image mode)")
+    parser.add_argument("--output", help="Single image CSV output path (single-image mode)")
+    parser.add_argument("--clear", action="store_true", help="Legacy flag - no longer used (kept for compatibility)")
+    return parser.parse_args()
 
-    args = parser.parse_args()
 
+def main() -> int:
+    args = parse_args()
     if args.input or args.output:
-        sys.exit(run_single_image_mode(args))
+        return run_single_image_mode(args)
+    return run_dataset_mode(args)
 
-    sys.exit(run_dataset_mode(args))
 
 if __name__ == "__main__":
-    main()
+    torch.set_grad_enabled(False)
+    sys.exit(main())

@@ -1,13 +1,13 @@
 experiment:
-  name: "libtorch_hardnet_keynet_ratio"
-  description: "LibTorch HardNet descriptor evaluated on KeyNet keypoints with ratio-test matching"
+  name: "libtorch_hardnet_keynet_bruteforce"
+  description: "LibTorch HardNet descriptor on KeyNet keypoints with brute-force matching"
   version: "1.0"
   author: "researcher"
 
 dataset:
   type: "hpatches"
   path: "../data/"
-  scenes: []  # Empty = use all scenes
+  scenes: []
 
 keypoints:
   generator: "keynet"
@@ -16,19 +16,17 @@ keypoints:
   keypoint_set_name: "keynet_kornia_shared"
 
 descriptors:
-  - name: "libtorch_hardnet_keynet_ratio"
+  - name: "libtorch_hardnet_keynet_bruteforce"
     type: "libtorch_hardnet"
     pooling: "none"
     normalize_after_pooling: true
 
-  # Could add SOSNet variant later if needed
-
 evaluation:
   matching:
-    method: "ratio_test"
-    ratio_threshold: 0.8
+    method: "brute_force"
     norm: "l2"
-    cross_check: false
+    cross_check: true
+    threshold: 0.8
 
   validation:
     method: "homography"

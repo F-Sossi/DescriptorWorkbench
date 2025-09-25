@@ -1,27 +1,25 @@
 experiment:
-  name: "libtorch_hardnet_keynet_ratio"
-  description: "LibTorch HardNet descriptor evaluated on KeyNet keypoints with ratio-test matching"
+  name: "libtorch_hardnet_sift_ratio"
+  description: "LibTorch HardNet descriptor on SIFT homography keypoints with ratio-test matching"
   version: "1.0"
   author: "researcher"
 
 dataset:
   type: "hpatches"
   path: "../data/"
-  scenes: []  # Empty = use all scenes
+  scenes: []
 
 keypoints:
-  generator: "keynet"
+  generator: "sift"
   max_features: 2000
-  source: "independent_detection"
-  keypoint_set_name: "keynet_kornia_shared"
+  source: "homography_projection"
+  keypoint_set_name: "sift_homography_projection"
 
 descriptors:
-  - name: "libtorch_hardnet_keynet_ratio"
+  - name: "libtorch_hardnet_sift_ratio"
     type: "libtorch_hardnet"
     pooling: "none"
     normalize_after_pooling: true
-
-  # Could add SOSNet variant later if needed
 
 evaluation:
   matching:

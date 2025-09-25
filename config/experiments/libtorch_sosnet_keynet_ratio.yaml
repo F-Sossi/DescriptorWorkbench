@@ -13,7 +13,7 @@ keypoints:
   generator: "keynet"
   max_features: 2000
   source: "independent_detection"
-  keypoint_set_name: "keynet_reference4"
+  keypoint_set_name: "keynet_kornia_shared"
 
 descriptors:
   - name: "libtorch_sosnet_keynet_ratio"

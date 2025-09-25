@@ -8,6 +8,8 @@
 #include <boost/filesystem.hpp>
 #include <fstream>
 #include <ctime>
+#include <cstdlib>
+#include <sstream>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/opencv.hpp>
 
@@ -31,6 +33,8 @@ int main(int argc, char** argv) {
         std::cout << "  Advanced Detector Generation:" << std::endl;
         std::cout << "    generate-detector <data_folder> <detector> [name]                    - Generate keypoints using specific detector (sift|harris|orb)" << std::endl;
         std::cout << "    generate-non-overlapping <data_folder> <detector> <min_distance> [name] - Generate non-overlapping keypoints" << std::endl;
+        std::cout << "    generate-kornia-keynet <data_folder> [set_name] [max_kp] [device] [--mode independent|projected] [--overwrite]" << std::endl;
+        std::cout << "                         Run Kornia KeyNet detector via Python (independent or homography projected)" << std::endl;
         std::cout << "  Import/Export:" << std::endl;
         std::cout << "    import-csv <csv_folder> [set_name]        - Import keypoints from CSV files" << std::endl;
         std::cout << "    export-csv <output_folder> [set_id]       - Export keypoints from DB to CSV" << std::endl;
@@ -404,6 +408,82 @@ int main(int argc, char** argv) {
         std::string image = argv[3];
         auto keypoints = db.getLockedKeypoints(scene, image);
         std::cout << "🔢 Keypoints for " << scene << "/" << image << ": " << keypoints.size() << std::endl;
+
+    } else if (command == "generate-kornia-keynet") {
+        if (argc < 3) {
+            std::cerr << "Usage: " << argv[0] << " generate-kornia-keynet <data_folder> [set_name] [max_kp] [device] [--overwrite]" << std::endl;
+            std::cerr << "  Example: " << argv[0] << " generate-kornia-keynet ../data keynet_reference 2000 auto --overwrite" << std::endl;
+            return 1;
+        }
+
+        std::string data_folder = argv[2];
+        std::string set_name = (argc >= 4 && std::string(argv[3]).rfind("--", 0) != 0)
+            ? argv[3]
+            : ("keynet_kornia_" + std::to_string(std::time(nullptr)));
+
+        int arg_index = 4;
+        int max_kp = 2000;
+        if (arg_index < argc && std::string(argv[arg_index]).rfind("--", 0) != 0) {
+            max_kp = std::stoi(argv[arg_index]);
+            ++arg_index;
+        }
+
+        std::string device_arg = "auto";
+        if (arg_index < argc && std::string(argv[arg_index]).rfind("--", 0) != 0) {
+            device_arg = argv[arg_index];
+            ++arg_index;
+        }
+
+        std::string mode_arg = "independent";
+        bool overwrite = false;
+        while (arg_index < argc) {
+            std::string extra = argv[arg_index];
+            if (extra == "--overwrite") {
+                overwrite = true;
+                ++arg_index;
+            } else if (extra == "--mode" && (arg_index + 1) < argc) {
+                mode_arg = argv[arg_index + 1];
+                arg_index += 2;
+            } else {
+                std::cerr << "Unknown option for generate-kornia-keynet: " << extra << std::endl;
+                return 1;
+            }
+        }
+
+        if (mode_arg != "independent" && mode_arg != "projected") {
+            std::cerr << "Unsupported mode for Kornia KeyNet: " << mode_arg << " (expected 'independent' or 'projected')" << std::endl;
+            return 1;
+        }
+
+        LOG_INFO("Launching Kornia KeyNet generation via Python");
+        LOG_INFO("  Data folder: " + data_folder);
+        LOG_INFO("  Set name: " + set_name);
+        LOG_INFO("  Max keypoints: " + std::to_string(max_kp));
+        LOG_INFO("  Device: " + device_arg);
+        LOG_INFO(std::string("  Mode: ") + mode_arg);
+        LOG_INFO(std::string("  Overwrite: ") + (overwrite ? "true" : "false"));
+
+        std::ostringstream cmd;
+        cmd << "/bin/bash -c \"source /home/frank/miniforge3/etc/profile.d/conda.sh && conda activate descriptor-compare && "
+            << "python3 ../scripts/generate_keynet_keypoints.py"
+            << " --data_dir \"" << data_folder << "\""
+            << " --db_path experiments.db"
+            << " --max_keypoints " << max_kp
+            << " --device " << device_arg
+            << " --mode " << mode_arg
+            << " --set-name \"" << set_name << "\"";
+        if (overwrite) {
+            cmd << " --overwrite";
+        }
+        cmd << "\"";
+
+        int result = std::system(cmd.str().c_str());
+        if (result != 0) {
+            LOG_ERROR("Kornia KeyNet generation failed. Exit code: " + std::to_string(result));
+            return 1;
+        }
+
+        LOG_INFO("✅ Kornia KeyNet generation completed successfully for set: " + set_name);
 
     } else if (command == "generate-detector") {
         if (argc < 4 || argc > 5) {

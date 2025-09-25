@@ -149,6 +149,53 @@ TEST_F(ExperimentMetricsTest, CalculateMeanPrecisionWithTrueMAPData) {
     EXPECT_NEAR(metrics.true_map_macro_by_scene, 0.775, 1e-6);
 }
 
+TEST_F(ExperimentMetricsTest, CalculateMapMetricsIncludingZeroQueries) {
+    // Scene 1: two successful queries (ranks 1 and 3)
+    TrueAveragePrecision::QueryAPResult rank1;
+    rank1.ap = 1.0; rank1.has_potential_match = true; rank1.rank_of_true_match = 1;
+    metrics.addQueryAP("scene1", rank1);
+
+    TrueAveragePrecision::QueryAPResult rank3;
+    rank3.ap = 1.0 / 3.0; rank3.has_potential_match = true; rank3.rank_of_true_match = 3;
+    metrics.addQueryAP("scene1", rank3);
+
+    // Scene 2: one successful query (rank 5) and one with no potential match (R = 0)
+    TrueAveragePrecision::QueryAPResult rank5;
+    rank5.ap = 1.0 / 5.0; rank5.has_potential_match = true; rank5.rank_of_true_match = 5;
+    metrics.addQueryAP("scene2", rank5);
+
+    TrueAveragePrecision::QueryAPResult no_match;
+    no_match.ap = 0.0; no_match.has_potential_match = false; no_match.rank_of_true_match = -1;
+    metrics.addQueryAP("scene2", no_match);
+
+    metrics.ranks_per_query = {1, 3, 5, -1};
+    metrics.calculateMeanPrecision();
+
+    // Micro mAP (queries with GT): (1 + 1/3 + 1/5) / 3
+    const double expected_micro = (1.0 + (1.0 / 3.0) + (1.0 / 5.0)) / 3.0;
+    EXPECT_NEAR(metrics.true_map_micro, expected_micro, 1e-6);
+
+    // Micro mAP including zeros: divide by total queries (3 matches + 1 excluded)
+    const double expected_micro_zeros = (1.0 + (1.0 / 3.0) + (1.0 / 5.0)) / 4.0;
+    EXPECT_NEAR(metrics.true_map_micro_including_zeros, expected_micro_zeros, 1e-6);
+
+    // Macro mAP (per scene) - averages of scene means
+    const double scene1_mean = (1.0 + (1.0 / 3.0)) / 2.0;
+    const double scene2_mean = (1.0 / 5.0);
+    const double expected_macro = (scene1_mean + scene2_mean) / 2.0;
+    EXPECT_NEAR(metrics.true_map_macro_by_scene, expected_macro, 1e-6);
+
+    // Macro mAP including zeros: second scene divides by total queries (including excluded)
+    const double scene2_mean_with_zero = (1.0 / 5.0) / 2.0; // one match + one excluded
+    const double expected_macro_zeros = (scene1_mean + scene2_mean_with_zero) / 2.0;
+    EXPECT_NEAR(metrics.true_map_macro_by_scene_including_zeros, expected_macro_zeros, 1e-6);
+
+    // Precision@K from the rank list
+    EXPECT_NEAR(metrics.precision_at_1, 1.0 / 3.0, 1e-6); // ranks 1,3,5 => only one at rank ≤ 1
+    EXPECT_NEAR(metrics.precision_at_5, 1.0, 1e-6);       // all three valid ranks ≤ 5
+    EXPECT_NEAR(metrics.precision_at_10, 1.0, 1e-6);
+}
+
 TEST_F(ExperimentMetricsTest, CalculatePrecisionAtK) {
     // Add rank data for P@K/R@K calculation
     metrics.ranks_per_query = {1, 3, 1, 5, -1, 2, 10, 1};  // 7 valid ranks, 1 R=0
