@@ -9,9 +9,7 @@
 #include "src/core/metrics/TrueAveragePrecision.hpp"
 #include "thesis_project/types.hpp"
 #include "src/core/config/experiment_config.hpp"  // For MatchingStrategy enum
-#ifdef BUILD_DATABASE
 #include "thesis_project/database/DatabaseManager.hpp"
-#endif
 #include <iostream>
 #include <filesystem>
 #include <numeric>
@@ -48,11 +46,7 @@ static cv::Ptr<cv::Feature2D> makeDetector(const thesis_project::config::Experim
 static ::ExperimentMetrics processDirectoryNew(
     const config::ExperimentConfig& yaml_config,
     const config::ExperimentConfig::DescriptorConfig& desc_config,
-#ifdef BUILD_DATABASE
     thesis_project::database::DatabaseManager* db_ptr,
-#else
-    void* db_ptr,
-#endif
     ProfilingSummary& profile
 ) {
     namespace fs = std::filesystem;
@@ -63,6 +57,8 @@ static ::ExperimentMetrics processDirectoryNew(
         if (!fs::exists(yaml_config.dataset.path) || !fs::is_directory(yaml_config.dataset.path)) {
             return ::ExperimentMetrics::createError("Invalid data folder: " + yaml_config.dataset.path);
         }
+
+        const int keypoint_set_id = yaml_config.keypoints.params.keypoint_set_id;
 
         // Build extractor and pooling strategy for this descriptor (Schema v1)
         std::unique_ptr<IDescriptorExtractor> extractor;
@@ -136,17 +132,20 @@ static ::ExperimentMetrics processDirectoryNew(
 
             // Get keypoints for image1
             std::vector<cv::KeyPoint> keypoints1;
-#ifdef BUILD_DATABASE
-            if (yaml_config.keypoints.params.source == thesis_project::KeypointSource::HOMOGRAPHY_PROJECTION && db_ptr) {
+            if ((yaml_config.keypoints.params.source == thesis_project::KeypointSource::HOMOGRAPHY_PROJECTION ||
+                 yaml_config.keypoints.params.source == thesis_project::KeypointSource::INDEPENDENT_DETECTION) && db_ptr) {
                 auto& db = *db_ptr;
-                keypoints1 = db.getLockedKeypoints(scene_name, "1.ppm");
+                if (keypoint_set_id >= 0) {
+                    keypoints1 = db.getLockedKeypointsFromSet(keypoint_set_id, scene_name, "1.ppm");
+                } else {
+                    keypoints1 = db.getLockedKeypoints(scene_name, "1.ppm");
+                    LOG_INFO("Experiment not using specified keypoint set");
+                }
                 if (keypoints1.empty()) {
                     LOG_ERROR("No locked keypoints for " + scene_name + "/1.ppm");
                     continue;
                 }
-            } else
-#endif
-            {
+            } else {
                 // Detect fresh keypoints
                 auto det = makeDetector(yaml_config);
                 auto t0 = std::chrono::high_resolution_clock::now();
@@ -182,17 +181,20 @@ static ::ExperimentMetrics processDirectoryNew(
 
                 // Get keypoints2
                 std::vector<cv::KeyPoint> keypoints2;
-#ifdef BUILD_DATABASE
-                if (yaml_config.keypoints.params.source == thesis_project::KeypointSource::HOMOGRAPHY_PROJECTION && db_ptr) {
+                if ((yaml_config.keypoints.params.source == thesis_project::KeypointSource::HOMOGRAPHY_PROJECTION ||
+                     yaml_config.keypoints.params.source == thesis_project::KeypointSource::INDEPENDENT_DETECTION) && db_ptr) {
                     auto& db = *db_ptr;
-                    keypoints2 = db.getLockedKeypoints(scene_name, image_name);
+                    if (keypoint_set_id >= 0) {
+                        keypoints2 = db.getLockedKeypointsFromSet(keypoint_set_id, scene_name, image_name);
+                    } else {
+                        keypoints2 = db.getLockedKeypoints(scene_name, image_name);
+                        LOG_INFO("Experiment not using specified keypoint set");
+                    }
                     if (keypoints2.empty()) {
                         LOG_ERROR("No locked keypoints for " + scene_name + "/" + image_name);
                         continue;
                     }
-                } else
-#endif
-                {
+                } else {
                     auto det = makeDetector(yaml_config);
                     auto t0 = std::chrono::high_resolution_clock::now();
                     det->detect(image2, keypoints2);
@@ -300,7 +302,6 @@ int main(int argc, char** argv) {
         LOG_INFO("Loading experiment configuration from: " + config_path);
         auto yaml_config = config::YAMLConfigLoader::loadFromFile(config_path);
 
-#ifdef BUILD_DATABASE
         // Initialize database for experiment tracking (respect YAML when provided)
         auto normalizeDbPath = [](std::string s) {
             const std::string prefix = "sqlite:///";
@@ -326,7 +327,17 @@ int main(int argc, char** argv) {
         } else {
             LOG_INFO("Database tracking disabled");
         }
-#endif
+
+        // Resolve keypoint set name to ID for any source type that uses database keypoints
+        if (db.isEnabled() && !yaml_config.keypoints.params.keypoint_set_name.empty()) {
+            int resolved_set_id = db.getKeypointSetId(yaml_config.keypoints.params.keypoint_set_name);
+            if (resolved_set_id == -1) {
+                LOG_ERROR("Keypoint set '" + yaml_config.keypoints.params.keypoint_set_name + "' not found in database");
+                return 1;
+            }
+            yaml_config.keypoints.params.keypoint_set_id = resolved_set_id;
+            LOG_INFO("Using keypoint set '" + yaml_config.keypoints.params.keypoint_set_name + "' (id=" + std::to_string(resolved_set_id) + ") with source: " + toString(yaml_config.keypoints.params.source));
+        }
 
         LOG_INFO("Experiment: " + yaml_config.experiment.name);
         LOG_INFO("Description: " + yaml_config.experiment.description);
@@ -347,34 +358,32 @@ int main(int argc, char** argv) {
 
             // New interface is the default path where supported; processor_utils handles routing.
 
-#ifdef BUILD_DATABASE
-            // Record experiment configuration
-            thesis_project::database::ExperimentConfig dbConfig;
-            dbConfig.descriptor_type = desc_config.name;
-            dbConfig.dataset_path = yaml_config.dataset.path;
-            dbConfig.pooling_strategy = toString(desc_config.params.pooling);
-            dbConfig.similarity_threshold = yaml_config.evaluation.params.match_threshold;
-            dbConfig.max_features = yaml_config.keypoints.params.max_features;
-            dbConfig.parameters["experiment_name"] = yaml_config.experiment.name;
-            dbConfig.parameters["descriptor_type"] = toString(desc_config.type);
-            dbConfig.parameters["pooling_strategy"] = toString(desc_config.params.pooling);
-            dbConfig.parameters["norm_type"] = std::to_string(desc_config.params.norm_type);
-            
             auto start_time = std::chrono::high_resolution_clock::now();
-            int experiment_id = db.recordConfiguration(dbConfig);
-#endif
+            int experiment_id = -1;
+            if (db.isEnabled()) {
+                thesis_project::database::ExperimentConfig dbConfig;
+                dbConfig.descriptor_type = desc_config.name;
+                dbConfig.dataset_path = yaml_config.dataset.path;
+                dbConfig.pooling_strategy = toString(desc_config.params.pooling);
+                dbConfig.similarity_threshold = yaml_config.evaluation.params.match_threshold;
+                dbConfig.max_features = yaml_config.keypoints.params.max_features;
+                dbConfig.parameters["experiment_name"] = yaml_config.experiment.name;
+                dbConfig.parameters["descriptor_type"] = toString(desc_config.type);
+                dbConfig.parameters["pooling_strategy"] = toString(desc_config.params.pooling);
+                dbConfig.parameters["norm_type"] = std::to_string(desc_config.params.norm_type);
+
+                start_time = std::chrono::high_resolution_clock::now();
+                experiment_id = db.recordConfiguration(dbConfig);
+            }
 
             // Run new pipeline path end-to-end
             ProfilingSummary profile{};
-            auto experiment_metrics = processDirectoryNew(yaml_config, desc_config,
-#ifdef BUILD_DATABASE
-                &db,
-#else
-                nullptr,
-#endif
+            auto experiment_metrics = processDirectoryNew(
+                yaml_config,
+                desc_config,
+                db.isEnabled() ? &db : nullptr,
                 profile);
             
-#ifdef BUILD_DATABASE
             if (experiment_id != -1) {
                 auto end_time = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
@@ -458,7 +467,6 @@ int main(int argc, char** argv) {
                 
                 db.recordExperiment(results);
             }
-#endif
 
             if (experiment_metrics.success) {
                 LOG_INFO("✅ Completed descriptor: " + desc_config.name);

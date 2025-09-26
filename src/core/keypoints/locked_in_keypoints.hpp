@@ -7,9 +7,7 @@
 #include <boost/filesystem.hpp>  // Add this include
 #include <vector>  // Add this for std::vector
 
-#ifdef BUILD_DATABASE
 #include "thesis_project/database/DatabaseManager.hpp"
-#endif
 
 namespace fs = boost::filesystem;  // Add this namespace alias
 
@@ -21,7 +19,6 @@ public:
     static void displayLockedInKeypointsBorder(const std::string &dataFolderPath);
     static void saveLockedInKeypointsBorder(const std::string& dataFolderPath);
 
-#ifdef BUILD_DATABASE
     /**
      * @brief Generate locked-in keypoints with proper boundary filtering and store in database
      * @param dataFolderPath Path to HPatches data folder containing scene subdirectories
@@ -39,7 +36,6 @@ public:
     static void generateLockedInKeypointsToDatabase(const std::string& dataFolderPath, 
                                                    const thesis_project::database::DatabaseManager& db,
                                                    int keypoint_set_id);
-#endif
 
 private:
     static void saveKeypointsToCSV(const std::string& filePath, const std::vector<cv::KeyPoint>& keypoints);
@@ -47,12 +43,10 @@ private:
     static void createSummaryImage(const std::vector<std::string>& imageFilenames,
                                    const std::string& sceneName,
                                    const std::string& outputPath);
-#ifdef BUILD_DATABASE
     static void createSummaryImageWithDatabase(const std::vector<std::string>& imageFilenames,
                                               const std::string& sceneName,
                                               const std::string& outputPath,
                                               const thesis_project::database::DatabaseManager& db);
-#endif
 };
 
 #endif // LOCKED_IN_KEYPOINTS_HPP

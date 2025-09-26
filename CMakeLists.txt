@@ -36,7 +36,6 @@ endif()
 option(USE_CONAN "Use Conan for dependency management" OFF)
 option(BUILD_PYTHON_BRIDGE "Build Python bridge for CNN descriptors" OFF)
 option(USE_SYSTEM_PACKAGES "Prefer system packages over Conan" ON)
-option(BUILD_DATABASE "Build database integration" ON)
 option(BUILD_LIBTORCH "Build LibTorch CNN descriptor support" ON)
 
 # Compiler flags
@@ -228,7 +227,7 @@ endif()
 # The modern implementation is in thesis_database library
 
 # STAGE 5: NEW DATABASE LIBRARY (THESIS PROJECT)
-if(BUILD_DATABASE AND EXISTS "${CMAKE_SOURCE_DIR}/src/core/database/DatabaseManager.cpp")
+if(EXISTS "${CMAKE_SOURCE_DIR}/src/core/database/DatabaseManager.cpp")
     add_library(thesis_database
         src/core/database/DatabaseManager.cpp
     )
@@ -244,10 +243,9 @@ if(BUILD_DATABASE AND EXISTS "${CMAKE_SOURCE_DIR}/src/core/database/DatabaseMana
     )
 
     target_compile_features(thesis_database PRIVATE cxx_std_17)
-    target_compile_definitions(thesis_database PUBLIC BUILD_DATABASE=1)
     message(STATUS "Stage 5: Thesis database library configured")
 else()
-    message(STATUS "Stage 5: Database integration disabled or files not found")
+    message(FATAL_ERROR "Stage 5: DatabaseManager.cpp not found; database integration is required")
 endif()
 
 # ================================
@@ -452,6 +450,16 @@ create_gtest_if_exists("tests/unit/pooling/test_domain_size_pooling_procedural_g
 
 # Google Test matching factory tests
 create_gtest_if_exists("tests/unit/factories/test_matching_factory_gtest.cpp" "test_matching_factory_gtest")
+if(TARGET test_matching_factory_gtest)
+    target_sources(test_matching_factory_gtest PRIVATE 
+        src/core/matching/BruteForceMatching.cpp
+        src/core/matching/RatioTestMatching.cpp
+        src/core/matching/MatchingFactory.cpp
+        src/core/config/experiment_config.cpp
+    )
+    target_link_libraries(test_matching_factory_gtest ${OpenCV_LIBRARIES} keypoints)
+    target_include_directories(test_matching_factory_gtest PRIVATE src include descriptor_compare keypoints ${OpenCV_INCLUDE_DIRS})
+endif()
 
 # Google Test descriptor factory tests
 create_gtest_if_exists("tests/unit/factories/test_descriptor_factory_gtest.cpp" "test_descriptor_factory_gtest")
@@ -477,7 +485,8 @@ if(TARGET test_keypoint_generators_gtest)
         src/core/keypoints/detectors/HarrisKeypointGenerator.cpp
         src/core/keypoints/detectors/ORBKeypointGenerator.cpp
         src/core/keypoints/detectors/NonOverlappingKeypointGenerator.cpp
-        src/core/keypoints/KeypointGeneratorFactory.cpp)
+        src/core/keypoints/KeypointGeneratorFactory.cpp
+        src/core/keypoints/generators/KeynetDetector.cpp)
     target_link_libraries(test_keypoint_generators_gtest ${OpenCV_LIBRARIES})
     target_include_directories(test_keypoint_generators_gtest PRIVATE src include ${OpenCV_INCLUDE_DIRS})
 endif()
@@ -537,7 +546,6 @@ message(STATUS "Configuration Summary:")
 message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  Use Conan: ${USE_CONAN}")
 message(STATUS "  Use system packages: ${USE_SYSTEM_PACKAGES}")
-message(STATUS "  Build database integration: ${BUILD_DATABASE}")
 message(STATUS "")
 message(STATUS "Dependencies:")
 message(STATUS "  OpenCV: ${OpenCV_VERSION}")
@@ -671,11 +679,7 @@ if(BUILD_EXPERIMENT_CLI)
             Boost::filesystem
         )
 
-        # Add database integration if enabled
-        if(BUILD_DATABASE)
-            target_link_libraries(experiment_runner thesis_database)
-            target_compile_definitions(experiment_runner PRIVATE BUILD_DATABASE=1)
-        endif()
+        target_link_libraries(experiment_runner thesis_database)
 
         # Add OpenCV and other dependencies
         if(USE_CONAN)
@@ -712,7 +716,7 @@ else()
 endif()
 
 # Keypoint manager CLI tool
-if(BUILD_KEYPOINT_MANAGER AND BUILD_DATABASE)
+if(BUILD_KEYPOINT_MANAGER)
     message(STATUS "Building keypoint manager CLI tool")
     
     # Check if keypoint manager exists
@@ -760,7 +764,6 @@ if(BUILD_KEYPOINT_MANAGER AND BUILD_DATABASE)
             RESULTS_PATH="${RESULTS_PATH}"
             KEYPOINTS_PATH="${KEYPOINTS_PATH}"
             DATABASE_PATH="${DATABASE_PATH}"
-            BUILD_DATABASE=1
         )
 
         # Link libraries
@@ -786,11 +789,7 @@ if(BUILD_KEYPOINT_MANAGER AND BUILD_DATABASE)
         message(WARNING "keypoint_manager.cpp not found - skipping keypoint manager CLI")
     endif()
 else()
-    if(NOT BUILD_DATABASE)
-        message(STATUS "Keypoint manager disabled - requires database integration (use -DBUILD_DATABASE=ON)")
-    else()
-        message(STATUS "Keypoint manager disabled (use -DBUILD_KEYPOINT_MANAGER=ON to enable)")
-    endif()
+    message(STATUS "Keypoint manager disabled (use -DBUILD_KEYPOINT_MANAGER=ON to enable)")
 endif()
 
 # Stage 7 migration system removed: new pipeline is the default

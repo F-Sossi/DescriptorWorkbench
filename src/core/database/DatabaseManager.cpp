@@ -629,6 +629,27 @@ bool DatabaseManager::clearSceneKeypoints(const std::string& scene_name) const {
     return success;
 }
 
+int DatabaseManager::getKeypointSetId(const std::string& set_name) const {
+    if (!isEnabled()) return -1;
+
+    const auto sql = "SELECT id FROM keypoint_sets WHERE name = ? LIMIT 1;";
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        return -1;
+    }
+
+    sqlite3_bind_text(stmt, 1, set_name.c_str(), -1, SQLITE_STATIC);
+    rc = sqlite3_step(stmt);
+    int set_id = -1;
+    if (rc == SQLITE_ROW) {
+        set_id = sqlite3_column_int(stmt, 0);
+    }
+
+    sqlite3_finalize(stmt);
+    return set_id;
+}
+
 bool DatabaseManager::storeDescriptors(int experiment_id,
                                       const std::string& scene_name,
                                       const std::string& image_name,

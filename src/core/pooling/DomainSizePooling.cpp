@@ -158,7 +158,9 @@ const experiment_config& config
             kps_scaled.push_back(k);
         }
 
-        cv::Mat desc = extractor.extract(processedImage, kps_scaled);
+        // Legacy config doesn't have device settings - use default params
+        thesis_project::DescriptorParams params; // defaults to device="auto"
+        cv::Mat desc = extractor.extract(processedImage, kps_scaled, params);
         if (desc.empty()) continue;
 
         if (expected_rows < 0) {
@@ -233,7 +235,7 @@ cv::Mat DomainSizePooling::computeDescriptors(
 
     if (params.scales.empty()) {
         // No scales means act like NoPooling
-        cv::Mat d = extractor.extract(image, keypoints);
+        cv::Mat d = extractor.extract(image, keypoints, params);
         // Optional normalize after pooling flag applies
         if (params.normalize_after_pooling) normalizeRows(d, params.norm_type);
         return d;
@@ -261,7 +263,7 @@ cv::Mat DomainSizePooling::computeDescriptors(
         }
 
         // Extract per-scale descriptors
-        cv::Mat desc = extractor.extract(processedImage, kps_scaled);
+        cv::Mat desc = extractor.extract(processedImage, kps_scaled, params);
 
         // Normalize before pooling if requested
         if (params.normalize_before_pooling) normalizeRows(desc, params.norm_type);

@@ -557,12 +557,13 @@ def run_evaluation(args: argparse.Namespace) -> None:
                     global_total_queries,
                 )
             )
-    print(f"Saved summary to {output_path}")
+        print(f"Saved summary to {output_path}")
 
+    experiment_id = None
     if args.record:
         processing_ms = (time.perf_counter() - start_time) * 1000.0
         experiment_cfg = config.get("experiment", {})
-        record_results(
+        experiment_id = record_results(
             db_path,
             experiment_cfg,
             dataset_path,
@@ -575,6 +576,21 @@ def run_evaluation(args: argparse.Namespace) -> None:
             pixel_threshold_px,
             device_str,
             processing_ms,
+        )
+
+    if args.store_descriptors:
+        if experiment_id is None:
+            raise RuntimeError("--store-descriptors requires --record so experiment_id is available")
+        store_descriptors_for_run(
+            db_path,
+            experiment_id,
+            dataset_path,
+            scenes,
+            set_id,
+            descriptor_name,
+            descriptor_cfg,
+            device,
+            hardnet_module,
         )
 
 
@@ -689,6 +705,86 @@ def record_results(
         conn.commit()
 
     print(f"Recorded experiment results in database (experiment_id={experiment_id})")
+    return experiment_id
+
+
+def store_descriptors_for_run(
+    db_path: Path,
+    experiment_id: int,
+    dataset_path: Path,
+    scenes: List[Path],
+    set_id: int,
+    descriptor_name: str,
+    descriptor_cfg: Dict,
+    device: torch.device,
+    descriptor_module,
+) -> None:
+    processing_method = "python_" + descriptor_name
+    normalization = descriptor_cfg.get("normalize_after_pooling", False)
+    normalization_label = "l2" if normalization or descriptor_name == "libtorch_hardnet" else "none"
+    rooting_label = "none"
+    pooling_label = descriptor_cfg.get("pooling", "none")
+
+    sql = (
+        "INSERT INTO descriptors (experiment_id, scene_name, image_name, keypoint_x, keypoint_y, "
+        "descriptor_vector, descriptor_dimension, processing_method, normalization_applied, rooting_applied, pooling_applied) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        for scene_dir in scenes:
+            scene_name = scene_dir.name
+            for idx in range(1, 7):
+                image_name = f"{idx}.ppm"
+                image_path = scene_dir / image_name
+                if not image_path.exists():
+                    continue
+
+                keypoints = load_keypoints_from_db(db_path, set_id, scene_name, image_name)
+                if not keypoints:
+                    continue
+
+                image = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
+                if image is None:
+                    continue
+
+                if descriptor_name == "libtorch_hardnet":
+                    descriptors = hardnet_descriptors(image, keypoints, device, descriptor_module)
+                else:
+                    descriptors = sift_descriptors(image, keypoints)
+
+                if descriptors.size == 0:
+                    continue
+
+                records = []
+                seen = set()
+                for kp, desc in zip(keypoints, descriptors):
+                    key = (round(float(kp.pt[0]), 4), round(float(kp.pt[1]), 4))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    records.append(
+                        (
+                            experiment_id,
+                            scene_name,
+                            image_name,
+                            key[0],
+                            key[1],
+                            sqlite3.Binary(desc.astype(np.float32).tobytes()),
+                            int(desc.shape[0]),
+                            processing_method,
+                            normalization_label,
+                            rooting_label,
+                            pooling_label,
+                        )
+                    )
+
+                cursor.executemany(sql, records)
+
+        conn.commit()
+
+    print(f"Stored {descriptor_name} descriptors for experiment_id={experiment_id}")
 
 # -----------------------------------------------------------------------------
 # CLI parsing
@@ -702,6 +798,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", help="Optional CSV summary output")
     parser.add_argument("--pixel-threshold", type=float, help="Override pixel tolerance (default 3px)")
     parser.add_argument("--record", action="store_true", help="Store results back into experiments.db")
+    parser.add_argument("--store-descriptors", action="store_true", help="Persist per-keypoint descriptors to the database (requires --record)")
     return parser.parse_args()
 
 

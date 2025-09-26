@@ -35,8 +35,8 @@ git clone <repository-url>
 cd DescriptorWorkbench
 mkdir build && cd build
 
-# Configure with system packages (recommended)
-cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF -DBUILD_DATABASE=ON
+# Configure with system packages (recommended). Database integration is always enabled.
+cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF
 
 # Build (all tests should pass: 20/20)
 make -j$(nproc)
@@ -62,7 +62,8 @@ git clone <repository-url>
 cd DescriptorWorkbench
 python3 setup.py  # Download HPatches dataset
 mkdir build && cd build
-cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF -DBUILD_DATABASE=ON
+# Configure (database support builds automatically)
+cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF
 make -j$(nproc)
 ```
 
@@ -79,7 +80,8 @@ git clone <repository-url>
 cd DescriptorWorkbench
 python3 setup.py  # Download HPatches dataset
 mkdir build && cd build
-cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF -DBUILD_DATABASE=ON
+# Configure (database support builds automatically)
+cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF
 make -j$(nproc)
 ```
 
@@ -96,7 +98,8 @@ git clone <repository-url>
 cd DescriptorWorkbench
 python3 setup.py  # Download HPatches dataset
 mkdir build && cd build
-cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF -DBUILD_DATABASE=ON
+# Configure (database support builds automatically)
+cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF
 make -j$(nproc)
 ```
 
@@ -569,8 +572,8 @@ ls build/experiments.db
 # Check database permissions
 chmod 644 build/experiments.db
 
-# Ensure database build option enabled
-cmake .. -DBUILD_DATABASE=ON
+# Reconfigure to regenerate database schema (integration is always enabled)
+cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF
 ```
 
 #### ONNX Model Loading

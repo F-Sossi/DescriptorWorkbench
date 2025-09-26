@@ -8,9 +8,7 @@
 #include "../config/experiment_config.hpp"
 #include "image_processor.hpp"
 #include "../keypoints/locked_in_keypoints.hpp"
-#ifdef BUILD_DATABASE
 #include "thesis_project/database/DatabaseManager.hpp"
-#endif
 #include "thesis_project/types.hpp"
 #include "src/core/pooling/PoolingFactory.hpp"
 #include "src/core/metrics/MetricsCalculator.hpp"
@@ -194,29 +192,24 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_locked(const s
         cv::cvtColor(image1, image1, cv::COLOR_BGR2GRAY);
     }
 
-    // Load locked-in keypoints for image 1
-    std::vector<cv::KeyPoint> keypoints1;
-    
-#ifdef BUILD_DATABASE
-    // Load keypoints from database only (no CSV fallback)
     thesis_project::database::DatabaseManager db("experiments.db", true);
-    keypoints1 = db.getLockedKeypoints(scene_name, "1.ppm");
-    
+    if (!db.isEnabled()) {
+        std::cerr << "[ERROR] Database support not enabled at runtime." << std::endl;
+        return ExperimentMetrics();
+    }
+
+    // Load locked-in keypoints for image 1
+    std::vector<cv::KeyPoint> keypoints1 = db.getLockedKeypoints(scene_name, "1.ppm");
     if (keypoints1.empty()) {
         std::cerr << "[ERROR] No keypoints found in database for " << scene_name << "/1.ppm. Use keypoint_manager to generate keypoints first." << std::endl;
         return ExperimentMetrics(); // Return empty metrics
     }
     std::cout << "[INFO] Loaded " << keypoints1.size() << " keypoints from database for " << scene_name << "/1.ppm" << std::endl;
-#else
-    std::cerr << "[ERROR] Database support not enabled. Build with -DBUILD_DATABASE=ON" << std::endl;
-    return ExperimentMetrics(); // Return empty metrics
-#endif
 
     // Compute descriptors for image 1 using the locked-in keypoints
     std::pair<std::vector<cv::KeyPoint>, cv::Mat> result1 = processor_utils::detectAndComputeWithConfigLocked(image1, keypoints1, config);
     cv::Mat descriptors1 = result1.second;
 
-#ifdef BUILD_DATABASE
     // Store descriptors in database for research analysis
     if (db.isEnabled() && !descriptors1.empty() && config.experiment_id != -1) {
         // Build descriptive processing method string for database queries
@@ -232,7 +225,6 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_locked(const s
                            rootingStageToDescriptiveString(config.descriptorOptions.rootingStage),
                            poolingStrategyToDescriptiveString(config.descriptorOptions.poolingStrategy));
     }
-#endif
 
     // CSV outputs disabled - using database storage only
 
@@ -250,26 +242,20 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_locked(const s
         // Load locked-in keypoints for image i
         std::vector<cv::KeyPoint> keypoints2;
         std::string image_name = std::to_string(i) + ".ppm";
-        
-#ifdef BUILD_DATABASE
+
         // Load keypoints from database only (no CSV fallback)
         keypoints2 = db.getLockedKeypoints(scene_name, image_name);
-        
+
         if (keypoints2.empty()) {
             std::cerr << "[ERROR] No keypoints found in database for " << scene_name << "/" << image_name << ". Use keypoint_manager to generate keypoints first." << std::endl;
             continue; // Skip this image
         }
         std::cout << "[INFO] Loaded " << keypoints2.size() << " keypoints from database for " << scene_name << "/" << image_name << std::endl;
-#else
-        std::cerr << "[ERROR] Database support not enabled. Build with -DBUILD_DATABASE=ON" << std::endl;
-        return ExperimentMetrics(); // Return empty metrics
-#endif
 
         // Compute descriptors for image i using the locked-in keypoints
         std::pair<std::vector<cv::KeyPoint>, cv::Mat> result2 = processor_utils::detectAndComputeWithConfigLocked(image2, keypoints2, config);
         cv::Mat descriptors2 = result2.second;
 
-#ifdef BUILD_DATABASE
         // Store descriptors in database for research analysis
         if (db.isEnabled() && !descriptors2.empty() && config.experiment_id != -1) {
             // Build descriptive processing method string (same as image 1)
@@ -285,7 +271,6 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_locked(const s
                                rootingStageToDescriptiveString(config.descriptorOptions.rootingStage),
                                poolingStrategyToDescriptiveString(config.descriptorOptions.poolingStrategy));
         }
-#endif
 
         // CSV outputs disabled - using database storage only
 
@@ -499,4 +484,3 @@ ExperimentMetrics image_processor::process_image_folder_keypoints_unlocked(const
     metrics.success = true;
     return metrics;
 }
-

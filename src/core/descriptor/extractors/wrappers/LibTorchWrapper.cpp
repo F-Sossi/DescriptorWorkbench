@@ -53,6 +53,36 @@ LibTorchWrapper::LibTorchWrapper(const std::string& model_path,
 cv::Mat LibTorchWrapper::extract(const cv::Mat& imageBgrOrGray,
                                  const std::vector<cv::KeyPoint>& keypoints,
                                  const DescriptorParams& params) {
+    // Debug: Show device settings
+    std::cout << "LibTorch DEBUG: params.device = '" << params.device << "'" << std::endl;
+    std::cout << "LibTorch DEBUG: constructor device_ = " << (device_.is_cuda() ? "CUDA" : "CPU") << std::endl;
+
+    // Override device if specified in params
+    torch::Device target_device = device_;
+    if (params.device == "cpu") {
+        std::cout << "LibTorch DEBUG: Setting target device to CPU" << std::endl;
+        target_device = torch::Device(torch::kCPU);
+    } else if (params.device == "cuda" && torch::cuda::is_available()) {
+        std::cout << "LibTorch DEBUG: Setting target device to CUDA" << std::endl;
+        target_device = torch::Device(torch::kCUDA, 0);
+    }
+    // "auto" uses the device_ set in constructor
+
+    std::cout << "LibTorch DEBUG: target_device = " << (target_device.is_cuda() ? "CUDA" : "CPU") << std::endl;
+
+    // Log device override if different from default
+    bool devices_different = (target_device.type() != device_.type()) ||
+                            (target_device.is_cuda() && device_.is_cuda() && target_device.index() != device_.index());
+
+    if (devices_different) {
+        std::cout << "LibTorch: Device overridden to " << (target_device.is_cuda() ? "CUDA" : "CPU")
+                  << " via YAML config" << std::endl;
+        // Move model to new device if different from construction device
+        model_.to(target_device);
+    } else {
+        std::cout << "LibTorch DEBUG: No device change needed" << std::endl;
+    }
+
     if (keypoints.empty()) {
         return cv::Mat();
     }
@@ -76,7 +106,7 @@ cv::Mat LibTorchWrapper::extract(const cv::Mat& imageBgrOrGray,
     }
 
     // Stack patches into batch tensor [N, 1, H, W]
-    torch::Tensor batch = torch::stack(patches, 0).to(device_);
+    torch::Tensor batch = torch::stack(patches, 0).to(target_device);
 
     // Run inference
     cv::Mat descriptors;
@@ -103,20 +133,24 @@ torch::Tensor LibTorchWrapper::makePatch(const cv::Mat& imageGray, const cv::Key
     // Direct 32×32 extraction (test reverting from HPatches protocol)
     const int CNN_INPUT_SIZE = input_size_;  // 32
 
-    // Calculate support window and scale for direct 32×32 extraction
-    float kpSize = std::max(kp.size, 1.0f);  // Guard against zero/negative keypoint size
-    float support_window = support_mult_ * kpSize;  // Real-world size of patch
-    double scale = static_cast<double>(CNN_INPUT_SIZE) / static_cast<double>(support_window);
+    // Calculate scale using Kornia LAF protocol: kp.size is diameter, convert to radius
+    float kpSize = std::max(kp.size, 1e-3f);  // Guard against zero/negative keypoint size
+    float scale_radius = kpSize / 2.0f;  // Convert diameter to radius (Kornia standard)
+    // Scale to map radius to half the patch size (32/2 = 16 pixels for radius)
+    double scale = static_cast<double>(CNN_INPUT_SIZE) / (2.0 * static_cast<double>(scale_radius));
 
     // Determine rotation angle (undo keypoint angle to make patch upright)
     float angle_deg = (rotate_upright_ && kp.angle >= 0.0f) ? -kp.angle : 0.0f;
 
-    // Build transformation matrix: rotate about keypoint, scale, then translate to center
-    cv::Mat M = cv::getRotationMatrix2D(kp.pt, angle_deg, scale);
+    // Build transformation matrix to match Kornia LAF protocol
+    // First translate keypoint to origin, rotate, scale, then translate to patch center
+    cv::Mat M = cv::getRotationMatrix2D(cv::Point2f(0, 0), angle_deg, scale);
 
-    // Translate so that keypoint maps to patch center (32/2, 32/2)
-    M.at<double>(0, 2) += (CNN_INPUT_SIZE * 0.5 - kp.pt.x * scale);
-    M.at<double>(1, 2) += (CNN_INPUT_SIZE * 0.5 - kp.pt.y * scale);
+    // Apply keypoint-centered transformation: translate kp to origin, then to patch center
+    double cx = CNN_INPUT_SIZE * 0.5;  // Patch center x
+    double cy = CNN_INPUT_SIZE * 0.5;  // Patch center y
+    M.at<double>(0, 2) = cx - M.at<double>(0, 0) * kp.pt.x - M.at<double>(0, 1) * kp.pt.y;
+    M.at<double>(1, 2) = cy - M.at<double>(1, 0) * kp.pt.x - M.at<double>(1, 1) * kp.pt.y;
 
     // Direct 32×32 extraction
     cv::Mat cnn_patch;
@@ -128,19 +162,22 @@ torch::Tensor LibTorchWrapper::makePatch(const cv::Mat& imageGray, const cv::Key
 }
 
 torch::Tensor LibTorchWrapper::matToTensor(const cv::Mat& patch) const {
-    // Convert to float and normalize to [0, 1]
+    // Convert to float and normalize to [0, 1] first
     cv::Mat patch_float;
     patch.convertTo(patch_float, CV_32F, 1.0/255.0);
 
-    // Apply normalization
+    // Apply HardNet-compatible normalization
     if (per_patch_standardize_) {
-        // Per-patch standardization (z-score)
+        // Per-patch standardization (z-score) - matches Kornia's approach
         cv::Scalar mean, stddev;
         cv::meanStdDev(patch_float, mean, stddev);
         patch_float = (patch_float - mean[0]) / (stddev[0] + 1e-8);
     } else {
-        // Global normalization
-        patch_float = (patch_float - mean_) / std_;
+        // Use ImageNet-style normalization (typical for HardNet training)
+        // ImageNet single-channel approximation: mean=0.485, std=0.229
+        const float imagenet_mean = 0.485f;
+        const float imagenet_std = 0.229f;
+        patch_float = (patch_float - imagenet_mean) / imagenet_std;
     }
 
     // Convert OpenCV Mat to PyTorch tensor

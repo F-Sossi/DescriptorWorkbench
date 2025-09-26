@@ -140,6 +140,13 @@ public:
     bool clearSceneKeypoints(const std::string& scene_name) const;
 
     /**
+     * @brief Look up a keypoint set id by name
+     * @param set_name Name stored in keypoint_sets
+     * @return set id if found, -1 otherwise
+     */
+    int getKeypointSetId(const std::string& set_name) const;
+
+    /**
      * @brief Create a new keypoint set with metadata
      * @param name Unique name for this keypoint set
      * @param generator_type Type of keypoint generator (e.g., "SIFT", "ORB") 

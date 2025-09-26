@@ -146,7 +146,9 @@ cv::Mat StackingPooling::computeDescriptors(
     std::vector<cv::KeyPoint> keypoints2 = keypoints;
 
     // Compute first descriptor using provided extractor
-    cv::Mat descriptor1 = extractor.extract(image1, keypoints1);
+    // Legacy config doesn't have device settings - use default params
+    thesis_project::DescriptorParams params; // defaults to device="auto"
+    cv::Mat descriptor1 = extractor.extract(image1, keypoints1, params);
 
     // Create secondary extractor by cloning config with descriptorType2
     experiment_config cfg2 = config;
@@ -154,7 +156,7 @@ cv::Mat StackingPooling::computeDescriptors(
     // Update image type/color space for second branch based on config
     // (wrappers use input image; we prep image2 accordingly)
     auto extractor2 = thesis_project::factories::DescriptorFactory::create(cfg2);
-    cv::Mat descriptor2 = extractor2->extract(image2, keypoints2);
+    cv::Mat descriptor2 = extractor2->extract(image2, keypoints2, params);
 
     // Validate descriptors before concatenation
     if (descriptor1.empty() || descriptor2.empty()) {
@@ -236,11 +238,11 @@ cv::Mat StackingPooling::computeDescriptors(
     std::vector<cv::KeyPoint> kps1 = keypoints;
     std::vector<cv::KeyPoint> kps2 = keypoints;
 
-    cv::Mat d1 = extractor.extract(image1, kps1);
+    cv::Mat d1 = extractor.extract(image1, kps1, descCfg.params);
 
     // Create secondary extractor from descriptor type
     auto ext2 = thesis_project::factories::DescriptorFactory::create(descCfg.params.secondary_descriptor);
-    cv::Mat d2 = ext2->extract(image2, kps2);
+    cv::Mat d2 = ext2->extract(image2, kps2, descCfg.params);
 
     if (d1.empty() || d2.empty()) return cv::Mat();
     if (d1.rows != d2.rows) return cv::Mat();

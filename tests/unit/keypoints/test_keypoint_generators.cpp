@@ -6,6 +6,7 @@
 #include "src/core/keypoints/KeypointGeneratorFactory.hpp"
 #include <opencv2/opencv.hpp>
 #include <memory>
+#include <opencv2/imgproc.hpp>
 
 using namespace thesis_project;
 
@@ -28,6 +29,7 @@ protected:
     
     cv::Mat test_image_;
     KeypointParams params_;
+    static constexpr float border_ = 35.0f;
 };
 
 TEST_F(KeypointGeneratorTest, SIFTDetectorBasicFunctionality) {
@@ -42,12 +44,12 @@ TEST_F(KeypointGeneratorTest, SIFTDetectorBasicFunctionality) {
     auto keypoints = sift_detector.detect(test_image_, params_);
     EXPECT_FALSE(keypoints.empty()) << "SIFT should detect some keypoints in test image";
     
-    // Test all keypoints are within bounds (40px border)
+    // Test all keypoints are within bounds (35px border, matching generator filter)
     for (const auto& kp : keypoints) {
-        EXPECT_GE(kp.pt.x, 40.0f);
-        EXPECT_GE(kp.pt.y, 40.0f);
-        EXPECT_LT(kp.pt.x, test_image_.cols - 40.0f);
-        EXPECT_LT(kp.pt.y, test_image_.rows - 40.0f);
+        EXPECT_GE(kp.pt.x, border_);
+        EXPECT_GE(kp.pt.y, border_);
+        EXPECT_LT(kp.pt.x, test_image_.cols - border_);
+        EXPECT_LT(kp.pt.y, test_image_.rows - border_);
     }
 }
 
@@ -65,10 +67,10 @@ TEST_F(KeypointGeneratorTest, HarrisDetectorBasicFunctionality) {
     
     // Test boundary filtering
     for (const auto& kp : keypoints) {
-        EXPECT_GE(kp.pt.x, 40.0f);
-        EXPECT_GE(kp.pt.y, 40.0f);
-        EXPECT_LT(kp.pt.x, test_image_.cols - 40.0f);
-        EXPECT_LT(kp.pt.y, test_image_.rows - 40.0f);
+        EXPECT_GE(kp.pt.x, border_);
+        EXPECT_GE(kp.pt.y, border_);
+        EXPECT_LT(kp.pt.x, test_image_.cols - border_);
+        EXPECT_LT(kp.pt.y, test_image_.rows - border_);
     }
 }
 
@@ -86,10 +88,10 @@ TEST_F(KeypointGeneratorTest, ORBDetectorBasicFunctionality) {
     
     // Test boundary filtering
     for (const auto& kp : keypoints) {
-        EXPECT_GE(kp.pt.x, 40.0f);
-        EXPECT_GE(kp.pt.y, 40.0f);
-        EXPECT_LT(kp.pt.x, test_image_.cols - 40.0f);
-        EXPECT_LT(kp.pt.y, test_image_.rows - 40.0f);
+        EXPECT_GE(kp.pt.x, border_);
+        EXPECT_GE(kp.pt.y, border_);
+        EXPECT_LT(kp.pt.x, test_image_.cols - border_);
+        EXPECT_LT(kp.pt.y, test_image_.rows - border_);
     }
 }
 

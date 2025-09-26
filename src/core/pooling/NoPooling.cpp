@@ -32,23 +32,27 @@ cv::Mat NoPooling::computeDescriptors(
     return descriptors;
 }
 
-// New interface overload: delegate to extractor
+// Legacy interface overload: delegate to extractor with default params
 cv::Mat NoPooling::computeDescriptors(
     const cv::Mat& image,
     const std::vector<cv::KeyPoint>& keypoints,
     thesis_project::IDescriptorExtractor& extractor,
     const experiment_config& /*config*/
 ) {
-    return extractor.extract(image, keypoints);
+    // Legacy config doesn't have device settings - use default params
+    thesis_project::DescriptorParams params; // defaults to device="auto"
+    return extractor.extract(image, keypoints, params);
 }
 
 cv::Mat NoPooling::computeDescriptors(
     const cv::Mat& image,
     const std::vector<cv::KeyPoint>& keypoints,
     thesis_project::IDescriptorExtractor& extractor,
-    const thesis_project::config::ExperimentConfig::DescriptorConfig& /*descCfg*/
+    const thesis_project::config::ExperimentConfig::DescriptorConfig& descCfg
 ) {
-    return extractor.extract(image, keypoints);
+    // Convert DescriptorConfig to DescriptorParams to pass device setting
+    thesis_project::DescriptorParams params = descCfg.params;
+    return extractor.extract(image, keypoints, params);
 }
 
 } // namespace thesis_project::pooling

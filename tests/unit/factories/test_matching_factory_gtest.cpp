@@ -41,9 +41,17 @@ TEST_F(MatchingFactoryTest, CreateFromConfigDefaultBruteForce) {
     EXPECT_EQ(matches.size(), static_cast<size_t>(desc1.rows));
 }
 
-TEST_F(MatchingFactoryTest, CreateStrategyUnknownsThrow) {
+TEST_F(MatchingFactoryTest, CreateRatioTestStrategy) {
+    auto strategy = MatchingFactory::createStrategy(RATIO_TEST);
+    ASSERT_NE(strategy, nullptr);
+    EXPECT_EQ(strategy->getName(), "RatioTest");
+
+    auto matches = strategy->matchDescriptors(desc1, desc2);
+    EXPECT_FALSE(matches.empty());
+}
+
+TEST_F(MatchingFactoryTest, CreateStrategyUnsupportedThrows) {
     EXPECT_THROW(MatchingFactory::createStrategy(FLANN), std::runtime_error);
-    EXPECT_THROW(MatchingFactory::createStrategy(RATIO_TEST), std::runtime_error);
     EXPECT_THROW(MatchingFactory::createStrategy(static_cast<MatchingStrategy>(99)), std::runtime_error);
 }
 
@@ -53,4 +61,3 @@ TEST_F(MatchingFactoryTest, GetAvailableStrategiesContainsBruteForce) {
     for (const auto& name : list) if (name == "BruteForce") hasBF = true;
     EXPECT_TRUE(hasBF);
 }
-

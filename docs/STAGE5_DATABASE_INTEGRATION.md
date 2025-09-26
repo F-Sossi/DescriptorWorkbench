@@ -1,13 +1,13 @@
 # Stage 5: Database Integration
 
 ## Overview
-Stage 5 adds experiment tracking capabilities without disrupting the workflow. Database integration is enabled by default in this repo (`-DBUILD_DATABASE=ON`).
+Stage 5 adds experiment tracking capabilities without disrupting the workflow. Database integration is now required and always built into the project.
 
 ## Key Features
 
 ### 1. Integration
-- Database tracking can be enabled/disabled at build time
-- Default build enables database integration (automatic experiment tracking)
+- Database tracking is always compiled in
+- CLI runs automatically persist experiments and metrics
 
 ### 2. CLI-First Workflow
 - Use `experiment_runner` and `keypoint_manager` CLIs
@@ -20,21 +20,13 @@ Stage 5 adds experiment tracking capabilities without disrupting the workflow. D
 
 ## Usage
 
-### Basic Usage (Database Disabled)
+### Basic Usage
 ```bash
-# Build without database (default)
-cmake .. -DBUILD_DATABASE=OFF
-make
-./experiment_runner ../config/experiments/sift_baseline.yaml
-```
-
-### Advanced Usage (Database Enabled)
-```bash
-# Build with database support
-cmake .. -DBUILD_DATABASE=ON
+# Configure (database integration is always enabled)
+cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF
 make
 
-# Run experiments (automatically tracked)
+# Run experiments (results recorded automatically)
 ./experiment_runner ../config/experiments/sift_baseline.yaml
 
 # Test database functionality
@@ -47,14 +39,14 @@ ctest -R database --output-on-failure
 
 // In your existing image_processor workflow:
 void processExperiments() {
-    // Optional database (disabled by default)
-    thesis_project::database::DatabaseManager db("experiments.db", false);
+    // Database manager (set enabled=false only if you explicitly want to skip persistence)
+    thesis_project::database::DatabaseManager db("experiments.db", true);
 
     // Your existing experiment code unchanged
     experiment_config config;
     // ... existing setup ...
 
-    // Optional: Record experiment if database enabled
+    // Record experiment when database persistence is active
     if (db.isEnabled()) {
         auto db_config = database_integration::toDbConfig(config);
         int exp_id = db.recordConfiguration(db_config);
@@ -120,7 +112,7 @@ auto results = database_integration::createDbResults(
 ## Benefits
 
 1. **Non-Disruptive**: Existing workflow unchanged
-2. **Optional**: Can be completely disabled
+2. **Persistent**: Every run is captured without extra flags
 3. **Lightweight**: SQLite embedded database
 4. **Automatic**: Tracks experiments transparently
 5. **Analyzable**: Provides statistics and history

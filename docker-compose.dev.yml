@@ -28,6 +28,6 @@ services:
     # export UID=$(id -u) && export GID=$(id -g)  # Set user IDs for Docker
     # docker-compose -f docker-compose.dev.yml up -d
     # docker-compose -f docker-compose.dev.yml exec descriptor-dev bash
-    # cd build && cmake .. -DBUILD_DATABASE=ON && make -j$(nproc)
+    # cd build && cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF && make -j$(nproc)
     # ./experiment_runner ../config/experiments/sift_baseline.yaml
     # Files created in container will match your host user permissions!

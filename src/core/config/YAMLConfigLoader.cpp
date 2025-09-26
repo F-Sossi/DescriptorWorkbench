@@ -177,6 +177,10 @@ namespace config {
             if (desc_node["use_color"]) {
                 desc_config.params.use_color = desc_node["use_color"].as<bool>();
             }
+
+            if (desc_node["device"]) {
+                desc_config.params.device = desc_node["device"].as<std::string>();
+            }
             
             if (desc_node["norm_type"]) {
                 std::string norm_str = desc_node["norm_type"].as<std::string>();
@@ -311,6 +315,11 @@ namespace config {
             if (matching["threshold"]) {
                 evaluation.params.match_threshold = matching["threshold"].as<float>();
             }
+
+            // Support ratio_threshold as an alias for threshold when using ratio_test
+            if (matching["ratio_threshold"]) {
+                evaluation.params.match_threshold = matching["ratio_threshold"].as<float>();
+            }
         }
         
         // Parse validation parameters
@@ -441,6 +450,9 @@ namespace config {
             }
             out << YAML::Key << "normalize_after_pooling" << YAML::Value << desc.params.normalize_after_pooling;
             out << YAML::Key << "use_color" << YAML::Value << desc.params.use_color;
+            if (desc.params.device != "auto") {
+                out << YAML::Key << "device" << YAML::Value << desc.params.device;
+            }
             out << YAML::EndMap;
         }
         out << YAML::EndSeq;
@@ -450,7 +462,12 @@ namespace config {
         out << YAML::Value << YAML::BeginMap;
         out << YAML::Key << "matching" << YAML::Value << YAML::BeginMap;
         out << YAML::Key << "method" << YAML::Value << toString(config.evaluation.params.matching_method);
-        out << YAML::Key << "threshold" << YAML::Value << config.evaluation.params.match_threshold;
+        // Use ratio_threshold for ratio test, threshold for others
+        if (config.evaluation.params.matching_method == MatchingMethod::RATIO_TEST) {
+            out << YAML::Key << "ratio_threshold" << YAML::Value << config.evaluation.params.match_threshold;
+        } else {
+            out << YAML::Key << "threshold" << YAML::Value << config.evaluation.params.match_threshold;
+        }
         out << YAML::Key << "cross_check" << YAML::Value << config.evaluation.params.cross_check;
         out << YAML::EndMap;
         out << YAML::Key << "validation" << YAML::Value << YAML::BeginMap;

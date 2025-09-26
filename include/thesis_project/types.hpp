@@ -289,6 +289,7 @@ namespace thesis_project {
         bool use_locked_keypoints = false;  // LEGACY: for backward compatibility
         KeypointSource source = KeypointSource::HOMOGRAPHY_PROJECTION;  // NEW: keypoint source strategy
         std::string keypoint_set_name;      // NEW: specific keypoint set to use
+        int keypoint_set_id = -1;           // NEW: resolved set id for fast lookups
         std::string locked_keypoints_path;
     };
 
@@ -302,6 +303,7 @@ namespace thesis_project {
         bool normalize_after_pooling = true;
         int norm_type = cv::NORM_L2;
         bool use_color = false;
+        std::string device = "auto";  // "auto", "cpu", "cuda"
 
         // For stacking
         DescriptorType secondary_descriptor = DescriptorType::SIFT;

@@ -6,12 +6,13 @@ namespace thesis_project {
 namespace wrappers {
 
 std::unique_ptr<IDescriptorExtractor> createLibTorchHardNet() {
-    // Test: Disable per-patch standardization, use simple [0,1] normalization
-    return std::make_unique<LibTorchWrapper>("../models/hardnet.pt", 32, 5.0f, true, 0.0f, 1.0f, false, 128, cv::INTER_AREA);
+    // Use Kornia-compatible settings: per-patch standardization enabled, proper scale multiplier
+    return std::make_unique<LibTorchWrapper>("../models/hardnet.pt", 32, 2.0f, true, 0.0f, 1.0f, true, 128, cv::INTER_LINEAR);
 }
 
 std::unique_ptr<IDescriptorExtractor> createLibTorchSOSNet() {
-    return std::make_unique<LibTorchWrapper>("../models/sosnet.pt");
+    // Use same Kornia-compatible settings as HardNet: per-patch standardization enabled
+    return std::make_unique<LibTorchWrapper>("../models/sosnet.pt", 32, 2.0f, true, 0.0f, 1.0f, true, 128, cv::INTER_LINEAR);
 }
 
 std::unique_ptr<IDescriptorExtractor> createLibTorchL2Net() {
