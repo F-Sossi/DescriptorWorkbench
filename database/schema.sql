@@ -108,7 +108,49 @@ CREATE INDEX IF NOT EXISTS idx_keypoint_sets_overlap ON keypoint_sets(overlap_fi
 CREATE INDEX IF NOT EXISTS idx_locked_keypoints_set ON locked_keypoints(keypoint_set_id);
 CREATE INDEX IF NOT EXISTS idx_locked_keypoints_scene ON locked_keypoints(keypoint_set_id, scene_name, image_name);
 
+-- Matches storage for research analysis
+CREATE TABLE IF NOT EXISTS matches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    experiment_id INTEGER NOT NULL,
+    scene_name TEXT NOT NULL,
+    query_image TEXT NOT NULL,  -- e.g., "1.ppm"
+    train_image TEXT NOT NULL,  -- e.g., "2.ppm"
+    query_keypoint_x REAL NOT NULL,
+    query_keypoint_y REAL NOT NULL,
+    train_keypoint_x REAL NOT NULL,
+    train_keypoint_y REAL NOT NULL,
+    distance REAL NOT NULL,
+    match_confidence REAL,
+    is_correct_match BOOLEAN,  -- Based on homography validation
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(experiment_id) REFERENCES experiments(id)
+);
+
+-- Visualizations storage for debugging and analysis
+CREATE TABLE IF NOT EXISTS visualizations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    experiment_id INTEGER NOT NULL,
+    scene_name TEXT NOT NULL,
+    visualization_type TEXT NOT NULL,  -- "keypoints", "matches", "homography"
+    image_pair TEXT,  -- e.g., "1_2" for 1.ppm -> 2.ppm
+    image_data BLOB NOT NULL,  -- PNG/JPEG encoded visualization
+    image_format TEXT DEFAULT 'PNG',
+    metadata TEXT,  -- JSON metadata about visualization
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(experiment_id) REFERENCES experiments(id)
+);
+
 -- Index for efficient descriptor queries by experiment and processing method
 CREATE INDEX IF NOT EXISTS idx_descriptors_experiment ON descriptors(experiment_id, processing_method);
 CREATE INDEX IF NOT EXISTS idx_descriptors_keypoint ON descriptors(scene_name, image_name, keypoint_x, keypoint_y);
 CREATE INDEX IF NOT EXISTS idx_descriptors_method ON descriptors(processing_method, normalization_applied, rooting_applied);
+
+-- Indexes for efficient match queries
+CREATE INDEX IF NOT EXISTS idx_matches_experiment ON matches(experiment_id, scene_name);
+CREATE INDEX IF NOT EXISTS idx_matches_correctness ON matches(experiment_id, is_correct_match);
+CREATE INDEX IF NOT EXISTS idx_matches_image_pair ON matches(experiment_id, scene_name, query_image, train_image);
+
+-- Indexes for efficient visualization queries
+CREATE INDEX IF NOT EXISTS idx_visualizations_experiment ON visualizations(experiment_id, scene_name);
+CREATE INDEX IF NOT EXISTS idx_visualizations_type ON visualizations(visualization_type);
+CREATE INDEX IF NOT EXISTS idx_visualizations_pair ON visualizations(experiment_id, scene_name, image_pair);

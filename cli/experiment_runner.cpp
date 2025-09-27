@@ -18,6 +18,65 @@
 
 using namespace thesis_project;
 
+// Generate match visualization with correctness color coding
+static cv::Mat generateMatchVisualization(const cv::Mat& img1, const cv::Mat& img2,
+                                         const std::vector<cv::KeyPoint>& kp1,
+                                         const std::vector<cv::KeyPoint>& kp2,
+                                         const std::vector<cv::DMatch>& matches,
+                                         const std::vector<bool>& correctness) {
+    cv::Mat visualization;
+
+    // Ensure both images are color
+    cv::Mat color_img1, color_img2;
+    if (img1.channels() == 1) {
+        cv::cvtColor(img1, color_img1, cv::COLOR_GRAY2BGR);
+    } else {
+        color_img1 = img1.clone();
+    }
+
+    if (img2.channels() == 1) {
+        cv::cvtColor(img2, color_img2, cv::COLOR_GRAY2BGR);
+    } else {
+        color_img2 = img2.clone();
+    }
+
+    // Create visualization with color-coded matches
+    std::vector<cv::Scalar> match_colors;
+    match_colors.reserve(matches.size());
+
+    for (size_t i = 0; i < matches.size(); ++i) {
+        if (i < correctness.size() && correctness[i]) {
+            match_colors.emplace_back(0, 255, 0); // Green for correct matches
+        } else {
+            match_colors.emplace_back(0, 0, 255); // Red for incorrect matches
+        }
+    }
+
+    // Draw matches with custom colors
+    cv::drawMatches(color_img1, kp1, color_img2, kp2, matches, visualization,
+                   cv::Scalar::all(-1), cv::Scalar::all(-1), std::vector<char>(),
+                   cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+
+    // Overlay match lines with correctness colors
+    if (!visualization.empty()) {
+        int img1_width = color_img1.cols;
+        for (size_t i = 0; i < matches.size() && i < match_colors.size(); ++i) {
+            const auto& match = matches[i];
+            if (match.queryIdx < static_cast<int>(kp1.size()) &&
+                match.trainIdx < static_cast<int>(kp2.size())) {
+
+                cv::Point2f pt1 = kp1[match.queryIdx].pt;
+                cv::Point2f pt2 = kp2[match.trainIdx].pt;
+                pt2.x += img1_width; // Offset for side-by-side layout
+
+                cv::line(visualization, pt1, pt2, match_colors[i], 2);
+            }
+        }
+    }
+
+    return visualization;
+}
+
 // Convert modern MatchingMethod to legacy MatchingStrategy for factory
 MatchingStrategy toMatchingStrategy(thesis_project::MatchingMethod method) {
     switch (method) {
@@ -47,6 +106,7 @@ static ::ExperimentMetrics processDirectoryNew(
     const config::ExperimentConfig& yaml_config,
     const config::ExperimentConfig::DescriptorConfig& desc_config,
     thesis_project::database::DatabaseManager* db_ptr,
+    int experiment_id,
     ProfilingSummary& profile
 ) {
     namespace fs = std::filesystem;
@@ -170,6 +230,18 @@ static ::ExperimentMetrics processDirectoryNew(
                 compute_ms += std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
             }
 
+            // Store descriptors if enabled
+            if (db_ptr && db_ptr->isEnabled() && experiment_id != -1 && yaml_config.database.save_descriptors) {
+                std::string processing_method = desc_config.name + "-" +
+                                               toString(desc_config.params.pooling) + "-" +
+                                               std::to_string(desc_config.params.norm_type);
+
+                if (!db_ptr->storeDescriptors(experiment_id, scene_name, "1.ppm",
+                                             keypoints1, descriptors1, processing_method)) {
+                    LOG_WARNING("Failed to store descriptors for " + scene_name + "/1.ppm");
+                }
+            }
+
             for (int i = 2; i <= 6; ++i) {
                 std::string image_name = std::to_string(i) + ".ppm";
                 std::string image2_path = scene_folder + "/" + image_name;
@@ -210,6 +282,19 @@ static ::ExperimentMetrics processDirectoryNew(
                     auto t1 = std::chrono::high_resolution_clock::now();
                     compute_ms += std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
                 }
+
+                // Store descriptors2 if enabled
+                if (db_ptr && db_ptr->isEnabled() && experiment_id != -1 && yaml_config.database.save_descriptors) {
+                    std::string processing_method = desc_config.name + "-" +
+                                                   toString(desc_config.params.pooling) + "-" +
+                                                   std::to_string(desc_config.params.norm_type);
+
+                    if (!db_ptr->storeDescriptors(experiment_id, scene_name, image_name,
+                                                 keypoints2, descriptors2, processing_method)) {
+                        LOG_WARNING("Failed to store descriptors for " + scene_name + "/" + image_name);
+                    }
+                }
+
                 if (descriptors1.empty() || descriptors2.empty()) continue;
 
                 // Match descriptors
@@ -223,10 +308,45 @@ static ::ExperimentMetrics processDirectoryNew(
 
                 // Legacy precision using index equality (if locked)
                 int correctMatches = 0;
+                std::vector<bool> correctness_flags;
                 if (yaml_config.keypoints.params.source == thesis_project::KeypointSource::HOMOGRAPHY_PROJECTION && !matches.empty()) {
-                    for (const auto& m : matches) if (m.queryIdx == m.trainIdx) ++correctMatches;
+                    correctness_flags.reserve(matches.size());
+                    for (const auto& m : matches) {
+                        bool is_correct = (m.queryIdx == m.trainIdx);
+                        if (is_correct) ++correctMatches;
+                        correctness_flags.push_back(is_correct);
+                    }
                     double precision = matches.empty() ? 0.0 : (double)correctMatches / matches.size();
                     metrics.addImageResult(scene_name, precision, (int)matches.size(), (int)keypoints2.size());
+                } else {
+                    // For non-homography-projection sources, we don't have easy correctness info
+                    correctness_flags.resize(matches.size(), false); // Conservative: assume incorrect
+                }
+
+                // Store matches if enabled
+                if (db_ptr && db_ptr->isEnabled() && experiment_id != -1 && yaml_config.database.save_matches && !matches.empty()) {
+                    if (!db_ptr->storeMatches(experiment_id, scene_name, "1.ppm", image_name,
+                                             keypoints1, keypoints2, matches, correctness_flags)) {
+                        LOG_WARNING("Failed to store matches for " + scene_name + "/" + image_name);
+                    }
+                }
+
+                // Store visualizations if enabled
+                if (db_ptr && db_ptr->isEnabled() && experiment_id != -1 && yaml_config.database.save_visualizations && !matches.empty()) {
+                    cv::Mat match_viz = generateMatchVisualization(image1, image2, keypoints1,
+                                                                  keypoints2, matches, correctness_flags);
+
+                    if (!match_viz.empty()) {
+                        std::string image_pair = "1_" + std::to_string(i);
+                        std::string metadata = "{\"matches\":" + std::to_string(matches.size()) +
+                                              ",\"correct\":" + std::to_string(correctMatches) +
+                                              ",\"precision\":" + std::to_string(correctMatches / (double)matches.size()) + "}";
+
+                        if (!db_ptr->storeVisualization(experiment_id, scene_name, "matches",
+                                                       image_pair, match_viz, metadata)) {
+                            LOG_WARNING("Failed to store visualization for " + scene_name + "/" + image_pair);
+                        }
+                    }
                 }
 
                 // True mAP via homography if available
@@ -382,6 +502,7 @@ int main(int argc, char** argv) {
                 yaml_config,
                 desc_config,
                 db.isEnabled() ? &db : nullptr,
+                experiment_id,
                 profile);
             
             if (experiment_id != -1) {

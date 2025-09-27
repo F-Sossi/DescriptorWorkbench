@@ -1,13 +1,13 @@
 #pragma once
 
 #include "interfaces/IDescriptorExtractor.hpp"
-#include <opencv2/features2d.hpp>
+#include <opencv4/opencv2/features2d.hpp>
 #include "src/core/config/experiment_config.hpp"
 
-namespace thesis_project {
-namespace wrappers {
 
-class SIFTWrapper : public IDescriptorExtractor {
+namespace thesis_project::wrappers {
+
+class SIFTWrapper final : public IDescriptorExtractor {
 private:
     cv::Ptr<cv::SIFT> sift_;
     std::unique_ptr<experiment_config> config_;
@@ -18,14 +18,14 @@ public:
 
     cv::Mat extract(const cv::Mat& image,
                    const std::vector<cv::KeyPoint>& keypoints,
-                   const DescriptorParams& params = {}) override;
+                   const DescriptorParams& params) override;
 
-    std::string name() const override { return "SIFT"; }
-    int descriptorSize() const override { return 128; }
-    int descriptorType() const override { return DESCRIPTOR_SIFT; }
+    [[nodiscard]] std::string name() const override { return "SIFT"; }
+    [[nodiscard]] int descriptorSize() const override { return 128; }
+    [[nodiscard]] int descriptorType() const override { return DESCRIPTOR_SIFT; }
 
-    std::string getConfiguration() const;
+    [[nodiscard]] std::string getConfiguration() const;
 };
 
-} // namespace wrappers
-} // namespace thesis_project
+} // namespace thesis_project::wrappers
+

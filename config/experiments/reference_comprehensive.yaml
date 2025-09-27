@@ -1,0 +1,316 @@
+# ============================================================================
+# COMPREHENSIVE REFERENCE EXPERIMENT CONFIGURATION
+# ============================================================================
+#
+# This file demonstrates ALL available configuration options in the
+# DescriptorWorkbench YAML Schema v1. Use this as a reference for creating
+# your own experiment configurations.
+#
+# Author: DescriptorWorkbench Team
+# Version: 1.0
+# Schema: v1
+# Last Updated: 2025-09-25
+#
+# IMPORTANT: This configuration is for DEMONSTRATION purposes. For actual
+# experiments, choose only the options relevant to your specific use case.
+# ============================================================================
+
+# ============================================================================
+# 1. EXPERIMENT METADATA
+# ============================================================================
+# Purpose: Identification and documentation of the experiment
+# All fields are optional except 'name'
+
+experiment:
+  name: "reference_comprehensive"                    # REQUIRED: Unique experiment identifier
+  description: "Comprehensive reference showing all available YAML configuration options"
+  version: "1.0"                                    # Version string for tracking
+  author: "DescriptorWorkbench Team"               # Author/researcher name
+
+# ============================================================================
+# 2. DATASET CONFIGURATION
+# ============================================================================
+# Purpose: Specify which dataset to use and which scenes to evaluate
+# Currently supports HPatches dataset
+
+dataset:
+  type: "hpatches"                                  # Dataset type (currently only "hpatches")
+  path: "../data/"                                  # REQUIRED: Path to dataset directory
+  scenes: ["i_dome", "v_wall"]                     # Optional: Specific scenes ([] = all scenes)
+                                                    # Available HPatches scenes:
+                                                    # - Illumination changes: i_*
+                                                    # - Viewpoint changes: v_*
+
+# ============================================================================
+# 3. KEYPOINT DETECTION CONFIGURATION
+# ============================================================================
+# Purpose: Configure how keypoints are detected or loaded
+# Supports multiple detection methods and strategies
+
+keypoints:
+  generator: "sift"                                 # Keypoint detector type
+                                                    # Options: "sift", "harris", "orb", "keynet", "locked_in"
+
+  max_features: 2000                               # Maximum keypoints to detect (0 = unlimited)
+
+  # SIFT-specific parameters (only used when generator="sift")
+  contrast_threshold: 0.04                         # SIFT contrast threshold (0.04 = default)
+  edge_threshold: 10.0                             # SIFT edge threshold (10.0 = default)
+  sigma: 1.6                                       # SIFT sigma parameter (1.6 = default)
+  num_octaves: 4                                   # SIFT number of octaves (4 = default)
+
+  # Keypoint source strategy
+  source: "homography_projection"                   # How to obtain keypoints:
+                                                    # - "homography_projection": Controlled, same keypoints transformed
+                                                    # - "independent_detection": Realistic, detect independently per image
+
+  keypoint_set_name: "sift_homography_projection"  # Named keypoint set identifier for database storage
+
+  # Legacy parameters (deprecated but maintained for compatibility)
+  use_locked_keypoints: false                      # Legacy: use pre-computed keypoints
+  locked_keypoints_path: ""                       # Legacy: path to keypoint files
+
+# ============================================================================
+# 4. DESCRIPTOR EXTRACTION CONFIGURATION
+# ============================================================================
+# Purpose: Configure one or more descriptor extractors for comparison
+# This is an ARRAY - you can define multiple descriptors for comparison
+
+descriptors:
+  # -------------------------------------------------------------------------
+  # BASIC SIFT DESCRIPTOR (Baseline)
+  # -------------------------------------------------------------------------
+  - name: "sift_baseline"                          # REQUIRED: Unique descriptor name
+    type: "sift"                                   # REQUIRED: Descriptor algorithm
+                                                   # Available types: "sift", "rgbsift", "vsift", "honc",
+                                                   # "dspsift", "vgg", "dnn_patch", "libtorch_hardnet",
+                                                   # "libtorch_sosnet", "libtorch_l2net"
+
+    pooling: "none"                                # Pooling strategy: "none", "domain_size_pooling"/"dsp", "stacking"
+
+    # Normalization options
+    normalize_before_pooling: false                # Apply normalization before pooling
+    normalize_after_pooling: true                 # Apply normalization after pooling (recommended)
+    norm_type: "l2"                               # Normalization type: "l1" or "l2" (L2 recommended)
+
+    # Color options
+    use_color: false                               # Use color information (grayscale vs color descriptors)
+
+    # Device options (for CNN descriptors)
+    device: "auto"                                 # Processing device: "auto" (detect), "cpu", "cuda"
+
+  # -------------------------------------------------------------------------
+  # DOMAIN SIZE POOLING WITH EXPLICIT WEIGHTS
+  # -------------------------------------------------------------------------
+  - name: "sift_dsp_weighted"
+    type: "sift"
+    pooling: "domain_size_pooling"                 # Enable domain size pooling
+
+    # Domain Size Pooling parameters
+    scales: [0.7, 1.0, 1.4]                      # Scale factors for multi-scale descriptor extraction
+    scale_weights: [0.2, 0.6, 0.2]               # Explicit weights (must match scales length)
+                                                   # Higher weight = more influence in final descriptor
+
+    normalize_after_pooling: true
+    device: "auto"
+
+  # -------------------------------------------------------------------------
+  # DOMAIN SIZE POOLING WITH PROCEDURAL WEIGHTING
+  # -------------------------------------------------------------------------
+  - name: "sift_dsp_gaussian"
+    type: "sift"
+    pooling: "domain_size_pooling"
+
+    scales: [0.5, 0.7, 1.0, 1.4, 2.0]            # More scales for smoother multi-scale representation
+    scale_weighting: "gaussian"                    # Procedural weighting: "uniform", "triangular", "gaussian"
+    scale_weight_sigma: 0.15                      # Gaussian sigma for weighting (smaller = more focused)
+
+    normalize_after_pooling: true
+    device: "auto"
+
+  # -------------------------------------------------------------------------
+  # STACKING POOLING (Combining Multiple Descriptors)
+  # -------------------------------------------------------------------------
+  - name: "stack_sift_rgbsift"
+    type: "sift"                                   # Primary descriptor
+    pooling: "stacking"                            # Enable stacking pooling
+
+    secondary_descriptor: "rgbsift"                # Secondary descriptor to stack with
+    stacking_weight: 0.5                          # Weight for combining descriptors [0,1]
+                                                   # 0.5 = equal weight, 0.7 = favor primary, 0.3 = favor secondary
+
+    normalize_before_pooling: false               # Normalize individual descriptors before stacking
+    normalize_after_pooling: true                # Normalize final stacked descriptor
+    device: "auto"
+
+  # -------------------------------------------------------------------------
+  # COLOR-BASED DESCRIPTOR
+  # -------------------------------------------------------------------------
+  - name: "rgbsift_color"
+    type: "rgbsift"                                # RGB color SIFT variant
+    pooling: "none"
+    use_color: true                                # Enable color processing
+    normalize_after_pooling: true
+    device: "auto"
+
+  # -------------------------------------------------------------------------
+  # CNN DESCRIPTOR WITH GPU ACCELERATION
+  # -------------------------------------------------------------------------
+  - name: "hardnet_gpu"
+    type: "libtorch_hardnet"                       # HardNet CNN descriptor
+    pooling: "none"
+    device: "cuda"                                 # Force GPU usage for speed
+    normalize_after_pooling: true
+
+    # CNN-specific parameters (optional, uses defaults if not specified)
+    dnn:
+      input_size: 32                               # Input patch size (32x32 pixels)
+      support_multiplier: 1.0                     # Patch size multiplier
+      rotate_to_upright: true                     # Rotate patch to canonical orientation
+      per_patch_standardize: true                 # Per-patch z-score normalization
+
+  # -------------------------------------------------------------------------
+  # CNN DESCRIPTOR WITH CPU (for fair comparison)
+  # -------------------------------------------------------------------------
+  - name: "hardnet_cpu"
+    type: "libtorch_hardnet"
+    pooling: "none"
+    device: "cpu"                                  # Force CPU for device-fair comparison
+    normalize_after_pooling: true
+
+  # -------------------------------------------------------------------------
+  # ADVANCED: CNN WITH DOMAIN SIZE POOLING
+  # -------------------------------------------------------------------------
+  - name: "hardnet_dsp_advanced"
+    type: "libtorch_hardnet"
+    pooling: "domain_size_pooling"
+    scales: [0.8, 1.0, 1.25]                     # Multi-scale CNN descriptors
+    scale_weighting: "gaussian"
+    scale_weight_sigma: 0.1
+    device: "cuda"
+    normalize_after_pooling: true
+
+# ============================================================================
+# 5. EVALUATION CONFIGURATION
+# ============================================================================
+# Purpose: Configure matching algorithms and validation methods
+
+evaluation:
+  # -------------------------------------------------------------------------
+  # MATCHING CONFIGURATION
+  # -------------------------------------------------------------------------
+  matching:
+    method: "ratio_test"                           # Matching algorithm:
+                                                   # - "brute_force": Simple nearest neighbor
+                                                   # - "flann": Fast approximate matching
+                                                   # - "ratio_test": Lowe's SNN ratio test (recommended)
+
+    ratio_threshold: 0.8                          # Ratio test threshold [0,1]
+                                                   # Lower = more strict, Higher = more matches
+                                                   # Alternative: "threshold" (same parameter)
+
+    norm: "l2"                                     # Distance norm: "l1" (Manhattan) or "l2" (Euclidean)
+    cross_check: false                             # Enable cross-checking (mutual best matches)
+                                                   # Usually disabled for ratio test
+
+  # -------------------------------------------------------------------------
+  # VALIDATION CONFIGURATION
+  # -------------------------------------------------------------------------
+  validation:
+    method: "homography"                           # Validation method:
+                                                   # - "homography": Use ground truth homography
+                                                   # - "cross_image": Cross-image validation
+                                                   # - "none": No validation
+
+    threshold: 0.05                                # Pixel threshold for correct matches [pixels]
+                                                   # Lower = more strict validation
+
+    min_matches: 10                                # Minimum matches required for homography estimation
+
+# ============================================================================
+# 6. OUTPUT CONFIGURATION (DEPRECATED - USE DATABASE INSTEAD)
+# ============================================================================
+# Purpose: Legacy file output options - DEPRECATED in favor of database storage
+#
+# ⚠️  WARNING: These file output options are DEPRECATED and NOT IMPLEMENTED
+# ⚠️  The project uses database-only storage for all experiment data
+# ⚠️  Use the 'database' section below for persistent storage instead
+
+output:
+  results_path: "results/"                         # DEPRECATED: Not used in current implementation
+  save_keypoints: false                           # DEPRECATED: Use database.save_keypoints instead
+  save_descriptors: false                         # DEPRECATED: Use database.save_descriptors instead
+  save_matches: false                             # DEPRECATED: Use database.save_matches instead
+  save_visualizations: false                      # DEPRECATED: Use database.save_visualizations instead
+                                                   # NOTE: These flags are parsed but completely ignored
+
+# ============================================================================
+# 7. DATABASE CONFIGURATION
+# ============================================================================
+# Purpose: Configure experiment tracking database
+
+database:
+  enabled: true                                    # Enable database storage (recommended)
+  connection: "sqlite:///experiments.db"          # Database connection string
+  save_keypoints: true                            # Store keypoints in database
+  save_descriptors: false                         # Store descriptors in database (storage intensive)
+  save_matches: false                             # Store matches in database
+  save_visualizations: true                       # Store visualizations in database
+
+# ============================================================================
+# CONFIGURATION USAGE NOTES
+# ============================================================================
+#
+# 1. DESCRIPTOR COMPARISON:
+#    - Each descriptor in the 'descriptors' array will be evaluated independently
+#    - Results are stored separately and can be compared via database queries
+#    - Use meaningful names for easy identification
+#
+# 2. POOLING STRATEGIES:
+#    - "none": Standard descriptor extraction (fastest)
+#    - "domain_size_pooling": Multi-scale extraction with weighted averaging
+#    - "stacking": Horizontal concatenation of different descriptor types
+#
+# 3. DEVICE SELECTION:
+#    - "auto": Automatically detect GPU/CPU (uses GPU if available)
+#    - "cpu": Force CPU execution (useful for fair comparisons)
+#    - "cuda": Force GPU execution (fastest for CNN descriptors)
+#
+# 4. KEYPOINT STRATEGIES:
+#    - "homography_projection": Same keypoints transformed across images
+#      → More controlled evaluation, measures descriptor quality directly
+#    - "independent_detection": Fresh keypoint detection per image
+#      → More realistic evaluation, includes detector variability
+#
+# 5. EVALUATION METHODS:
+#    - "ratio_test" with threshold 0.8 is recommended for most descriptors
+#    - Lower thresholds (0.6-0.7) for more precision, higher (0.9+) for recall
+#
+# 6. DATABASE-FIRST ARCHITECTURE:
+#    - All experiment data is automatically stored in SQLite database
+#    - Enable database.enabled: true for persistent tracking (recommended)
+#    - Access results via SQL queries instead of file outputs
+#    - Visualization storage: database.save_visualizations: true
+#
+# 7. PERFORMANCE OPTIMIZATION:
+#    - Use fewer descriptors during development/testing
+#    - Limit scenes for quick iterations: scenes: ["i_dome"]
+#    - The deprecated 'output' section is ignored - all storage is database-driven
+#
+# ============================================================================
+# EXAMPLE USAGE COMMANDS
+# ============================================================================
+#
+# Run this comprehensive experiment:
+#   cd build && ./experiment_runner ../config/experiments/reference_comprehensive.yaml
+#
+# View results in database (RECOMMENDED - replaces file outputs):
+#   sqlite3 experiments.db
+#   SELECT descriptor_type, mean_average_precision, processing_time_ms FROM results ORDER BY mean_average_precision DESC;
+#   SELECT * FROM experiments WHERE id IN (SELECT MAX(id) FROM experiments GROUP BY descriptor_type);
+#
+# Quick single-scene test (modify this file):
+#   dataset.scenes: ["i_dome"]
+#   Keep only 1-2 descriptors for faster execution
+#
+# ============================================================================

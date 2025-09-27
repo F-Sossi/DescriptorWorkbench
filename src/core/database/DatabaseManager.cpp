@@ -143,6 +143,40 @@ public:
             );
         )";
 
+        const auto create_matches_table = R"(
+            CREATE TABLE IF NOT EXISTS matches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                experiment_id INTEGER NOT NULL,
+                scene_name TEXT NOT NULL,
+                query_image TEXT NOT NULL,
+                train_image TEXT NOT NULL,
+                query_keypoint_x REAL NOT NULL,
+                query_keypoint_y REAL NOT NULL,
+                train_keypoint_x REAL NOT NULL,
+                train_keypoint_y REAL NOT NULL,
+                distance REAL NOT NULL,
+                match_confidence REAL,
+                is_correct_match BOOLEAN,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(experiment_id) REFERENCES experiments(id)
+            );
+        )";
+
+        const auto create_visualizations_table = R"(
+            CREATE TABLE IF NOT EXISTS visualizations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                experiment_id INTEGER NOT NULL,
+                scene_name TEXT NOT NULL,
+                visualization_type TEXT NOT NULL,
+                image_pair TEXT,
+                image_data BLOB NOT NULL,
+                image_format TEXT DEFAULT 'PNG',
+                metadata TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(experiment_id) REFERENCES experiments(id)
+            );
+        )";
+
         const auto create_keypoint_indexes = R"(
             CREATE INDEX IF NOT EXISTS idx_keypoint_sets_method ON keypoint_sets(generation_method);
             CREATE INDEX IF NOT EXISTS idx_keypoint_sets_generator ON keypoint_sets(generator_type);
@@ -155,6 +189,18 @@ public:
             CREATE INDEX IF NOT EXISTS idx_descriptors_experiment ON descriptors(experiment_id, processing_method);
             CREATE INDEX IF NOT EXISTS idx_descriptors_keypoint ON descriptors(scene_name, image_name, keypoint_x, keypoint_y);
             CREATE INDEX IF NOT EXISTS idx_descriptors_method ON descriptors(processing_method, normalization_applied, rooting_applied);
+        )";
+
+        const auto create_matches_indexes = R"(
+            CREATE INDEX IF NOT EXISTS idx_matches_experiment ON matches(experiment_id, scene_name);
+            CREATE INDEX IF NOT EXISTS idx_matches_correctness ON matches(experiment_id, is_correct_match);
+            CREATE INDEX IF NOT EXISTS idx_matches_image_pair ON matches(experiment_id, scene_name, query_image, train_image);
+        )";
+
+        const auto create_visualizations_indexes = R"(
+            CREATE INDEX IF NOT EXISTS idx_visualizations_experiment ON visualizations(experiment_id, scene_name);
+            CREATE INDEX IF NOT EXISTS idx_visualizations_type ON visualizations(visualization_type);
+            CREATE INDEX IF NOT EXISTS idx_visualizations_pair ON visualizations(experiment_id, scene_name, image_pair);
         )";
 
         char* error_msg = nullptr;
@@ -204,6 +250,34 @@ public:
         int rc7 = sqlite3_exec(db, create_descriptor_indexes, nullptr, nullptr, &error_msg);
         if (rc7 != SQLITE_OK) {
             std::cerr << "Failed to create descriptor indexes: " << error_msg << std::endl;
+            sqlite3_free(error_msg);
+            return false;
+        }
+
+        int rc8 = sqlite3_exec(db, create_matches_table, nullptr, nullptr, &error_msg);
+        if (rc8 != SQLITE_OK) {
+            std::cerr << "Failed to create matches table: " << error_msg << std::endl;
+            sqlite3_free(error_msg);
+            return false;
+        }
+
+        int rc9 = sqlite3_exec(db, create_visualizations_table, nullptr, nullptr, &error_msg);
+        if (rc9 != SQLITE_OK) {
+            std::cerr << "Failed to create visualizations table: " << error_msg << std::endl;
+            sqlite3_free(error_msg);
+            return false;
+        }
+
+        int rc10 = sqlite3_exec(db, create_matches_indexes, nullptr, nullptr, &error_msg);
+        if (rc10 != SQLITE_OK) {
+            std::cerr << "Failed to create matches indexes: " << error_msg << std::endl;
+            sqlite3_free(error_msg);
+            return false;
+        }
+
+        int rc11 = sqlite3_exec(db, create_visualizations_indexes, nullptr, nullptr, &error_msg);
+        if (rc11 != SQLITE_OK) {
+            std::cerr << "Failed to create visualizations indexes: " << error_msg << std::endl;
             sqlite3_free(error_msg);
             return false;
         }
@@ -1045,6 +1119,238 @@ std::vector<std::tuple<int, std::string, std::string>> DatabaseManager::getAvail
 
     sqlite3_finalize(stmt);
     return sets;
+}
+
+bool DatabaseManager::storeMatches(int experiment_id,
+                                  const std::string& scene_name,
+                                  const std::string& query_image,
+                                  const std::string& train_image,
+                                  const std::vector<cv::KeyPoint>& query_kps,
+                                  const std::vector<cv::KeyPoint>& train_kps,
+                                  const std::vector<cv::DMatch>& matches,
+                                  const std::vector<bool>& correctness_flags) const {
+    if (!impl_->enabled || !impl_->db) return true; // Success if disabled
+
+    if (matches.size() != correctness_flags.size()) {
+        std::cerr << "Match and correctness vectors must have same size" << std::endl;
+        return false;
+    }
+
+    const auto sql = R"(
+        INSERT INTO matches (experiment_id, scene_name, query_image, train_image,
+                           query_keypoint_x, query_keypoint_y, train_keypoint_x, train_keypoint_y,
+                           distance, match_confidence, is_correct_match)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    )";
+
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare match insert statement: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    // Start transaction for performance
+    sqlite3_exec(impl_->db, "BEGIN TRANSACTION", nullptr, nullptr, nullptr);
+
+    bool success = true;
+    for (size_t i = 0; i < matches.size(); ++i) {
+        const auto& match = matches[i];
+
+        // Validate keypoint indices
+        if (match.queryIdx >= static_cast<int>(query_kps.size()) ||
+            match.trainIdx >= static_cast<int>(train_kps.size())) {
+            std::cerr << "Invalid keypoint indices in match " << i << std::endl;
+            success = false;
+            break;
+        }
+
+        const auto& query_kp = query_kps[match.queryIdx];
+        const auto& train_kp = train_kps[match.trainIdx];
+
+        sqlite3_bind_int(stmt, 1, experiment_id);
+        sqlite3_bind_text(stmt, 2, scene_name.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 3, query_image.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 4, train_image.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_double(stmt, 5, query_kp.pt.x);
+        sqlite3_bind_double(stmt, 6, query_kp.pt.y);
+        sqlite3_bind_double(stmt, 7, train_kp.pt.x);
+        sqlite3_bind_double(stmt, 8, train_kp.pt.y);
+        sqlite3_bind_double(stmt, 9, match.distance);
+        sqlite3_bind_double(stmt, 10, match.distance); // Use distance as confidence for now
+        sqlite3_bind_int(stmt, 11, correctness_flags[i] ? 1 : 0);
+
+        rc = sqlite3_step(stmt);
+        if (rc != SQLITE_DONE) {
+            std::cerr << "Failed to insert match " << i << ": " << sqlite3_errmsg(impl_->db) << std::endl;
+            success = false;
+            break;
+        }
+
+        sqlite3_reset(stmt);
+    }
+
+    sqlite3_finalize(stmt);
+
+    if (success) {
+        sqlite3_exec(impl_->db, "COMMIT", nullptr, nullptr, nullptr);
+        std::cout << "Stored " << matches.size() << " matches for "
+                  << scene_name << "/" << query_image << " -> " << train_image
+                  << " (experiment " << experiment_id << ")" << std::endl;
+    } else {
+        sqlite3_exec(impl_->db, "ROLLBACK", nullptr, nullptr, nullptr);
+    }
+
+    return success;
+}
+
+std::vector<cv::DMatch> DatabaseManager::getMatches(int experiment_id,
+                                                    const std::string& scene_name,
+                                                    const std::string& query_image,
+                                                    const std::string& train_image) const {
+    if (!impl_->enabled || !impl_->db) return {};
+
+    const char* sql = R"(
+        SELECT query_keypoint_x, query_keypoint_y, train_keypoint_x, train_keypoint_y, distance
+        FROM matches
+        WHERE experiment_id = ? AND scene_name = ? AND query_image = ? AND train_image = ?
+        ORDER BY distance ASC
+    )";
+
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare match select statement: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return {};
+    }
+
+    sqlite3_bind_int(stmt, 1, experiment_id);
+    sqlite3_bind_text(stmt, 2, scene_name.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, query_image.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 4, train_image.c_str(), -1, SQLITE_STATIC);
+
+    std::vector<cv::DMatch> matches;
+    int match_idx = 0;
+
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        cv::DMatch match;
+        match.queryIdx = match_idx; // Note: We don't store actual indices, so use sequential
+        match.trainIdx = match_idx;
+        match.distance = static_cast<float>(sqlite3_column_double(stmt, 4));
+        match.imgIdx = 0;
+
+        matches.push_back(match);
+        match_idx++;
+    }
+
+    sqlite3_finalize(stmt);
+    return matches;
+}
+
+bool DatabaseManager::storeVisualization(int experiment_id,
+                                        const std::string& scene_name,
+                                        const std::string& visualization_type,
+                                        const std::string& image_pair,
+                                        const cv::Mat& visualization_image,
+                                        const std::string& metadata) const {
+    if (!impl_->enabled || !impl_->db) return true; // Success if disabled
+
+    if (visualization_image.empty()) {
+        std::cerr << "Cannot store empty visualization image" << std::endl;
+        return false;
+    }
+
+    // Encode image to PNG format for storage
+    std::vector<uchar> encoded_image;
+    std::vector<int> compression_params = {cv::IMWRITE_PNG_COMPRESSION, 6}; // Medium compression
+
+    if (!cv::imencode(".png", visualization_image, encoded_image, compression_params)) {
+        std::cerr << "Failed to encode visualization image to PNG" << std::endl;
+        return false;
+    }
+
+    const auto sql = R"(
+        INSERT OR REPLACE INTO visualizations (experiment_id, scene_name, visualization_type,
+                                             image_pair, image_data, image_format, metadata)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    )";
+
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare visualization insert statement: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    sqlite3_bind_int(stmt, 1, experiment_id);
+    sqlite3_bind_text(stmt, 2, scene_name.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, visualization_type.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 4, image_pair.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_blob(stmt, 5, encoded_image.data(), static_cast<int>(encoded_image.size()), SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 6, "PNG", -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 7, metadata.c_str(), -1, SQLITE_STATIC);
+
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        std::cerr << "Failed to insert visualization: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    std::cout << "Stored " << visualization_type << " visualization for "
+              << scene_name << "/" << image_pair << " (experiment " << experiment_id
+              << ", size: " << encoded_image.size() << " bytes)" << std::endl;
+
+    return true;
+}
+
+cv::Mat DatabaseManager::getVisualization(int experiment_id,
+                                         const std::string& scene_name,
+                                         const std::string& visualization_type,
+                                         const std::string& image_pair) const {
+    if (!impl_->enabled || !impl_->db) return cv::Mat();
+
+    const char* sql = R"(
+        SELECT image_data, image_format
+        FROM visualizations
+        WHERE experiment_id = ? AND scene_name = ? AND visualization_type = ? AND image_pair = ?
+    )";
+
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare visualization select statement: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return cv::Mat();
+    }
+
+    sqlite3_bind_int(stmt, 1, experiment_id);
+    sqlite3_bind_text(stmt, 2, scene_name.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, visualization_type.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 4, image_pair.c_str(), -1, SQLITE_STATIC);
+
+    cv::Mat result;
+
+    if ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        const void* blob_data = sqlite3_column_blob(stmt, 0);
+        int blob_size = sqlite3_column_bytes(stmt, 0);
+        const char* format = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+
+        if (blob_data && blob_size > 0) {
+            // Decode image from stored format
+            std::vector<uchar> encoded_data(static_cast<const uchar*>(blob_data),
+                                          static_cast<const uchar*>(blob_data) + blob_size);
+
+            result = cv::imdecode(encoded_data, cv::IMREAD_COLOR);
+
+            if (result.empty()) {
+                std::cerr << "Failed to decode visualization image from " << (format ? format : "unknown") << " format" << std::endl;
+            }
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return result;
 }
 
 } // namespace thesis_project::database

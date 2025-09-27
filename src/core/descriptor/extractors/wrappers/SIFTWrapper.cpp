@@ -1,8 +1,7 @@
 #include "SIFTWrapper.hpp"
 #include <sstream>
 
-namespace thesis_project {
-namespace wrappers {
+namespace thesis_project::wrappers {
 
 SIFTWrapper::SIFTWrapper() {
     sift_ = cv::SIFT::create();
@@ -34,5 +33,5 @@ std::string SIFTWrapper::getConfiguration() const {
     return ss.str();
 }
 
-} // namespace wrappers
-} // namespace thesis_project
+} // namespace thesis_project::wrappers
+

@@ -268,6 +268,70 @@ public:
     std::vector<std::string> getAvailableProcessingMethods() const;
 
     /**
+     * @brief Store matches for an experiment between two images
+     * @param experiment_id ID of the experiment these matches belong to
+     * @param scene_name Name of the scene (e.g., "i_dome", "v_wall")
+     * @param query_image Name of the query image (e.g., "1.ppm")
+     * @param train_image Name of the train image (e.g., "2.ppm")
+     * @param query_kps Vector of query keypoints
+     * @param train_kps Vector of train keypoints
+     * @param matches Vector of DMatch objects
+     * @param correctness_flags Vector indicating if each match is correct (same size as matches)
+     * @return true if successfully stored
+     */
+    bool storeMatches(int experiment_id,
+                     const std::string& scene_name,
+                     const std::string& query_image,
+                     const std::string& train_image,
+                     const std::vector<cv::KeyPoint>& query_kps,
+                     const std::vector<cv::KeyPoint>& train_kps,
+                     const std::vector<cv::DMatch>& matches,
+                     const std::vector<bool>& correctness_flags) const;
+
+    /**
+     * @brief Retrieve matches for a specific experiment and image pair
+     * @param experiment_id ID of the experiment
+     * @param scene_name Name of the scene
+     * @param query_image Name of the query image
+     * @param train_image Name of the train image
+     * @return Vector of DMatch objects (empty if not found or disabled)
+     */
+    std::vector<cv::DMatch> getMatches(int experiment_id,
+                                      const std::string& scene_name,
+                                      const std::string& query_image,
+                                      const std::string& train_image) const;
+
+    /**
+     * @brief Store a visualization image for an experiment
+     * @param experiment_id ID of the experiment this visualization belongs to
+     * @param scene_name Name of the scene (e.g., "i_dome", "v_wall")
+     * @param visualization_type Type of visualization ("keypoints", "matches", "homography")
+     * @param image_pair Image pair identifier (e.g., "1_2" for 1.ppm -> 2.ppm)
+     * @param visualization_image cv::Mat containing the visualization image
+     * @param metadata Optional JSON metadata string
+     * @return true if successfully stored
+     */
+    bool storeVisualization(int experiment_id,
+                           const std::string& scene_name,
+                           const std::string& visualization_type,
+                           const std::string& image_pair,
+                           const cv::Mat& visualization_image,
+                           const std::string& metadata = "") const;
+
+    /**
+     * @brief Retrieve a visualization image for a specific experiment
+     * @param experiment_id ID of the experiment
+     * @param scene_name Name of the scene
+     * @param visualization_type Type of visualization
+     * @param image_pair Image pair identifier
+     * @return cv::Mat containing the visualization image (empty if not found or disabled)
+     */
+    cv::Mat getVisualization(int experiment_id,
+                            const std::string& scene_name,
+                            const std::string& visualization_type,
+                            const std::string& image_pair) const;
+
+    /**
      * @brief Initialize database tables (safe to call multiple times)
      * @return true if successful or disabled
      */

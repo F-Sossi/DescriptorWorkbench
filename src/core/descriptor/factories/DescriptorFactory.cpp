@@ -12,8 +12,7 @@
 #endif
 #include <stdexcept>
 
-namespace thesis_project {
-namespace factories {
+namespace thesis_project::factories {
 
 std::unique_ptr<IDescriptorExtractor> DescriptorFactory::create(const experiment_config& config) {
     switch (config.descriptorOptions.descriptorType) {
@@ -55,7 +54,7 @@ bool DescriptorFactory::isSupported(const experiment_config& config) {
 std::vector<std::string> DescriptorFactory::getSupportedTypes() {
     std::vector<std::string> types = {"SIFT", "RGBSIFT", "HoNC", "VSIFT", "DSPSIFT"};
 #ifdef HAVE_OPENCV_XFEATURES2D
-    types.push_back("VGG");
+    types.emplace_back("VGG");
 #endif
     return types;
 }
@@ -124,5 +123,5 @@ std::unique_ptr<IDescriptorExtractor> DescriptorFactory::createRGBSIFT() {
     return std::make_unique<wrappers::RGBSIFTWrapper>();
 }
 
-} // namespace factories
-} // namespace thesis_project
+} // namespace thesis_project::factories
+

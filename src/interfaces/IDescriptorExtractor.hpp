@@ -23,22 +23,22 @@ namespace thesis_project {
          */
         virtual cv::Mat extract(const cv::Mat& image,
                                const std::vector<cv::KeyPoint>& keypoints,
-                               const DescriptorParams& params = {}) = 0;
+                               const DescriptorParams& params) = 0;
 
         /**
          * @brief Get the descriptor name
          */
-        virtual std::string name() const = 0;
+        [[nodiscard]] virtual std::string name() const = 0;
 
         /**
          * @brief Get the descriptor size (dimensions)
          */
-        virtual int descriptorSize() const = 0;
+        [[nodiscard]] virtual int descriptorSize() const = 0;
 
         /**
          * @brief Get the descriptor type
          */
-        virtual int descriptorType() const = 0;
+        [[nodiscard]] virtual int descriptorType() const = 0;
     };
 
 } // namespace thesis_project
