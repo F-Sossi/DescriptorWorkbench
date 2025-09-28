@@ -57,6 +57,8 @@ namespace thesis_project {
         LIBTORCH_HARDNET,      ///< LibTorch HardNet CNN descriptor
         LIBTORCH_SOSNET,       ///< LibTorch SOSNet CNN descriptor
         LIBTORCH_L2NET,        ///< LibTorch L2-Net CNN descriptor
+        ORB,                   ///< OpenCV ORB binary descriptor
+        SURF,                  ///< OpenCV SURF descriptor (requires opencv_contrib)
         NONE                   ///< No descriptor
     };
 
@@ -199,6 +201,8 @@ namespace thesis_project {
             case DescriptorType::LIBTORCH_HARDNET: return "libtorch_hardnet";
             case DescriptorType::LIBTORCH_SOSNET: return "libtorch_sosnet";
             case DescriptorType::LIBTORCH_L2NET: return "libtorch_l2net";
+            case DescriptorType::ORB: return "orb";
+            case DescriptorType::SURF: return "surf";
             case DescriptorType::NONE: return "none";
             default: return "unknown";
         }

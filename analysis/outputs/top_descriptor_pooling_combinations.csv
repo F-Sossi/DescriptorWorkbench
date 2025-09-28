@@ -1,0 +1,6 @@
+descriptor_type,pooling_clean,mean_average_precision,precision_at_1,processing_time_ms
+dspsift_baseline_color_dsp_l2,DSP,0.5501127511193913,0.5034138397849673,146536.0
+dspsift_color_dsp_l1,DSP,0.5501127511193913,0.5034138397849673,146777.0
+dspsift_baseline_grayscale_dsp_l1,DSP,0.5501039486390028,0.5034040299005278,140055.0
+dspsift_baseline_grayscale_dsp_l2,DSP,0.5501039486390028,0.5034040299005278,138738.0
+dspsift_color_stacking_l2,Stacking,0.5252714969296997,0.4798406874767015,84837.0

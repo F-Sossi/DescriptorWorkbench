@@ -1,0 +1,6 @@
+,macro_map,macro_map,macro_map,micro_map,micro_map,micro_map,mean_average_precision,mean_average_precision,mean_average_precision,precision_at_1,precision_at_1,precision_at_5,precision_at_5,processing_time_ms,processing_time_ms,map_improvement_pct,map_improvement_pct
+,mean,std,count,mean,std,count,mean,std,count,mean,std,mean,std,mean,std,mean,std
+pooling_clean,,,,,,,,,,,,,,,,,
+DSP,0.4872,0.0533,15,0.4864,0.051,15,0.4872,0.0533,15,0.4418,0.0532,0.5307,0.0498,156658.2667,71392.0105,21.7262,14.4972
+None,0.4015,0.1203,14,0.4037,0.1167,14,0.4015,0.1203,14,0.3565,0.1195,0.449,0.1166,65858.4286,15046.6432,0.0,29.8777
+Stacking,0.481,0.0197,13,0.4803,0.0185,13,0.481,0.0197,13,0.4354,0.0198,0.5249,0.0175,81322.8462,13623.4798,19.979,7.8426

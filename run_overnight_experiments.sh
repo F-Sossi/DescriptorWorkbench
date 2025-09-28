@@ -4,8 +4,8 @@
 # Runs systematic analysis for all descriptor types
 # 
 # IMPORTANT: Ensure you have enough disk space and the database is backed up
-# Total estimated time: 8-12 hours depending on hardware
-# Expected experiments: ~41 descriptor configurations
+# Total estimated time: 4-6 hours depending on hardware
+# Expected experiments: 8 experiment sets (systematic SIFT-based + CNN baselines)
 
 echo "=========================================="
 echo "OVERNIGHT DESCRIPTOR ANALYSIS STARTING"
@@ -103,50 +103,37 @@ fi
 # Show initial database state
 show_db_stats
 
-# Backup existing database if it exists
+# Clean database for fresh experiments
 if [ -f "$DB_FILE" ]; then
     BACKUP_FILE="${DB_FILE}.backup_$BATCH_TIMESTAMP"
     cp "$DB_FILE" "$BACKUP_FILE"
-    log " Created database backup: $BACKUP_FILE"
+    log "🔄 Created database backup: $BACKUP_FILE"
+
+    # Remove old database for clean experiments
+    rm "$DB_FILE"
+    log "🗑️  Removed old database for fresh start"
+else
+    log "📊 No existing database - starting fresh"
 fi
 
 # Generate keypoint sets for experiments
 log " Generating keypoint sets..."
 
-# Check if keypoint sets already exist
-KEYPOINT_COUNT=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM locked_keypoints;" 2>/dev/null || echo "0")
-if [ "$KEYPOINT_COUNT" -gt 0 ]; then
-    log " Found $KEYPOINT_COUNT existing keypoints in database"
-    log " Skipping keypoint generation (use 'rm $DB_FILE' to regenerate)"
+# Generate keypoints for fresh database
+log "🔍 Generating homography projection keypoints (controlled evaluation)..."
+(cd "$BUILD_DIR" && ./keypoint_manager generate-projected ../data "homography_projection_systematic") >> "$BATCH_LOG" 2>&1
+
+# Check if keypoints were actually generated
+HOMOG_KEYPOINTS=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM locked_keypoints WHERE keypoint_set_id = (SELECT id FROM keypoint_sets WHERE name = 'homography_projection_systematic');" 2>/dev/null || echo "0")
+if [ "$HOMOG_KEYPOINTS" -gt 0 ]; then
+    log "✅ Generated $HOMOG_KEYPOINTS homography projection keypoints"
 else
-    log " Generating homography projection keypoints (controlled evaluation)..."
-    (cd "$BUILD_DIR" && ./keypoint_manager generate-projected ../data "homography_projection_systematic") >> "$BATCH_LOG" 2>&1
-    
-    # Check if keypoints were actually generated
-    HOMOG_KEYPOINTS=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM locked_keypoints WHERE keypoint_set_id = (SELECT id FROM keypoint_sets WHERE name = 'homography_projection_systematic');" 2>/dev/null || echo "0")
-    if [ "$HOMOG_KEYPOINTS" -gt 0 ]; then
-        log "✅ Generated $HOMOG_KEYPOINTS homography projection keypoints"
-    else
-        log "❌ Failed to generate homography projection keypoints (check $BATCH_LOG)"
-        exit 1
-    fi
-    
-    log " Generating independent detection keypoints (realistic evaluation)..."
-    (cd "$BUILD_DIR" && ./keypoint_manager generate-independent ../data "independent_detection_systematic") >> "$BATCH_LOG" 2>&1
-    
-    # Check if keypoints were actually generated
-    INDEP_KEYPOINTS=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM locked_keypoints WHERE keypoint_set_id = (SELECT id FROM keypoint_sets WHERE name = 'independent_detection_systematic');" 2>/dev/null || echo "0")
-    if [ "$INDEP_KEYPOINTS" -gt 0 ]; then
-        log "✅ Generated $INDEP_KEYPOINTS independent detection keypoints"
-    else
-        log "❌ Failed to generate independent detection keypoints (check $BATCH_LOG)"
-        exit 1
-    fi
-    
-    # Show keypoint generation results
-    NEW_KEYPOINT_COUNT=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM locked_keypoints;" 2>/dev/null || echo "0")
-    log "📊 Generated $NEW_KEYPOINT_COUNT total keypoints across both methods"
+    log "❌ Failed to generate homography projection keypoints (check $BATCH_LOG)"
+    exit 1
 fi
+
+# Show keypoint generation results
+log "📊 Generated $HOMOG_KEYPOINTS total keypoints for systematic evaluation"
 
 log "🏁 All checks passed - starting experiments..."
 
@@ -155,13 +142,19 @@ TOTAL_EXPERIMENTS=0
 SUCCESSFUL_EXPERIMENTS=0
 FAILED_EXPERIMENTS=0
 
-# List of all systematic analysis configs
+# List of essential experiment configs for paper
 EXPERIMENT_CONFIGS=(
+    # SIFT-based systematic analyses
     "$CONFIG_DIR/sift_systematic_analysis.yaml"
     "$CONFIG_DIR/honc_systematic_analysis.yaml"
     "$CONFIG_DIR/vsift_systematic_analysis.yaml"
-    "$CONFIG_DIR/vgg_systematic_analysis.yaml"
     "$CONFIG_DIR/dspsift_systematic_analysis.yaml"
+    "$CONFIG_DIR/vgg_systematic_analysis.yaml"
+
+    # Non-SIFT baseline comparisons
+    "$CONFIG_DIR/surf_baseline.yaml"
+    "$CONFIG_DIR/libtorch_hardnet_baseline.yaml"
+    "$CONFIG_DIR/libtorch_sosnet_baseline.yaml"
 )
 
 # Run each experiment set

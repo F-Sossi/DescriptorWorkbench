@@ -1,0 +1,13 @@
+uses_color,pooling,normalization,MAP,Count,Improvement_%,ProcessTime_ms
+False,DSP,L1,0.4996,4,2.2971,117499.75
+False,DSP,L2,0.4996,4,2.2971,117287.75
+False,Stacking,L2,0.4854,4,-0.5986,73297.5
+True,Stacking,L2,0.4843,5,-0.8254,91083.0
+False,None,L1,0.4775,3,-2.2213,60346.6667
+True,DSP,L2,0.4767,5,-2.389,199167.0
+True,Stacking,L1,0.4735,1,-3.0347,93963.0
+False,Stacking,L1,0.4721,3,-3.3186,71543.0
+True,DSP,L1,0.4642,2,-4.9529,207444.5
+True,None,L2,0.4525,4,-7.3384,80909.25
+True,None,L1,0.3703,1,-24.1715,83391.0
+False,None,L2,0.3348,6,-31.4447,55658.3333

@@ -1,12 +1,14 @@
 #include "DescriptorFactory.hpp"
-#include "../extractors/wrappers/SIFTWrapper.hpp"
-#include "../extractors/wrappers/RGBSIFTWrapper.hpp"
-#include "../extractors/wrappers/HoNCWrapper.hpp"
-#include "../extractors/wrappers/VSIFTWrapper.hpp"
-#include "../extractors/wrappers/DSPSIFTWrapper.hpp"
-#include "../extractors/wrappers/DNNPatchWrapper.hpp"
-#include "../extractors/wrappers/PseudoDNNWrapper.hpp"
-#include "../extractors/wrappers/VGGWrapper.hpp"
+#include "src/core/descriptor/extractors/wrappers/SIFTWrapper.hpp"
+#include "src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.hpp"
+#include "src/core/descriptor/extractors/wrappers/HoNCWrapper.hpp"
+#include "src/core/descriptor/extractors/wrappers/VSIFTWrapper.hpp"
+#include "src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.hpp"
+#include "src/core/descriptor/extractors/wrappers/DNNPatchWrapper.hpp"
+#include "src/core/descriptor/extractors/wrappers/PseudoDNNWrapper.hpp"
+#include "src/core/descriptor/extractors/wrappers/VGGWrapper.hpp"
+#include "src/core/descriptor/extractors/wrappers/ORBWrapper.hpp"
+#include "src/core/descriptor/extractors/wrappers/SURFWrapper.hpp"
 #ifdef BUILD_LIBTORCH_DESCRIPTORS
 #include "../extractors/wrappers/LibTorchFactory.hpp"
 #endif
@@ -82,6 +84,10 @@ std::unique_ptr<IDescriptorExtractor> DescriptorFactory::create(thesis_project::
             return std::make_unique<wrappers::DSPSIFTWrapper>();
         case thesis_project::DescriptorType::VGG:
             return std::make_unique<wrappers::VGGWrapper>();
+        case thesis_project::DescriptorType::ORB:
+            return std::make_unique<wrappers::ORBWrapper>();
+        case thesis_project::DescriptorType::SURF:
+            return std::make_unique<wrappers::SURFWrapper>();
 #ifdef BUILD_LIBTORCH_DESCRIPTORS
         case thesis_project::DescriptorType::LIBTORCH_HARDNET:
             return wrappers::createLibTorchHardNet();
@@ -104,6 +110,8 @@ bool DescriptorFactory::isSupported(thesis_project::DescriptorType type) {
         case thesis_project::DescriptorType::vSIFT:
         case thesis_project::DescriptorType::DSPSIFT:
         case thesis_project::DescriptorType::VGG:
+        case thesis_project::DescriptorType::ORB:
+        case thesis_project::DescriptorType::SURF:
 #ifdef BUILD_LIBTORCH_DESCRIPTORS
         case thesis_project::DescriptorType::LIBTORCH_HARDNET:
         case thesis_project::DescriptorType::LIBTORCH_SOSNET:

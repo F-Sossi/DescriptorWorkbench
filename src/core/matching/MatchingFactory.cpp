@@ -1,6 +1,7 @@
 #include "MatchingFactory.hpp"
 #include "BruteForceMatching.hpp"
 #include "RatioTestMatching.hpp"
+#include "FLANNMatching.hpp"
 #include <stdexcept>
 
 namespace thesis_project::matching {
@@ -11,7 +12,7 @@ MatchingStrategyPtr MatchingFactory::createStrategy(::MatchingStrategy strategy)
             return std::make_unique<BruteForceMatching>();
             
         case FLANN:
-            throw std::runtime_error("FLANN matching strategy not yet implemented");
+            return std::make_unique<FLANNMatching>();
             
         case RATIO_TEST:
             return std::make_unique<RatioTestMatching>();
@@ -25,10 +26,26 @@ MatchingStrategyPtr MatchingFactory::createFromConfig(const experiment_config& c
     return createStrategy(config.matchingStrategy);
 }
 
+MatchingStrategyPtr MatchingFactory::createStrategy(thesis_project::MatchingMethod method) {
+    switch (method) {
+        case thesis_project::MatchingMethod::BRUTE_FORCE:
+            return std::make_unique<BruteForceMatching>();
+
+        case thesis_project::MatchingMethod::FLANN:
+            return std::make_unique<FLANNMatching>();
+
+        case thesis_project::MatchingMethod::RATIO_TEST:
+            return std::make_unique<RatioTestMatching>();
+
+        default:
+            throw std::runtime_error("Unknown matching method: " + std::to_string(static_cast<int>(method)));
+    }
+}
+
 std::vector<std::string> MatchingFactory::getAvailableStrategies() {
     return {
         "BruteForce",
-        "FLANN (future)",
+        "FLANN",
         "RatioTest"
     };
 }

@@ -361,6 +361,7 @@ function(create_gtest_if_exists test_source test_name)
                     src/core/pooling/DomainSizePooling.cpp
                     src/core/pooling/StackingPooling.cpp
                     src/core/matching/BruteForceMatching.cpp
+                    src/core/matching/FLANNMatching.cpp
                     src/core/matching/MatchingFactory.cpp
                     src/core/config/experiment_config.cpp
                     src/core/processing/processor_utils.cpp
@@ -373,8 +374,9 @@ function(create_gtest_if_exists test_source test_name)
             target_include_directories(${test_name} PRIVATE ${OpenCV_INCLUDE_DIRS} src)
         elseif(${test_name} MATCHES "matching")
             # Matching tests need matching sources and OpenCV
-            target_sources(${test_name} PRIVATE 
+            target_sources(${test_name} PRIVATE
                 src/core/matching/BruteForceMatching.cpp
+                src/core/matching/FLANNMatching.cpp
                 src/core/matching/MatchingFactory.cpp
                 src/core/config/experiment_config.cpp
             )
@@ -395,6 +397,8 @@ function(create_gtest_if_exists test_source test_name)
                        src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
                        src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
                        src/core/descriptor/extractors/wrappers/VGGWrapper.cpp
+                       src/core/descriptor/extractors/wrappers/ORBWrapper.cpp
+                       src/core/descriptor/extractors/wrappers/SURFWrapper.cpp
             )
             target_link_libraries(${test_name} ${OpenCV_LIBRARIES} keypoints)
             target_include_directories(${test_name} PRIVATE ${OpenCV_INCLUDE_DIRS} src keypoints descriptor_compare)
@@ -453,6 +457,7 @@ create_gtest_if_exists("tests/unit/factories/test_matching_factory_gtest.cpp" "t
 if(TARGET test_matching_factory_gtest)
     target_sources(test_matching_factory_gtest PRIVATE 
         src/core/matching/BruteForceMatching.cpp
+        src/core/matching/FLANNMatching.cpp
         src/core/matching/RatioTestMatching.cpp
         src/core/matching/MatchingFactory.cpp
         src/core/config/experiment_config.cpp
@@ -472,7 +477,9 @@ if(TARGET test_descriptor_factory_gtest)
         src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
         src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
         src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
-        src/core/descriptor/extractors/wrappers/VGGWrapper.cpp)
+        src/core/descriptor/extractors/wrappers/VGGWrapper.cpp
+        src/core/descriptor/extractors/wrappers/ORBWrapper.cpp
+        src/core/descriptor/extractors/wrappers/SURFWrapper.cpp)
     target_link_libraries(test_descriptor_factory_gtest keypoints ${OpenCV_LIBRARIES})
     target_include_directories(test_descriptor_factory_gtest PRIVATE src include keypoints descriptor_compare ${OpenCV_INCLUDE_DIRS})
 endif()
@@ -629,6 +636,7 @@ if(BUILD_EXPERIMENT_CLI)
                        src/core/pooling/StackingPooling.cpp
                        src/core/pooling/PoolingFactory.cpp
                        src/core/matching/BruteForceMatching.cpp
+                       src/core/matching/FLANNMatching.cpp
                        src/core/matching/RatioTestMatching.cpp
                        src/core/matching/MatchingFactory.cpp
                        src/core/metrics/TrueAveragePrecision.cpp
@@ -643,6 +651,10 @@ if(BUILD_EXPERIMENT_CLI)
         target_sources(experiment_runner PRIVATE src/core/descriptor/extractors/wrappers/PseudoDNNWrapper.cpp)
         # VGG wrapper (requires OpenCV contrib xfeatures2d)
         target_sources(experiment_runner PRIVATE src/core/descriptor/extractors/wrappers/VGGWrapper.cpp)
+        # ORB wrapper
+        target_sources(experiment_runner PRIVATE src/core/descriptor/extractors/wrappers/ORBWrapper.cpp)
+        # SURF wrapper
+        target_sources(experiment_runner PRIVATE src/core/descriptor/extractors/wrappers/SURFWrapper.cpp)
 
         # LibTorch wrapper (if available)
         if(BUILD_LIBTORCH_DESCRIPTORS)
@@ -736,6 +748,7 @@ if(BUILD_KEYPOINT_MANAGER)
                        src/core/pooling/StackingPooling.cpp
                        src/core/pooling/PoolingFactory.cpp
                        src/core/matching/BruteForceMatching.cpp
+                       src/core/matching/FLANNMatching.cpp
                        src/core/matching/RatioTestMatching.cpp
                        src/core/matching/MatchingFactory.cpp
                        src/core/descriptor/factories/DescriptorFactory.cpp
@@ -747,6 +760,10 @@ if(BUILD_KEYPOINT_MANAGER)
 
         # VGG wrapper (requires OpenCV contrib xfeatures2d)
         target_sources(keypoint_manager PRIVATE src/core/descriptor/extractors/wrappers/VGGWrapper.cpp)
+        # ORB wrapper
+        target_sources(keypoint_manager PRIVATE src/core/descriptor/extractors/wrappers/ORBWrapper.cpp)
+        # SURF wrapper
+        target_sources(keypoint_manager PRIVATE src/core/descriptor/extractors/wrappers/SURFWrapper.cpp)
         
         target_compile_features(keypoint_manager PRIVATE cxx_std_17)
         

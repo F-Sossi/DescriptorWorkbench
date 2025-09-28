@@ -373,6 +373,8 @@ namespace config {
         if (str == "libtorch_hardnet") return DescriptorType::LIBTORCH_HARDNET;
         if (str == "libtorch_sosnet") return DescriptorType::LIBTORCH_SOSNET;
         if (str == "libtorch_l2net") return DescriptorType::LIBTORCH_L2NET;
+        if (str == "orb") return DescriptorType::ORB;
+        if (str == "surf") return DescriptorType::SURF;
         throw std::runtime_error("Unknown descriptor type: " + str);
     }
     

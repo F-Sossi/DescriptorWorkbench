@@ -206,9 +206,9 @@ struct ExperimentMetrics {
             }
             
             // DEBUG: Print rank distribution for first few ranks
-            std::cout << "[DEBUG] Rank distribution - Total queries: " << ranks_per_query.size() 
+            /*std::cout << "[DEBUG] Rank distribution - Total queries: " << ranks_per_query.size()
                       << ", Valid ranks: " << queries_with_ranks << std::endl;
-            std::cout << "[DEBUG] Ranks 1-10: ";
+            std::cout << "[DEBUG] Ranks 1-10: ";*/
             for (int r = 1; r <= 10; r++) {
                 std::cout << "R" << r << ":" << rank_histogram[r] << " ";
             }

@@ -1,13 +1,14 @@
 experiment:
-  name: "sift_ratio_test"
-  description: "SIFT baseline with SNN ratio test matching (0.8 threshold)"
+  name: "surf_baseline"
+  description: "SURF descriptor baseline performance evaluation"
   version: "1.0"
   author: "researcher"
+  note: "Baseline SURF performance for comparison with SIFT-based descriptors"
 
 dataset:
   type: "hpatches"
   path: "../data/"
-  scenes: []  # Empty = use all scenes
+  scenes: []  # Use all available scenes
 
 keypoints:
   generator: "sift"
@@ -15,21 +16,20 @@ keypoints:
   contrast_threshold: 0.04
   edge_threshold: 10.0
   source: "homography_projection"
-  keypoint_set_name: "sift_homography_projection"
-  use_locked_keypoints: false
+  keypoint_set_name: "homography_projection_systematic"
 
 descriptors:
-  - name: "sift_ratio_test"
-    type: "sift"
+  - name: "surf_baseline"
+    type: "surf"
     pooling: "none"
     normalize_after_pooling: true
 
 evaluation:
   matching:
-    method: "ratio_test"       # NEW: Use SNN ratio test instead of brute_force
-    ratio_threshold: 0.8       # Standard threshold from literature
+    method: "brute_force"
     norm: "l2"
-    cross_check: false         # SNN ratio replaces cross-check
+    cross_check: true
+    threshold: 0.8
 
   validation:
     method: "homography"
@@ -41,7 +41,7 @@ output:
   save_keypoints: false
   save_descriptors: false
   save_matches: false
-  save_visualizations: true
+  save_visualizations: false
 
 database:
   enabled: true

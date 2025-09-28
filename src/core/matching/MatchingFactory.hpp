@@ -2,6 +2,7 @@
 
 #include "MatchingStrategy.hpp"
 #include "src/core/config/experiment_config.hpp"
+#include "include/thesis_project/types.hpp"
 #include <memory>
 #include <vector>
 #include <string>
@@ -27,12 +28,21 @@ class MatchingFactory {
 public:
     /**
      * @brief Create a matching strategy based on the experiment configuration
-     * 
+     *
      * @param strategy The matching strategy type from the configuration
      * @return MatchingStrategyPtr Unique pointer to the created strategy
      * @throws std::runtime_error If the strategy type is unknown
      */
     static MatchingStrategyPtr createStrategy(::MatchingStrategy strategy);
+
+    /**
+     * @brief Create a matching strategy based on the new MatchingMethod enum
+     *
+     * @param method The matching method type from the new enum system
+     * @return MatchingStrategyPtr Unique pointer to the created strategy
+     * @throws std::runtime_error If the method type is unknown
+     */
+    static MatchingStrategyPtr createStrategy(thesis_project::MatchingMethod method);
     
     /**
      * @brief Create a matching strategy from experiment config

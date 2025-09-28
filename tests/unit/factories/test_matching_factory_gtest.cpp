@@ -50,8 +50,20 @@ TEST_F(MatchingFactoryTest, CreateRatioTestStrategy) {
     EXPECT_FALSE(matches.empty());
 }
 
+TEST_F(MatchingFactoryTest, CreateFLANNStrategy) {
+    auto strategy = MatchingFactory::createStrategy(FLANN);
+    ASSERT_NE(strategy, nullptr);
+    EXPECT_EQ(strategy->getName(), "FLANN");
+    EXPECT_TRUE(strategy->supportsRatioTest());
+
+    auto matches = strategy->matchDescriptors(desc1, desc2);
+    EXPECT_FALSE(matches.empty());
+}
+
 TEST_F(MatchingFactoryTest, CreateStrategyUnsupportedThrows) {
-    EXPECT_THROW(MatchingFactory::createStrategy(FLANN), std::runtime_error);
+    // FLANN is now supported, so it should not throw
+    EXPECT_NO_THROW(MatchingFactory::createStrategy(FLANN));
+    // Test with an actually unsupported enum value
     EXPECT_THROW(MatchingFactory::createStrategy(static_cast<MatchingStrategy>(99)), std::runtime_error);
 }
 
