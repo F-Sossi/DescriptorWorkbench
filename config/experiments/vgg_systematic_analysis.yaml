@@ -15,8 +15,9 @@ keypoints:
   max_features: 2000
   contrast_threshold: 0.04
   edge_threshold: 10.0
-  source: "homography_projection"
-  keypoint_set_name: "homography_projection_systematic"
+  source: "independent_detection"
+  keypoint_set_name: "sift_keynet_pairs"
+  use_locked_keypoints: true
 
 descriptors:
   # ===== BASELINE: Traditional VGG =====

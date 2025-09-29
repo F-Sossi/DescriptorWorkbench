@@ -1,9 +1,9 @@
 experiment:
-  name: "surf_baseline"
-  description: "SURF descriptor baseline performance evaluation"
+  name: "orb_baseline"
+  description: "ORB descriptor baseline performance evaluation using ORB-SIFT spatial intersection"
   version: "1.0"
-  author: "researcher"
-  note: "Baseline SURF performance for comparison with SIFT-based descriptors"
+  author: "automation"
+  note: "Baseline ORB performance on spatially matched ORB-SIFT keypoint pairs"
 
 dataset:
   type: "hpatches"
@@ -11,24 +11,22 @@ dataset:
   scenes: []  # Use all available scenes
 
 keypoints:
-  generator: "sift"
+  generator: "orb"
   max_features: 2000
-  contrast_threshold: 0.04
-  edge_threshold: 10.0
   source: "independent_detection"
-  keypoint_set_name: "sift_keynet_pairs"
+  keypoint_set_name: "orb_sift_pairs"
   use_locked_keypoints: true
 
 descriptors:
-  - name: "surf_baseline"
-    type: "surf"
+  - name: "orb_baseline"
+    type: "orb"
     pooling: "none"
     normalize_after_pooling: true
 
 evaluation:
   matching:
     method: "brute_force"
-    norm: "l2"
+    norm: "hamming"  # ORB uses binary descriptors
     cross_check: true
     threshold: 0.8
 
@@ -47,3 +45,6 @@ output:
 database:
   enabled: true
   connection: "sqlite:///experiments.db"
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false

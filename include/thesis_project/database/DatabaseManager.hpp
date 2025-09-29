@@ -4,6 +4,8 @@
 #include <string>
 #include <memory>
 #include <map>
+#include <optional>
+#include <unordered_map>
 #include <vector>
 #include <opencv2/opencv.hpp>
 #include <opencv2/features2d.hpp>
@@ -25,6 +27,37 @@ struct DatabaseConfig;
  */
 class DatabaseManager {
 public:
+    struct DetectorAttributes {
+        float size = 0.0f;
+        float angle = 0.0f;
+        float response = 0.0f;
+        int octave = 0;
+        int class_id = 0;
+    };
+
+    struct DetectorAttributeRecord {
+        int locked_keypoint_id = -1;
+        std::string detector_type;
+        DetectorAttributes attributes;
+    };
+
+    struct KeypointRecord {
+        int id = -1;
+        cv::KeyPoint keypoint;
+    };
+
+    struct KeypointSetInfo {
+        int id = -1;
+        std::string name;
+        std::string generator_type;
+        std::string generation_method;
+        std::string dataset_path;
+        int max_features = 0;
+        int boundary_filter_px = 0;
+        bool overlap_filtering = false;
+        float min_distance = 0.0f;
+    };
+
     /**
      * @brief Construct database manager
      * @param config Database configuration (connection string, enabled flag, etc.)
@@ -189,6 +222,33 @@ public:
                                    float min_distance = 0.0f) const;
 
     /**
+     * @brief Create a new intersection keypoint set with source tracking
+     * @param name Unique name for the intersection set
+     * @param generator_type Generator type (from source set A)
+     * @param generation_method Generation method
+     * @param max_features Maximum features to store
+     * @param dataset_path Dataset path
+     * @param description Human-readable description
+     * @param boundary_filter_px Boundary filter in pixels
+     * @param source_set_a_id ID of source keypoint set A
+     * @param source_set_b_id ID of source keypoint set B
+     * @param tolerance_px Spatial matching tolerance in pixels
+     * @param intersection_method Method used for intersection (e.g., "mutual_nearest_neighbor")
+     * @return ID of created keypoint set, or -1 on failure
+     */
+    int createIntersectionKeypointSet(const std::string& name,
+                                    const std::string& generator_type,
+                                    const std::string& generation_method,
+                                    int max_features,
+                                    const std::string& dataset_path,
+                                    const std::string& description,
+                                    int boundary_filter_px,
+                                    int source_set_a_id,
+                                    int source_set_b_id,
+                                    float tolerance_px,
+                                    const std::string& intersection_method) const;
+
+    /**
      * @brief Store locked-in keypoints for a specific keypoint set
      * @param keypoint_set_id ID of the keypoint set
      * @param scene_name Name of the scene (e.g., "i_dome", "v_wall")
@@ -210,10 +270,75 @@ public:
                                                        const std::string& image_name) const;
 
     /**
+     * @brief Retrieve locked-in keypoints with their database ids for attribution workflows
+     */
+    std::vector<KeypointRecord> getLockedKeypointsWithIds(int keypoint_set_id,
+                                                          const std::string& scene_name,
+                                                          const std::string& image_name) const;
+
+    /**
+     * @brief Insert a single locked keypoint and return its database id
+     */
+    int insertLockedKeypoint(int keypoint_set_id,
+                             const std::string& scene_name,
+                             const std::string& image_name,
+                             const cv::KeyPoint& keypoint,
+                             bool valid_bounds = true) const;
+
+    /**
+     * @brief Upsert detector-specific attributes for locked keypoints
+     */
+    bool upsertDetectorAttributes(const std::vector<DetectorAttributeRecord>& records) const;
+
+    /**
+     * @brief Remove detector attributes for a given detector and keypoint set
+     */
+    bool clearDetectorAttributesForSet(int keypoint_set_id, const std::string& detector_type) const;
+
+    /**
+     * @brief Retrieve detector-specific attributes for all keypoints in a scene/image
+     */
+    std::unordered_map<int, DetectorAttributes> getDetectorAttributesForImage(
+        int keypoint_set_id,
+        const std::string& scene_name,
+        const std::string& image_name,
+        const std::string& detector_type) const;
+
+    /**
      * @brief Get all available keypoint sets
      * @return Vector of {id, name, generation_method} tuples
      */
     std::vector<std::tuple<int, std::string, std::string>> getAvailableKeypointSets() const;
+
+    /**
+     * @brief Retrieve metadata for a keypoint set by name
+     */
+    std::optional<KeypointSetInfo> getKeypointSetInfo(const std::string& name) const;
+
+    /**
+     * @brief Get list of scenes for a specific keypoint set
+     */
+    std::vector<std::string> getScenesForSet(int keypoint_set_id) const;
+
+    /**
+     * @brief Get list of images for a scene within a keypoint set
+     */
+    std::vector<std::string> getImagesForSet(int keypoint_set_id, const std::string& scene_name) const;
+
+    /**
+     * @brief Get list of detector types with attributes stored for a keypoint set
+     */
+    std::vector<std::string> getDetectorsForSet(int keypoint_set_id) const;
+
+    /**
+     * @brief Remove all keypoints for a keypoint set
+     */
+    bool clearKeypointsForSet(int keypoint_set_id) const;
+
+    /**
+     * @brief Remove all detector attributes associated with a keypoint set
+     */
+    bool clearAllDetectorAttributesForSet(int keypoint_set_id) const;
 
     /**
      * @brief Store descriptors for keypoints in an experiment

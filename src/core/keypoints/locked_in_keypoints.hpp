@@ -24,8 +24,9 @@ public:
      * @param dataFolderPath Path to HPatches data folder containing scene subdirectories
      * @param db Database manager for storing keypoints
      */
-    static void generateLockedInKeypointsToDatabase(const std::string& dataFolderPath, 
-                                                   const thesis_project::database::DatabaseManager& db);
+    static void generateLockedInKeypointsToDatabase(const std::string& dataFolderPath,
+                                                   const thesis_project::database::DatabaseManager& db,
+                                                   int max_keypoints = 2000);
     
     /**
      * @brief Generate locked-in keypoints for specific keypoint set
@@ -33,9 +34,10 @@ public:
      * @param db Database manager for storing keypoints  
      * @param keypoint_set_id ID of the keypoint set to store keypoints in
      */
-    static void generateLockedInKeypointsToDatabase(const std::string& dataFolderPath, 
+    static void generateLockedInKeypointsToDatabase(const std::string& dataFolderPath,
                                                    const thesis_project::database::DatabaseManager& db,
-                                                   int keypoint_set_id);
+                                                   int keypoint_set_id,
+                                                   int max_keypoints = 2000);
 
 private:
     static void saveKeypointsToCSV(const std::string& filePath, const std::vector<cv::KeyPoint>& keypoints);

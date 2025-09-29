@@ -103,37 +103,29 @@ fi
 # Show initial database state
 show_db_stats
 
-# Clean database for fresh experiments
-if [ -f "$DB_FILE" ]; then
-    BACKUP_FILE="${DB_FILE}.backup_$BATCH_TIMESTAMP"
-    cp "$DB_FILE" "$BACKUP_FILE"
-    log "🔄 Created database backup: $BACKUP_FILE"
-
-    # Remove old database for clean experiments
-    rm "$DB_FILE"
-    log "🗑️  Removed old database for fresh start"
-else
-    log "📊 No existing database - starting fresh"
-fi
-
-# Generate keypoint sets for experiments
-log " Generating keypoint sets..."
-
-# Generate keypoints for fresh database
-log "🔍 Generating homography projection keypoints (controlled evaluation)..."
-(cd "$BUILD_DIR" && ./keypoint_manager generate-projected ../data "homography_projection_systematic") >> "$BATCH_LOG" 2>&1
-
-# Check if keypoints were actually generated
-HOMOG_KEYPOINTS=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM locked_keypoints WHERE keypoint_set_id = (SELECT id FROM keypoint_sets WHERE name = 'homography_projection_systematic');" 2>/dev/null || echo "0")
-if [ "$HOMOG_KEYPOINTS" -gt 0 ]; then
-    log "✅ Generated $HOMOG_KEYPOINTS homography projection keypoints"
-else
-    log "❌ Failed to generate homography projection keypoints (check $BATCH_LOG)"
+# Verify existing database and keypoint sets
+if [ ! -f "$DB_FILE" ]; then
+    log "❌ Database not found: $DB_FILE"
+    log " Please ensure the database exists with intersection keypoint sets"
     exit 1
 fi
 
-# Show keypoint generation results
-log "📊 Generated $HOMOG_KEYPOINTS total keypoints for systematic evaluation"
+# Check for required keypoint sets (intersection sets)
+log "🔍 Verifying intersection keypoint sets..."
+
+REQUIRED_SETS=("sift_keynet_pairs" "keynet_sift_pairs" "orb_sift_pairs")
+for set_name in "${REQUIRED_SETS[@]}"; do
+    KEYPOINT_COUNT=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM locked_keypoints WHERE keypoint_set_id = (SELECT id FROM keypoint_sets WHERE name = '$set_name');" 2>/dev/null || echo "0")
+    if [ "$KEYPOINT_COUNT" -gt 0 ]; then
+        log "✅ Found keypoint set '$set_name': $KEYPOINT_COUNT keypoints"
+    else
+        log "❌ Missing keypoint set '$set_name' - please generate intersection sets first"
+        log " Run: ./keypoint_manager build-intersection --source-a <detector1> --source-b <detector2> --out-a <set1> --out-b <set2>"
+        exit 1
+    fi
+done
+
+log "✅ All required intersection keypoint sets verified"
 
 log "🏁 All checks passed - starting experiments..."
 

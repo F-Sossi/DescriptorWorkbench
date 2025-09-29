@@ -4,14 +4,15 @@ A comprehensive computer vision research framework for comparing image descripto
 
 ## Overview
 
-DescriptorWorkbench is a production-ready research platform for evaluating image descriptors (SIFT, RGBSIFT, HoNC, VGG, DNN-based descriptors) with sophisticated processing techniques including domain-size pooling, stacking, and **interface-based keypoint generation with non-overlapping constraints**.
+DescriptorWorkbench is a production-ready research platform for evaluating image descriptors (SIFT, RGBSIFT, HoNC, VGG, DNN-based descriptors) with sophisticated processing techniques including domain-size pooling, stacking, and **revolutionary spatial intersection architecture for cross-detector evaluation**.
 
 ### Key Features
 
-- **Interface-Based Keypoint Generation**: Complete `IKeypointGenerator` architecture supporting multiple detectors
-- **Multiple Keypoint Detectors**: SIFT, Harris Corner Detection, and ORB feature detection
-- **Non-Overlapping Algorithm**: Eliminates keypoint overlap for CNN descriptor optimization (+6.29% P@1 improvement)
-- **CNN Performance Optimization**: Validated +1.33% MAP improvement through spatial constraints
+- **Spatial Intersection System**: Revolutionary architecture enabling any detector/descriptor combination
+- **Cross-Detector Evaluation**: SIFT, Harris, ORB, and KeyNet detectors with mutual spatial correspondence
+- **Pure Intersection Sets**: Native detector parameters preserved at spatially matched locations
+- **Controlled Comparisons**: Same spatial sampling across descriptor types for fair evaluation
+- **Multiple Descriptor Types**: Traditional (SIFT, SURF, ORB) and CNN-based (HardNet, SOSNet) descriptors
 - **Database-Driven Workflow**: SQLite-based experiment tracking with full reproducibility
 - **Docker Integration**: User-safe containerized development environment
 - **YAML Configuration**: Schema-validated experiment configuration system
@@ -197,33 +198,33 @@ brew install docker docker-compose
 
 ## Keypoint Generation & Management
 
-### Interface-Based Architecture - NEW
+### Spatial Intersection System - NEW
 
-The project features a complete interface upgrade supporting multiple detectors and non-overlapping constraints:
+The project features a revolutionary **spatial intersection architecture** that enables any detector/descriptor combination through spatially matched keypoint pairs:
 
 ```bash
 cd build
 
-# List all supported keypoint detectors
-./keypoint_manager list-detectors
-# Output: sift, harris, orb (with recommended min distances)
+# 1. Generate max detector sets
+./keypoint_manager generate-detector ../data sift sift_independent_full
+./keypoint_manager generate-detector ../data orb orb_independent_full
 
-# Generate keypoints using specific detector
-./keypoint_manager generate-detector ../data sift sift_keypoints
-./keypoint_manager generate-detector ../data harris harris_keypoints
-./keypoint_manager generate-detector ../data orb orb_keypoints
+# 2. Create spatial intersection pairs (within 10px tolerance)
+./keypoint_manager build-intersection --source-a orb_independent_full --source-b sift_independent_full \
+  --out-a orb_sift_pairs --out-b sift_orb_pairs --tolerance 10
 
-# Generate NON-OVERLAPPING keypoints for CNN optimization
-./keypoint_manager generate-non-overlapping ../data sift 32.0 cnn_optimized_keypoints
-./keypoint_manager generate-non-overlapping ../data harris 25.6 harris_non_overlapping
+# 3. Verify intersection results
+./keypoint_manager list-sets
+# Shows: orb_sift_pairs (11,093 keypoints), sift_orb_pairs (11,093 keypoints)
 ```
 
-### Performance Validation
+### Cross-Detector Evaluation Capabilities
 
-**CNN Descriptor Improvements**:
-- **+6.29% P@1** improvement with non-overlapping keypoints
-- **+1.33% MAP** improvement for DNN_PATCH descriptors
-- **Methodology**: Equivalent to HardNet paper approach with spatial constraints
+**Spatial Intersection Results**:
+- **KeyNet-SIFT**: 111,030 matched pairs (33% detector overlap)
+- **ORB-SIFT**: 11,093 matched pairs (31% detector overlap)
+- **Native Parameters**: Each intersection set retains its detector's optimal keypoint properties
+- **Controlled Evaluation**: Same spatial locations across descriptor types for fair comparison
 
 ### Legacy Commands (Still Supported)
 
@@ -247,12 +248,13 @@ cd build
 ```bash
 cd build
 
-# Run baseline experiments
-./experiment_runner ../config/experiments/sift_baseline.yaml
-./experiment_runner ../config/experiments/rgbsift_comparison.yaml
+# Run baseline experiments with spatial intersection sets
+./experiment_runner ../config/experiments/sift_systematic_analysis.yaml
+./experiment_runner ../config/experiments/orb_baseline.yaml
 
-# CNN descriptor experiments with non-overlapping keypoints
-./experiment_runner ../config/experiments/dnn_hardnet_non_overlapping_keypoints.yaml
+# Cross-detector evaluation experiments
+./experiment_runner ../config/experiments/sift_vs_hardnet_keynet.yaml
+./experiment_runner ../config/experiments/libtorch_hardnet_baseline.yaml
 ```
 
 ### Dataset Setup

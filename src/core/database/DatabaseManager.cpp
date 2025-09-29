@@ -7,6 +7,7 @@
 #include <vector>
 #include <tuple>
 #include <map>
+#include <unordered_map>
 
 namespace thesis_project::database {
 
@@ -123,6 +124,21 @@ public:
             );
         )";
 
+        const auto create_detector_attributes_table = R"(
+            CREATE TABLE IF NOT EXISTS keypoint_detector_attributes (
+                locked_keypoint_id INTEGER NOT NULL,
+                detector_type TEXT NOT NULL,
+                size REAL,
+                angle REAL,
+                response REAL,
+                octave INTEGER,
+                class_id INTEGER,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (locked_keypoint_id, detector_type),
+                FOREIGN KEY(locked_keypoint_id) REFERENCES locked_keypoints(id)
+            );
+        )";
+
         const auto create_descriptors_table = R"(
             CREATE TABLE IF NOT EXISTS descriptors (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -183,6 +199,8 @@ public:
             CREATE INDEX IF NOT EXISTS idx_keypoint_sets_overlap ON keypoint_sets(overlap_filtering);
             CREATE INDEX IF NOT EXISTS idx_locked_keypoints_set ON locked_keypoints(keypoint_set_id);
             CREATE INDEX IF NOT EXISTS idx_locked_keypoints_scene ON locked_keypoints(keypoint_set_id, scene_name, image_name);
+            CREATE INDEX IF NOT EXISTS idx_kp_attr_detector ON keypoint_detector_attributes(detector_type);
+            CREATE INDEX IF NOT EXISTS idx_kp_attr_locked_id ON keypoint_detector_attributes(locked_keypoint_id);
         )";
 
         const auto create_descriptor_indexes = R"(
@@ -229,6 +247,13 @@ public:
         int rc4 = sqlite3_exec(db, create_keypoints_table, nullptr, nullptr, &error_msg);
         if (rc4 != SQLITE_OK) {
             std::cerr << "Failed to create locked_keypoints table: " << error_msg << std::endl;
+            sqlite3_free(error_msg);
+            return false;
+        }
+
+        int rc4b = sqlite3_exec(db, create_detector_attributes_table, nullptr, nullptr, &error_msg);
+        if (rc4b != SQLITE_OK) {
+            std::cerr << "Failed to create keypoint_detector_attributes table: " << error_msg << std::endl;
             sqlite3_free(error_msg);
             return false;
         }
@@ -1004,6 +1029,54 @@ int DatabaseManager::createKeypointSetWithOverlap(const std::string& name,
     return static_cast<int>(sqlite3_last_insert_rowid(impl_->db));
 }
 
+int DatabaseManager::createIntersectionKeypointSet(const std::string& name,
+                                                  const std::string& generator_type,
+                                                  const std::string& generation_method,
+                                                  int max_features,
+                                                  const std::string& dataset_path,
+                                                  const std::string& description,
+                                                  int boundary_filter_px,
+                                                  int source_set_a_id,
+                                                  int source_set_b_id,
+                                                  float tolerance_px,
+                                                  const std::string& intersection_method) const {
+    if (!impl_->enabled || !impl_->db) return -1;
+
+    const auto sql = R"(
+        INSERT INTO keypoint_sets (name, generator_type, generation_method, max_features, dataset_path, description, boundary_filter_px, source_set_a_id, source_set_b_id, tolerance_px, intersection_method)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    )";
+
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare intersection keypoint set statement: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return -1;
+    }
+
+    sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, generator_type.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, generation_method.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 4, max_features);
+    sqlite3_bind_text(stmt, 5, dataset_path.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 6, description.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 7, boundary_filter_px);
+    sqlite3_bind_int(stmt, 8, source_set_a_id);
+    sqlite3_bind_int(stmt, 9, source_set_b_id);
+    sqlite3_bind_double(stmt, 10, static_cast<double>(tolerance_px));
+    sqlite3_bind_text(stmt, 11, intersection_method.c_str(), -1, SQLITE_STATIC);
+
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        std::cerr << "Failed to insert intersection keypoint set: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return -1;
+    }
+
+    return static_cast<int>(sqlite3_last_insert_rowid(impl_->db));
+}
+
 bool DatabaseManager::storeLockedKeypointsForSet(int keypoint_set_id, const std::string& scene_name,
                                                  const std::string& image_name, const std::vector<cv::KeyPoint>& keypoints) const {
     if (!impl_->enabled || !impl_->db) return true;
@@ -1090,6 +1163,232 @@ std::vector<cv::KeyPoint> DatabaseManager::getLockedKeypointsFromSet(int keypoin
     return keypoints;
 }
 
+std::vector<DatabaseManager::KeypointRecord> DatabaseManager::getLockedKeypointsWithIds(
+    int keypoint_set_id,
+    const std::string& scene_name,
+    const std::string& image_name) const {
+
+    std::vector<KeypointRecord> records;
+    if (!impl_->enabled || !impl_->db) return records;
+
+    const auto sql = R"(
+        SELECT id, x, y, size, angle, response, octave, class_id
+        FROM locked_keypoints
+        WHERE keypoint_set_id = ? AND scene_name = ? AND image_name = ?
+        ORDER BY response DESC
+    )";
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare keypoint id query: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return records;
+    }
+
+    sqlite3_bind_int(stmt, 1, keypoint_set_id);
+    sqlite3_bind_text(stmt, 2, scene_name.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, image_name.c_str(), -1, SQLITE_STATIC);
+
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        KeypointRecord record;
+        record.id = sqlite3_column_int(stmt, 0);
+        record.keypoint.pt.x = sqlite3_column_double(stmt, 1);
+        record.keypoint.pt.y = sqlite3_column_double(stmt, 2);
+        record.keypoint.size = sqlite3_column_double(stmt, 3);
+        record.keypoint.angle = sqlite3_column_double(stmt, 4);
+        record.keypoint.response = sqlite3_column_double(stmt, 5);
+        record.keypoint.octave = sqlite3_column_int(stmt, 6);
+        record.keypoint.class_id = sqlite3_column_int(stmt, 7);
+        records.push_back(record);
+    }
+
+    sqlite3_finalize(stmt);
+    return records;
+}
+
+int DatabaseManager::insertLockedKeypoint(int keypoint_set_id,
+                                          const std::string& scene_name,
+                                          const std::string& image_name,
+                                          const cv::KeyPoint& keypoint,
+                                          bool valid_bounds) const {
+    if (!impl_->enabled || !impl_->db) return -1;
+
+    const char* sql = R"(
+        INSERT INTO locked_keypoints(
+            keypoint_set_id, scene_name, image_name,
+            x, y, size, angle, response, octave, class_id, valid_bounds)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    )";
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare insertLockedKeypoint: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return -1;
+    }
+
+    sqlite3_bind_int(stmt, 1, keypoint_set_id);
+    sqlite3_bind_text(stmt, 2, scene_name.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, image_name.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_double(stmt, 4, keypoint.pt.x);
+    sqlite3_bind_double(stmt, 5, keypoint.pt.y);
+    sqlite3_bind_double(stmt, 6, keypoint.size);
+    sqlite3_bind_double(stmt, 7, keypoint.angle);
+    sqlite3_bind_double(stmt, 8, keypoint.response);
+    sqlite3_bind_int(stmt, 9, keypoint.octave);
+    sqlite3_bind_int(stmt, 10, keypoint.class_id);
+    sqlite3_bind_int(stmt, 11, valid_bounds ? 1 : 0);
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        std::cerr << "Failed to insert locked keypoint: " << sqlite3_errmsg(impl_->db) << std::endl;
+        sqlite3_finalize(stmt);
+        return -1;
+    }
+
+    sqlite3_finalize(stmt);
+    return static_cast<int>(sqlite3_last_insert_rowid(impl_->db));
+}
+
+bool DatabaseManager::upsertDetectorAttributes(const std::vector<DetectorAttributeRecord>& records) const {
+    if (!impl_->enabled || !impl_->db) return true;
+    if (records.empty()) return true;
+
+    const char* sql = R"(
+        INSERT INTO keypoint_detector_attributes
+        (locked_keypoint_id, detector_type, size, angle, response, octave, class_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(locked_keypoint_id, detector_type) DO UPDATE SET
+            size = excluded.size,
+            angle = excluded.angle,
+            response = excluded.response,
+            octave = excluded.octave,
+            class_id = excluded.class_id,
+            updated_at = CURRENT_TIMESTAMP
+    )";
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare detector attribute upsert: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    sqlite3_exec(impl_->db, "BEGIN TRANSACTION", nullptr, nullptr, nullptr);
+
+    bool success = true;
+    for (const auto& record : records) {
+        sqlite3_bind_int(stmt, 1, record.locked_keypoint_id);
+        sqlite3_bind_text(stmt, 2, record.detector_type.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_double(stmt, 3, record.attributes.size);
+        sqlite3_bind_double(stmt, 4, record.attributes.angle);
+        sqlite3_bind_double(stmt, 5, record.attributes.response);
+        sqlite3_bind_int(stmt, 6, record.attributes.octave);
+        sqlite3_bind_int(stmt, 7, record.attributes.class_id);
+
+        rc = sqlite3_step(stmt);
+        if (rc != SQLITE_DONE) {
+            std::cerr << "Failed to upsert detector attribute: " << sqlite3_errmsg(impl_->db) << std::endl;
+            success = false;
+            break;
+        }
+
+        sqlite3_reset(stmt);
+    }
+
+    sqlite3_finalize(stmt);
+
+    if (success) {
+        sqlite3_exec(impl_->db, "COMMIT", nullptr, nullptr, nullptr);
+    } else {
+        sqlite3_exec(impl_->db, "ROLLBACK", nullptr, nullptr, nullptr);
+    }
+
+    return success;
+}
+
+bool DatabaseManager::clearDetectorAttributesForSet(int keypoint_set_id, const std::string& detector_type) const {
+    if (!impl_->enabled || !impl_->db) return true;
+
+    const char* sql = R"(
+        DELETE FROM keypoint_detector_attributes
+        WHERE detector_type = ?
+          AND locked_keypoint_id IN (
+              SELECT id FROM locked_keypoints WHERE keypoint_set_id = ?
+          )
+    )";
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare detector attribute clear: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    sqlite3_bind_text(stmt, 1, detector_type.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 2, keypoint_set_id);
+
+    rc = sqlite3_step(stmt);
+    bool success = (rc == SQLITE_DONE);
+    if (!success) {
+        std::cerr << "Failed to clear detector attributes: " << sqlite3_errmsg(impl_->db) << std::endl;
+    }
+
+    sqlite3_finalize(stmt);
+    return success;
+}
+
+std::unordered_map<int, DatabaseManager::DetectorAttributes> DatabaseManager::getDetectorAttributesForImage(
+    int keypoint_set_id,
+    const std::string& scene_name,
+    const std::string& image_name,
+    const std::string& detector_type) const {
+
+    std::unordered_map<int, DetectorAttributes> attributes_map;
+    if (!impl_->enabled || !impl_->db) return attributes_map;
+
+    const char* sql = R"(
+        SELECT attr.locked_keypoint_id,
+               attr.size,
+               attr.angle,
+               attr.response,
+               attr.octave,
+               attr.class_id
+        FROM keypoint_detector_attributes attr
+        INNER JOIN locked_keypoints lk ON lk.id = attr.locked_keypoint_id
+        WHERE attr.detector_type = ?
+          AND lk.keypoint_set_id = ?
+          AND lk.scene_name = ?
+          AND lk.image_name = ?
+    )";
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare detector attribute query: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return attributes_map;
+    }
+
+    sqlite3_bind_text(stmt, 1, detector_type.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 2, keypoint_set_id);
+    sqlite3_bind_text(stmt, 3, scene_name.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 4, image_name.c_str(), -1, SQLITE_STATIC);
+
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        DetectorAttributes attrs;
+        int locked_id = sqlite3_column_int(stmt, 0);
+        attrs.size = static_cast<float>(sqlite3_column_double(stmt, 1));
+        attrs.angle = static_cast<float>(sqlite3_column_double(stmt, 2));
+        attrs.response = static_cast<float>(sqlite3_column_double(stmt, 3));
+        attrs.octave = sqlite3_column_int(stmt, 4);
+        attrs.class_id = sqlite3_column_int(stmt, 5);
+        attributes_map.emplace(locked_id, attrs);
+    }
+
+    sqlite3_finalize(stmt);
+    return attributes_map;
+}
+
 std::vector<std::tuple<int, std::string, std::string>> DatabaseManager::getAvailableKeypointSets() const {
     std::vector<std::tuple<int, std::string, std::string>> sets;
     if (!impl_->enabled || !impl_->db) return sets;
@@ -1119,6 +1418,190 @@ std::vector<std::tuple<int, std::string, std::string>> DatabaseManager::getAvail
 
     sqlite3_finalize(stmt);
     return sets;
+}
+
+std::optional<DatabaseManager::KeypointSetInfo> DatabaseManager::getKeypointSetInfo(const std::string& name) const {
+    if (!impl_->enabled || !impl_->db) return std::nullopt;
+
+    const char* sql = R"(
+        SELECT id, name, generator_type, generation_method, dataset_path,
+               max_features, boundary_filter_px, overlap_filtering, min_distance
+        FROM keypoint_sets
+        WHERE name = ?
+        LIMIT 1
+    )";
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to query keypoint set info: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return std::nullopt;
+    }
+
+    sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_STATIC);
+
+    std::optional<KeypointSetInfo> info;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        KeypointSetInfo result;
+        result.id = sqlite3_column_int(stmt, 0);
+        result.name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        result.generator_type = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+        result.generation_method = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+        result.dataset_path = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
+        result.max_features = sqlite3_column_int(stmt, 5);
+        result.boundary_filter_px = sqlite3_column_int(stmt, 6);
+        result.overlap_filtering = sqlite3_column_int(stmt, 7) != 0;
+        result.min_distance = static_cast<float>(sqlite3_column_double(stmt, 8));
+        info = result;
+    }
+
+    sqlite3_finalize(stmt);
+    return info;
+}
+
+std::vector<std::string> DatabaseManager::getScenesForSet(int keypoint_set_id) const {
+    std::vector<std::string> scenes;
+    if (!impl_->enabled || !impl_->db) return scenes;
+
+    const char* sql = R"(
+        SELECT DISTINCT scene_name
+        FROM locked_keypoints
+        WHERE keypoint_set_id = ?
+        ORDER BY scene_name
+    )";
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to query scenes for set: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return scenes;
+    }
+
+    sqlite3_bind_int(stmt, 1, keypoint_set_id);
+
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        const char* text = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        if (text) scenes.emplace_back(text);
+    }
+
+    sqlite3_finalize(stmt);
+    return scenes;
+}
+
+std::vector<std::string> DatabaseManager::getImagesForSet(int keypoint_set_id, const std::string& scene_name) const {
+    std::vector<std::string> images;
+    if (!impl_->enabled || !impl_->db) return images;
+
+    const char* sql = R"(
+        SELECT DISTINCT image_name
+        FROM locked_keypoints
+        WHERE keypoint_set_id = ? AND scene_name = ?
+        ORDER BY image_name
+    )";
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to query images for set: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return images;
+    }
+
+    sqlite3_bind_int(stmt, 1, keypoint_set_id);
+    sqlite3_bind_text(stmt, 2, scene_name.c_str(), -1, SQLITE_STATIC);
+
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        const char* text = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        if (text) images.emplace_back(text);
+    }
+
+    sqlite3_finalize(stmt);
+    return images;
+}
+
+std::vector<std::string> DatabaseManager::getDetectorsForSet(int keypoint_set_id) const {
+    std::vector<std::string> detectors;
+    if (!impl_->enabled || !impl_->db) return detectors;
+
+    const char* sql = R"(
+        SELECT DISTINCT detector_type
+        FROM keypoint_detector_attributes
+        WHERE locked_keypoint_id IN (
+            SELECT id FROM locked_keypoints WHERE keypoint_set_id = ?
+        )
+        ORDER BY detector_type
+    )";
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to query detector types for set: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return detectors;
+    }
+
+    sqlite3_bind_int(stmt, 1, keypoint_set_id);
+
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        const char* text = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        if (text) {
+            detectors.emplace_back(text);
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return detectors;
+}
+
+bool DatabaseManager::clearKeypointsForSet(int keypoint_set_id) const {
+    if (!impl_->enabled || !impl_->db) return true;
+
+    const char* sql = "DELETE FROM locked_keypoints WHERE keypoint_set_id = ?";
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare clear keypoints statement: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    sqlite3_bind_int(stmt, 1, keypoint_set_id);
+
+    rc = sqlite3_step(stmt);
+    bool success = (rc == SQLITE_DONE);
+    if (!success) {
+        std::cerr << "Failed to clear keypoints for set: " << sqlite3_errmsg(impl_->db) << std::endl;
+    }
+
+    sqlite3_finalize(stmt);
+    return success;
+}
+
+bool DatabaseManager::clearAllDetectorAttributesForSet(int keypoint_set_id) const {
+    if (!impl_->enabled || !impl_->db) return true;
+
+    const char* sql = R"(
+        DELETE FROM keypoint_detector_attributes
+        WHERE locked_keypoint_id IN (
+            SELECT id FROM locked_keypoints WHERE keypoint_set_id = ?
+        )
+    )";
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare clear detector attributes statement: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    sqlite3_bind_int(stmt, 1, keypoint_set_id);
+
+    rc = sqlite3_step(stmt);
+    bool success = (rc == SQLITE_DONE);
+    if (!success) {
+        std::cerr << "Failed to clear detector attributes for set: " << sqlite3_errmsg(impl_->db) << std::endl;
+    }
+
+    sqlite3_finalize(stmt);
+    return success;
 }
 
 bool DatabaseManager::storeMatches(int experiment_id,

@@ -3,6 +3,7 @@
 #include "src/core/descriptor/extractors/wrappers/PseudoDNNWrapper.hpp"
 #include "thesis_project/logging.hpp"
 #include "src/core/descriptor/factories/DescriptorFactory.hpp"
+// #include "thesis_project/keypoints/KeypointAttributeAdapter.hpp" // No longer needed with pure intersection sets
 #include "src/core/pooling/PoolingFactory.hpp"
 #include "src/core/matching/MatchingFactory.hpp"
 #include "src/core/metrics/ExperimentMetrics.hpp"
@@ -163,6 +164,8 @@ static ::ExperimentMetrics processDirectoryNew(
         long total_images = 0;
         long total_kps = 0;
 
+        // Using pure intersection sets - no hydration needed
+
         for (const auto& entry : fs::directory_iterator(yaml_config.dataset.path)) {
             if (!entry.is_directory()) continue;
             const std::string scene_folder = entry.path().string();
@@ -190,18 +193,22 @@ static ::ExperimentMetrics processDirectoryNew(
                 cv::cvtColor(image1, image1, cv::COLOR_BGR2GRAY);
             }
 
-            // Get keypoints for image1
+            // Get keypoints for image1 - using pure intersection sets
             std::vector<cv::KeyPoint> keypoints1;
             if ((yaml_config.keypoints.params.source == thesis_project::KeypointSource::HOMOGRAPHY_PROJECTION ||
                  yaml_config.keypoints.params.source == thesis_project::KeypointSource::INDEPENDENT_DETECTION) && db_ptr) {
                 auto& db = *db_ptr;
+                bool loaded = false;
                 if (keypoint_set_id >= 0) {
                     keypoints1 = db.getLockedKeypointsFromSet(keypoint_set_id, scene_name, "1.ppm");
+                    loaded = !keypoints1.empty();
                 } else {
                     keypoints1 = db.getLockedKeypoints(scene_name, "1.ppm");
+                    loaded = !keypoints1.empty();
                     LOG_INFO("Experiment not using specified keypoint set");
                 }
-                if (keypoints1.empty()) {
+
+                if (!loaded || keypoints1.empty()) {
                     LOG_ERROR("No locked keypoints for " + scene_name + "/1.ppm");
                     continue;
                 }
@@ -256,13 +263,17 @@ static ::ExperimentMetrics processDirectoryNew(
                 if ((yaml_config.keypoints.params.source == thesis_project::KeypointSource::HOMOGRAPHY_PROJECTION ||
                      yaml_config.keypoints.params.source == thesis_project::KeypointSource::INDEPENDENT_DETECTION) && db_ptr) {
                     auto& db = *db_ptr;
+                    bool loaded = false;
                     if (keypoint_set_id >= 0) {
                         keypoints2 = db.getLockedKeypointsFromSet(keypoint_set_id, scene_name, image_name);
+                        loaded = !keypoints2.empty();
                     } else {
                         keypoints2 = db.getLockedKeypoints(scene_name, image_name);
+                        loaded = !keypoints2.empty();
                         LOG_INFO("Experiment not using specified keypoint set");
                     }
-                    if (keypoints2.empty()) {
+
+                    if (!loaded || keypoints2.empty()) {
                         LOG_ERROR("No locked keypoints for " + scene_name + "/" + image_name);
                         continue;
                     }

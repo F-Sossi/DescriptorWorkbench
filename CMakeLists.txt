@@ -645,7 +645,8 @@ if(BUILD_EXPERIMENT_CLI)
                        src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
                        src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
                        src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
-                       src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp)
+                       src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
+                       src/core/keypoints/KeypointAttributeAdapter.cpp)
         # DNN wrapper
         target_sources(experiment_runner PRIVATE src/core/descriptor/extractors/wrappers/DNNPatchWrapper.cpp)
         target_sources(experiment_runner PRIVATE src/core/descriptor/extractors/wrappers/PseudoDNNWrapper.cpp)
@@ -737,6 +738,7 @@ if(BUILD_KEYPOINT_MANAGER)
                        cli/keypoint_manager.cpp
                        src/core/keypoints/locked_in_keypoints.cpp
                        src/core/keypoints/KeypointGeneratorFactory.cpp
+                       src/core/keypoints/KeypointAttributeAdapter.cpp
                        src/core/keypoints/detectors/SIFTKeypointGenerator.cpp
                        src/core/keypoints/detectors/HarrisKeypointGenerator.cpp
                        src/core/keypoints/detectors/ORBKeypointGenerator.cpp

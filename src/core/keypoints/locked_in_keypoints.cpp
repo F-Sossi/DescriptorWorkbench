@@ -102,8 +102,9 @@ void LockedInKeypoints::generateLockedInKeypoints(const std::string& dataFolderP
     }
 }
 
-void LockedInKeypoints::generateLockedInKeypointsToDatabase(const std::string& dataFolderPath, 
-                                                           const thesis_project::database::DatabaseManager& db) {
+void LockedInKeypoints::generateLockedInKeypointsToDatabase(const std::string& dataFolderPath,
+                                                           const thesis_project::database::DatabaseManager& db,
+                                                           int max_keypoints) {
     if (!fs::exists(dataFolderPath) || !fs::is_directory(dataFolderPath)) {
         throw std::runtime_error("Invalid data folder path: " + dataFolderPath);
     }
@@ -195,14 +196,16 @@ void LockedInKeypoints::generateLockedInKeypointsToDatabase(const std::string& d
     }
 }
 
-void LockedInKeypoints::generateLockedInKeypointsToDatabase(const std::string& dataFolderPath, 
+void LockedInKeypoints::generateLockedInKeypointsToDatabase(const std::string& dataFolderPath,
                                                            const thesis_project::database::DatabaseManager& db,
-                                                           int keypoint_set_id) {
+                                                           int keypoint_set_id,
+                                                           int max_keypoints) {
     if (!fs::exists(dataFolderPath) || !fs::is_directory(dataFolderPath)) {
         throw std::runtime_error("Invalid data folder path: " + dataFolderPath);
     }
 
-    cv::Ptr<cv::SIFT> detector = cv::SIFT::create();
+    int sift_features = max_keypoints > 0 ? max_keypoints : 0;
+    cv::Ptr<cv::SIFT> detector = cv::SIFT::create(sift_features);
     const int BORDER = 40;
 
     for (const auto& entry : fs::directory_iterator(dataFolderPath)) {
