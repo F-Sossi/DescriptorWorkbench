@@ -32,6 +32,7 @@ descriptors:
   - name: "vsift_grayscale_dsp_l2"
     type: "vsift"
     pooling: "domain_size_pooling"
+    scales: [0.85, 1.0, 1.30]
     normalize_after_pooling: true
     norm_type: 4  # L2
     use_color: false
@@ -64,6 +65,7 @@ descriptors:
   - name: "vsift_color_dsp_l2"
     type: "vsift"
     pooling: "domain_size_pooling"
+    scales: [0.85, 1.0, 1.30]
     normalize_after_pooling: true
     norm_type: 4  # L2
     use_color: true
@@ -80,6 +82,7 @@ descriptors:
   - name: "vsift_grayscale_dsp_l1"
     type: "vsift"
     pooling: "domain_size_pooling"
+    scales: [0.85, 1.0, 1.30]
     normalize_after_pooling: true
     norm_type: 1  # L1
     use_color: false

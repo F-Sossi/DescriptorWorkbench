@@ -4,6 +4,7 @@
 #include "src/core/descriptor/extractors/wrappers/HoNCWrapper.hpp"
 #include "src/core/descriptor/extractors/wrappers/VSIFTWrapper.hpp"
 #include "src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.hpp"
+#include "src/core/descriptor/extractors/wrappers/DSPSIFTWrapperV2.hpp"
 #include "src/core/descriptor/extractors/wrappers/DNNPatchWrapper.hpp"
 #include "src/core/descriptor/extractors/wrappers/PseudoDNNWrapper.hpp"
 #include "src/core/descriptor/extractors/wrappers/VGGWrapper.hpp"
@@ -82,6 +83,8 @@ std::unique_ptr<IDescriptorExtractor> DescriptorFactory::create(thesis_project::
             return std::make_unique<wrappers::VSIFTWrapper>();
         case thesis_project::DescriptorType::DSPSIFT:
             return std::make_unique<wrappers::DSPSIFTWrapper>();
+        case thesis_project::DescriptorType::DSPSIFT_V2:
+            return std::make_unique<thesis_project::DSPSIFTWrapperV2>();
         case thesis_project::DescriptorType::VGG:
             return std::make_unique<wrappers::VGGWrapper>();
         case thesis_project::DescriptorType::ORB:
@@ -109,6 +112,7 @@ bool DescriptorFactory::isSupported(thesis_project::DescriptorType type) {
         case thesis_project::DescriptorType::HoNC:
         case thesis_project::DescriptorType::vSIFT:
         case thesis_project::DescriptorType::DSPSIFT:
+        case thesis_project::DescriptorType::DSPSIFT_V2:
         case thesis_project::DescriptorType::VGG:
         case thesis_project::DescriptorType::ORB:
         case thesis_project::DescriptorType::SURF:

@@ -1,9 +1,9 @@
 experiment:
   name: "dspsift_systematic_analysis"
-  description: "Systematic analysis of DSPSIFT (Domain-Size Pooled SIFT) modifications - Color and Normalization effects"
+  description: "Systematic analysis of DSPSIFT (Domain-Size Pooled SIFT) - Color and Normalization effects"
   version: "1.0"
   author: "researcher"
-  note: "Tests DSPSIFT performance variations - inherently includes domain-size pooling, so tests color and normalization"
+  note: "DSPSIFT inherently uses 3-scale pooling (0.85x, 1.0x, 1.30x) in descriptor computation - no additional DSP pooling needed"
 
 dataset:
   type: "hpatches"
@@ -20,48 +20,48 @@ keypoints:
   use_locked_keypoints: true
 
 descriptors:
-  # ===== BASELINE: Traditional DSPSIFT =====
-  - name: "dspsift_baseline_grayscale_dsp_l2"
+  # ===== BASELINE: Traditional DSPSIFT (inherently multi-scale) =====
+  - name: "dspsift_baseline_grayscale_none_l2"
     type: "dspsift"
-    pooling: "domain_size_pooling"  # DSPSIFT inherently uses DSP
+    pooling: "none"  # DSPSIFT already does multi-scale internally
     normalize_after_pooling: true
     norm_type: 4  # L2
     use_color: false
-    
-  # ===== COLOR EFFECTS (DSP, L2 norm) =====
-  - name: "dspsift_baseline_color_dsp_l2"
+
+  # ===== COLOR EFFECTS (No additional pooling, L2 norm) =====
+  - name: "dspsift_baseline_color_none_l2"
     type: "dspsift"
-    pooling: "domain_size_pooling"
+    pooling: "none"
     normalize_after_pooling: true
     norm_type: 4  # L2
     use_color: true
-    
-  # ===== NORMALIZATION EFFECTS (Grayscale, DSP) =====
-  - name: "dspsift_baseline_grayscale_dsp_l1"
+
+  # ===== NORMALIZATION EFFECTS (Grayscale, No additional pooling) =====
+  - name: "dspsift_baseline_grayscale_none_l1"
     type: "dspsift"
-    pooling: "domain_size_pooling"
+    pooling: "none"
     normalize_after_pooling: true
     norm_type: 1  # L1
     use_color: false
-    
+
   # ===== COMBINED EFFECTS =====
   # Color + L1 norm
-  - name: "dspsift_color_dsp_l1"
+  - name: "dspsift_color_none_l1"
     type: "dspsift"
-    pooling: "domain_size_pooling"
+    pooling: "none"
     normalize_after_pooling: true
     norm_type: 1  # L1
     use_color: true
-    
-  # ===== ALTERNATIVE POOLING (experimental) =====
-  # Test stacking on top of DSPSIFT
+
+  # ===== STACKING (experimental) =====
+  # Test stacking on top of DSPSIFT's internal multi-scale
   - name: "dspsift_grayscale_stacking_l2"
     type: "dspsift"
     pooling: "stacking"
     normalize_after_pooling: true
     norm_type: 4  # L2
     use_color: false
-    
+
   # Color + Stacking
   - name: "dspsift_color_stacking_l2"
     type: "dspsift"

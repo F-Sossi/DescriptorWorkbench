@@ -1,0 +1,47 @@
+schema_version: 1
+experiment_name: "DSPSIFTv2_vs_DSPSIFT_Baseline"
+description: "Compare pyramid-aware DSPSIFTWrapperV2 (using exact SIFT pyramid) against original DSPSIFT"
+
+dataset:
+  path: "../data"
+  scenes: ["i_dome", "v_wall"]
+
+keypoint_generation:
+  source: "locked_in"
+  keypoint_set_name: "test_keypoints"
+
+descriptors:
+  # Original DSPSIFT baseline (uses internal pyramid)
+  - name: "dspsift_baseline"
+    type: "dspsift"
+    pooling: "none"
+    scales: [0.85, 1.0, 1.30]
+    normalization_stage: "after_pooling"
+    rooting_stage: "none"
+
+  # New DSPSIFTWrapperV2 with MAX aggregation (recommended)
+  - name: "dspsift_v2_max"
+    type: "dspsift_v2"
+    pooling: "none"
+    scales: [0.85, 1.0, 1.30]
+    pooling_aggregation: "max"
+    normalization_stage: "after_pooling"
+    rooting_stage: "none"
+
+  # New DSPSIFTWrapperV2 with AVERAGE aggregation (original DSPSIFT method)
+  - name: "dspsift_v2_average"
+    type: "dspsift_v2"
+    pooling: "none"
+    scales: [0.85, 1.0, 1.30]
+    pooling_aggregation: "average"
+    normalization_stage: "after_pooling"
+    rooting_stage: "none"
+
+evaluation:
+  matching_method: "ratio_test"
+  ratio_threshold: 0.8
+  validation_method: "homography"
+  validation_threshold: 3.0
+
+database:
+  enabled: true

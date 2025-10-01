@@ -143,7 +143,12 @@ namespace config {
             if (desc_node["pooling"]) {
                 desc_config.params.pooling = stringToPoolingStrategy(desc_node["pooling"].as<std::string>());
             }
-            
+
+            if (desc_node["pooling_aggregation"]) {
+                desc_config.params.pooling_aggregation =
+                    stringToPoolingAggregation(desc_node["pooling_aggregation"].as<std::string>());
+            }
+
             if (desc_node["scales"] && desc_node["scales"].IsSequence()) {
                 desc_config.params.scales.clear();
                 for (const auto& scale : desc_node["scales"]) {
@@ -370,6 +375,7 @@ namespace config {
         if (str == "dnn_patch") return DescriptorType::DNN_PATCH;
         if (str == "vgg") return DescriptorType::VGG;
         if (str == "dspsift") return DescriptorType::DSPSIFT;
+        if (str == "dspsift_v2") return DescriptorType::DSPSIFT_V2;
         if (str == "libtorch_hardnet") return DescriptorType::LIBTORCH_HARDNET;
         if (str == "libtorch_sosnet") return DescriptorType::LIBTORCH_SOSNET;
         if (str == "libtorch_l2net") return DescriptorType::LIBTORCH_L2NET;
@@ -384,7 +390,17 @@ namespace config {
         if (str == "stacking") return PoolingStrategy::STACKING;
         throw std::runtime_error("Unknown pooling strategy: " + str);
     }
-    
+
+    PoolingAggregation YAMLConfigLoader::stringToPoolingAggregation(const std::string& str) {
+        if (str == "average" || str == "avg") return PoolingAggregation::AVERAGE;
+        if (str == "max") return PoolingAggregation::MAX;
+        if (str == "min") return PoolingAggregation::MIN;
+        if (str == "concatenate" || str == "concat") return PoolingAggregation::CONCATENATE;
+        if (str == "weighted_avg" || str == "weighted") return PoolingAggregation::WEIGHTED_AVG;
+        // Default to average (don't throw error for backward compatibility)
+        return PoolingAggregation::AVERAGE;
+    }
+
     KeypointGenerator YAMLConfigLoader::stringToKeypointGenerator(const std::string& str) {
         if (str == "sift") return KeypointGenerator::SIFT;
         if (str == "harris") return KeypointGenerator::HARRIS;

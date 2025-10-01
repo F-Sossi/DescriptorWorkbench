@@ -27,7 +27,26 @@ cv::Mat DomainSizePooling::computeDescriptors(
     for (auto scale : config.descriptorOptions.scales) {
         if (scale <= 0.0f) continue; // skip invalid scales
 
-        // Scale only keypoint size; keep image unchanged to preserve geometry
+        // Pyramid-aware pooling: apply appropriate blur for each scale
+        // Scale-space theory: smaller scales need less blur, larger scales need more blur
+        // Base sigma for SIFT is typically 1.6
+        const double base_sigma = 1.6;
+        double sigma = base_sigma * scale;
+
+        // Apply Gaussian blur appropriate for this scale
+        cv::Mat blurred_image;
+        if (std::abs(scale - 1.0) < 1e-6) {
+            // At scale 1.0, use original blur (or apply base sigma)
+            cv::GaussianBlur(processedImage, blurred_image, cv::Size(0, 0), base_sigma);
+        } else if (scale < 1.0) {
+            // Smaller scale -> less blur (sharper features)
+            cv::GaussianBlur(processedImage, blurred_image, cv::Size(0, 0), sigma);
+        } else {
+            // Larger scale -> more blur (coarser features)
+            cv::GaussianBlur(processedImage, blurred_image, cv::Size(0, 0), sigma);
+        }
+
+        // Scale keypoint sizes to sample appropriate region size
         std::vector<cv::KeyPoint> kps_scaled;
         kps_scaled.reserve(keypoints.size());
         for (const auto& kp : keypoints) {
@@ -36,13 +55,13 @@ cv::Mat DomainSizePooling::computeDescriptors(
             kps_scaled.push_back(k);
         }
 
-        // Compute descriptors
+        // Compute descriptors from the appropriately blurred image
         cv::Mat desc;
         std::vector<cv::KeyPoint> kps_out = kps_scaled; // allow detector to adjust
         if (auto vanillaSift = std::dynamic_pointer_cast<VanillaSIFT>(detector)) {
-            vanillaSift->compute(processedImage, kps_out, desc);
+            vanillaSift->compute(blurred_image, kps_out, desc);
         } else {
-            detector->compute(processedImage, kps_out, desc);
+            detector->compute(blurred_image, kps_out, desc);
         }
         if (desc.empty()) continue;
 
@@ -150,6 +169,19 @@ const experiment_config& config
 
     for (auto scale : config.descriptorOptions.scales) {
         if (scale <= 0.0f) continue;
+
+        // Pyramid-aware pooling: apply appropriate blur for each scale
+        const double base_sigma = 1.6;
+        double sigma = base_sigma * scale;
+        cv::Mat blurred_image;
+        if (std::abs(scale - 1.0) < 1e-6) {
+            cv::GaussianBlur(processedImage, blurred_image, cv::Size(0, 0), base_sigma);
+        } else if (scale < 1.0) {
+            cv::GaussianBlur(processedImage, blurred_image, cv::Size(0, 0), sigma);
+        } else {
+            cv::GaussianBlur(processedImage, blurred_image, cv::Size(0, 0), sigma);
+        }
+
         std::vector<cv::KeyPoint> kps_scaled;
         kps_scaled.reserve(keypoints.size());
         for (const auto& kp : keypoints) {
@@ -160,7 +192,7 @@ const experiment_config& config
 
         // Legacy config doesn't have device settings - use default params
         thesis_project::DescriptorParams params; // defaults to device="auto"
-        cv::Mat desc = extractor.extract(processedImage, kps_scaled, params);
+        cv::Mat desc = extractor.extract(blurred_image, kps_scaled, params);
         if (desc.empty()) continue;
 
         if (expected_rows < 0) {
@@ -241,34 +273,53 @@ cv::Mat DomainSizePooling::computeDescriptors(
         return d;
     }
 
-    // Prepare accumulators
-    cv::Mat acc;
-    double weight_sum = 0.0;
+    // TRUE PYRAMID-AWARE POOLING: Build pyramid once, sample from appropriate levels
+    // This matches DSPSIFT's approach of reusing the same scale-space structure
+
+    // Build SIFT-style Gaussian pyramid once
+    const int nOctaves = 4;
+    const int nScalesPerOctave = 3;
+    const double sigma0 = 1.6;
+    std::vector<std::vector<cv::Mat>> pyramid;
+    buildGaussianPyramid(image, pyramid, nOctaves, nScalesPerOctave, sigma0);
+
+    // Collect descriptors from all scales
+    std::vector<cv::Mat> descriptors_per_scale;
+    std::vector<double> weights;
     const bool use_weights = !params.scale_weights.empty();
 
     for (size_t i = 0; i < params.scales.size(); ++i) {
         float alpha = params.scales[i];
-        // Scale image by alpha around original resolution
-        cv::Mat processedImage;
-        if (std::abs(alpha - 1.0f) < 1e-6) {
-            processedImage = image;
-        } else {
-            cv::resize(image, processedImage, cv::Size(), alpha, alpha, cv::INTER_LINEAR);
+
+        // Find the appropriate pyramid level for this scale factor
+        auto [octave, scale] = findPyramidLevel(alpha, nScalesPerOctave);
+
+        // Safety check: ensure pyramid level exists
+        if (octave >= static_cast<int>(pyramid.size()) ||
+            scale >= static_cast<int>(pyramid[octave].size())) {
+            continue; // Skip invalid pyramid levels
         }
 
-        // Scale keypoints by alpha
+        // Get the pre-built pyramid level
+        const cv::Mat& pyramid_level = pyramid[octave][scale];
+
+        // Transform keypoints to pyramid space
+        // Octave 0 = original resolution, octave 1 = 1/2 resolution, etc.
+        double scale_factor = 1.0 / (1 << octave); // 2^(-octave)
         std::vector<cv::KeyPoint> kps_scaled = keypoints;
         for (auto& kp : kps_scaled) {
-            kp.pt.x *= alpha; kp.pt.y *= alpha; kp.size *= alpha;
+            kp.pt.x *= scale_factor;
+            kp.pt.y *= scale_factor;
+            kp.size *= alpha * scale_factor; // Scale size for domain pooling AND pyramid level
         }
 
-        // Extract per-scale descriptors
-        cv::Mat desc = extractor.extract(processedImage, kps_scaled, params);
+        // Extract descriptors from the pre-built pyramid level
+        cv::Mat desc = extractor.extract(pyramid_level, kps_scaled, params);
 
         // Normalize before pooling if requested
         if (params.normalize_before_pooling) normalizeRows(desc, params.norm_type);
 
-        // Weight
+        // Calculate weight for this scale
         double w = 1.0;
         if (use_weights) {
             w = static_cast<double>(params.scale_weights[i]);
@@ -292,21 +343,143 @@ cv::Mat DomainSizePooling::computeDescriptors(
             }
         }
 
-        // Accumulate
-        if (acc.empty()) {
-            acc = cv::Mat::zeros(desc.size(), desc.type());
-        }
-        acc += desc * w;
-        weight_sum += w;
+        descriptors_per_scale.push_back(desc);
+        weights.push_back(w);
     }
 
-    // Average
-    if (weight_sum > 0.0) acc /= weight_sum;
+    // Aggregate descriptors using configured method
+    cv::Mat acc;
+    aggregateDescriptors(descriptors_per_scale, weights, acc, params.pooling_aggregation);
 
     // Normalize after pooling if requested
     if (params.normalize_after_pooling) normalizeRows(acc, params.norm_type);
 
     return acc;
+}
+
+void DomainSizePooling::buildGaussianPyramid(const cv::Mat& image,
+                                              std::vector<std::vector<cv::Mat>>& pyramid,
+                                              int nOctaves,
+                                              int nScalesPerOctave,
+                                              double sigma0) const {
+    // Build SIFT-style Gaussian pyramid matching VanillaSIFT::buildGaussianPyramid
+    // This creates a multi-octave, multi-scale structure like SIFT uses internally
+
+    pyramid.clear();
+    pyramid.resize(nOctaves);
+
+    const int nScales = nScalesPerOctave + 3; // Extra scales for DoG computation
+    const double k = std::pow(2.0, 1.0 / nScalesPerOctave); // Scale multiplier per level
+
+    for (int o = 0; o < nOctaves; o++) {
+        pyramid[o].resize(nScales);
+
+        // Base image for this octave
+        cv::Mat octaveBase;
+        if (o == 0) {
+            octaveBase = image.clone();
+        } else {
+            // Downsample from previous octave's middle scale
+            cv::pyrDown(pyramid[o-1][nScalesPerOctave], octaveBase);
+        }
+
+        // First scale is the base
+        pyramid[o][0] = octaveBase.clone();
+
+        // Build remaining scales in this octave
+        for (int s = 1; s < nScales; s++) {
+            double sigma_prev = sigma0 * std::pow(k, s - 1);
+            double sigma_curr = sigma0 * std::pow(k, s);
+
+            // Incremental blur: only apply the DIFFERENCE in sigma
+            double sigma_diff = std::sqrt(sigma_curr * sigma_curr - sigma_prev * sigma_prev);
+
+            cv::GaussianBlur(pyramid[o][s-1], pyramid[o][s], cv::Size(0, 0), sigma_diff);
+        }
+    }
+}
+
+std::pair<int, int> DomainSizePooling::findPyramidLevel(float scaleFactor, int nScalesPerOctave) const {
+    // Map scale factor to pyramid coordinates (octave, scale)
+    // scaleFactor < 1.0 means finer details → higher octaves or later scales
+    // scaleFactor > 1.0 means coarser features → lower octaves or earlier scales
+
+    if (std::abs(scaleFactor - 1.0f) < 1e-6) {
+        // Scale 1.0 = base octave, base scale
+        return {0, 0};
+    }
+
+    // Convert scale factor to octave space
+    // log2(scaleFactor) gives the octave offset
+    double octave_float = std::log2(scaleFactor);
+    int octave = static_cast<int>(std::floor(octave_float));
+
+    // Remaining fractional part maps to intra-octave scale
+    double scale_fraction = octave_float - octave;
+    int scale = static_cast<int>(std::round(scale_fraction * nScalesPerOctave));
+
+    // Clamp to valid ranges
+    octave = std::max(0, std::min(3, octave)); // Assuming 4 octaves
+    scale = std::max(0, std::min(nScalesPerOctave + 2, scale));
+
+    return {octave, scale};
+}
+
+void DomainSizePooling::aggregateDescriptors(
+    const std::vector<cv::Mat>& descriptors_per_scale,
+    const std::vector<double>& weights,
+    cv::Mat& output,
+    thesis_project::PoolingAggregation aggregation) const {
+
+    if (descriptors_per_scale.empty()) {
+        output = cv::Mat();
+        return;
+    }
+
+    const int rows = descriptors_per_scale[0].rows;
+    const int cols = descriptors_per_scale[0].cols;
+    const int type = descriptors_per_scale[0].type();
+
+    switch (aggregation) {
+        case thesis_project::PoolingAggregation::AVERAGE:
+        case thesis_project::PoolingAggregation::WEIGHTED_AVG: {
+            output = cv::Mat::zeros(rows, cols, type);
+            double weight_sum = 0.0;
+            for (size_t i = 0; i < descriptors_per_scale.size(); ++i) {
+                double w = (i < weights.size()) ? weights[i] : 1.0;
+                output += descriptors_per_scale[i] * w;
+                weight_sum += w;
+            }
+            if (weight_sum > 0.0) output /= weight_sum;
+            break;
+        }
+
+        case thesis_project::PoolingAggregation::MAX: {
+            output = descriptors_per_scale[0].clone();
+            for (size_t i = 1; i < descriptors_per_scale.size(); ++i) {
+                cv::max(output, descriptors_per_scale[i], output);
+            }
+            break;
+        }
+
+        case thesis_project::PoolingAggregation::MIN: {
+            output = descriptors_per_scale[0].clone();
+            for (size_t i = 1; i < descriptors_per_scale.size(); ++i) {
+                cv::min(output, descriptors_per_scale[i], output);
+            }
+            break;
+        }
+
+        case thesis_project::PoolingAggregation::CONCATENATE: {
+            // Horizontal concatenation (increases dimensionality)
+            cv::hconcat(descriptors_per_scale, output);
+            break;
+        }
+
+        default:
+            output = descriptors_per_scale[0].clone();
+            break;
+    }
 }
 
 } // namespace thesis_project::pooling

@@ -26,6 +26,18 @@ namespace thesis_project {
     };
 
     /**
+     * @brief Aggregation methods for multi-scale pooling
+     * Controls how descriptors from different scales are combined
+     */
+    enum class PoolingAggregation {
+        AVERAGE,               ///< Average pooling (default for DSPSIFT)
+        MAX,                   ///< Max pooling (element-wise maximum)
+        MIN,                   ///< Min pooling (element-wise minimum)
+        CONCATENATE,           ///< Concatenate/stack (increases dimensionality)
+        WEIGHTED_AVG           ///< Weighted average (uses scale_weights)
+    };
+
+    /**
      * @brief When to apply normalization during processing
      */
     enum class NormalizationStage {
@@ -52,6 +64,7 @@ namespace thesis_project {
         RGBSIFT,               ///< RGB color SIFT
         vSIFT,                 ///< Vanilla SIFT implementation
         DSPSIFT,               ///< Domain-Size Pooled SIFT (professor's implementation)
+        DSPSIFT_V2,            ///< Pyramid-aware DSP wrapper with configurable aggregation
         VGG,                   ///< VGG descriptor from OpenCV xfeatures2d (non-pooled)
         DNN_PATCH,             ///< ONNX-backed patch descriptor via cv::dnn
         LIBTORCH_HARDNET,      ///< LibTorch HardNet CNN descriptor
@@ -189,6 +202,17 @@ namespace thesis_project {
         }
     }
 
+    inline std::string toString(PoolingAggregation aggregation) {
+        switch (aggregation) {
+            case PoolingAggregation::AVERAGE: return "average";
+            case PoolingAggregation::MAX: return "max";
+            case PoolingAggregation::MIN: return "min";
+            case PoolingAggregation::CONCATENATE: return "concatenate";
+            case PoolingAggregation::WEIGHTED_AVG: return "weighted_avg";
+            default: return "unknown";
+        }
+    }
+
     inline std::string toString(DescriptorType type) {
         switch (type) {
             case DescriptorType::SIFT: return "sift";
@@ -196,6 +220,7 @@ namespace thesis_project {
             case DescriptorType::RGBSIFT: return "rgbsift";
             case DescriptorType::vSIFT: return "vsift";
             case DescriptorType::DSPSIFT: return "dspsift";
+            case DescriptorType::DSPSIFT_V2: return "dspsift_v2";
             case DescriptorType::VGG: return "vgg";
             case DescriptorType::DNN_PATCH: return "dnn_patch";
             case DescriptorType::LIBTORCH_HARDNET: return "libtorch_hardnet";
@@ -299,6 +324,7 @@ namespace thesis_project {
 
     struct DescriptorParams {
         PoolingStrategy pooling = PoolingStrategy::NONE;
+        PoolingAggregation pooling_aggregation = PoolingAggregation::AVERAGE; // How to combine multi-scale descriptors
         std::vector<float> scales = {1.0f, 1.5f, 2.0f};
         std::vector<float> scale_weights; // optional: if provided, use weighted pooling aligned with scales
         ScaleWeighting scale_weighting = ScaleWeighting::UNIFORM; // procedural weighting if explicit weights not provided
