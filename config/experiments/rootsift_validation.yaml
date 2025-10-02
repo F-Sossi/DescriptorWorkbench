@@ -1,0 +1,74 @@
+experiment:
+  name: "rootsift_validation"
+  description: "RootSIFT transformation validation with DSPSIFT_V2 - targeting 10-15% improvement over 57.25% baseline"
+  version: "1.0"
+  author: "researcher"
+  note: "Testing RootSIFT (L1 normalize -> sqrt) with pyramid-aware DSP pooling"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # Use all available scenes
+
+keypoints:
+  generator: "sift"
+  max_features: 2000
+  contrast_threshold: 0.04
+  edge_threshold: 10.0
+  source: "locked_in"
+  keypoint_set_name: "sift_keynet_pairs"
+  use_locked_keypoints: true
+
+descriptors:
+  # ===== BASELINE: DSPSIFT_V2 without RootSIFT (57.25% MAP expected) =====
+  - name: "dspsift_v2_baseline_max_l2"
+    type: "dspsift_v2"
+    pooling: "none"  # DSP is internal to descriptor
+    pooling_aggregation: "max"
+    normalize_after_pooling: true
+    rooting_stage: "none"
+    norm_type: 4  # L2
+    use_color: false
+
+  # ===== TEST: DSPSIFT_V2 + RootSIFT (target: ~63-66% MAP) =====
+  - name: "dspsift_v2_rootsift_max_l2"
+    type: "dspsift_v2"
+    pooling: "none"  # DSP is internal to descriptor
+    pooling_aggregation: "max"
+    rooting_stage: "after_pooling"  # Enable RootSIFT transformation
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: false
+
+  # ===== COMPARISON: DSPSIFT_V2 + RootSIFT with AVERAGE aggregation =====
+  - name: "dspsift_v2_rootsift_average_l2"
+    type: "dspsift_v2"
+    pooling: "none"
+    pooling_aggregation: "average"
+    rooting_stage: "after_pooling"
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: false
+
+evaluation:
+  matching:
+    method: "ratio_test"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 3.0
+    min_matches: 10
+
+output:
+  results_path: "results/"
+  save_keypoints: false
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+database:
+  enabled: true
+  connection: "sqlite:///experiments.db"

@@ -1,0 +1,50 @@
+experiment:
+  name: "rootsift_validation_avg"
+  description: "DSPSIFT V2 average pooling with RootSIFT"
+  version: "1.0"
+  author: "automation"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []
+
+keypoints:
+  generator: "sift"
+  source: "locked_in"
+  keypoint_set_name: "sift_keynet_pairs"
+  use_locked_keypoints: true
+
+descriptors:
+  - name: "dspsift_v2_rootsift_average_l2"
+    type: "dspsift_v2"
+    pooling: "none"
+    pooling_aggregation: "average"
+    rooting_stage: "after_pooling"
+    normalize_after_pooling: true
+    norm_type: 4
+
+  
+
+evaluation:
+  matching:
+    method: "ratio_test"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+output:
+  results_path: "results/"
+  save_keypoints: false
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+database:
+  enabled: true
+  connection: "sqlite:///experiments.db"

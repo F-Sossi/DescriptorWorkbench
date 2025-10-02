@@ -1,0 +1,69 @@
+experiment:
+  name: "sift_baseline"
+  description: "Baseline SIFT descriptor on locked SIFT keypoints"
+  version: "1.0"
+  author: "automation"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # use full benchmark
+
+keypoints:
+  generator: "sift"
+  source: "locked_in"
+  keypoint_set_name: "sift_keynet_pairs"
+  use_locked_keypoints: true
+
+keypoints_params:
+  max_features: 2000
+  contrast_threshold: 0.04
+  edge_threshold: 10.0
+
+keypoints:
+  generator: "sift"
+  source: "locked_in"
+  keypoint_set_name: "sift_keynet_pairs"
+  use_locked_keypoints: true
+
+descriptors:
+  - name: "sift_baseline"
+    type: "sift"
+    pooling: "none"
+    pooling_aggregation: "max"
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+
+  - name: "rootsift_baseline"
+    type: "sift"
+    pooling: "none"
+    pooling_aggregation: "max"
+    rooting_stage: "after_pooling"
+    normalize_after_pooling: true
+    norm_type: 4
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+output:
+  results_path: "results/"
+  save_keypoints: false
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+database:
+  enabled: true
+  connection: "sqlite:///experiments.db"
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false

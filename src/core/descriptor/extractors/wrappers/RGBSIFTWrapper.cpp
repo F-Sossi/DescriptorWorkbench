@@ -18,7 +18,35 @@ cv::Mat RGBSIFTWrapper::extract(const cv::Mat& image,
                                const DescriptorParams& params) {
     cv::Mat descriptors;
     std::vector<cv::KeyPoint> mutable_keypoints = keypoints;
+
+    // RGBSIFT inherits from DSPSIFT, so compute() uses DSP internally
     rgbsift_->compute(image, mutable_keypoints, descriptors);
+
+    // Apply RootSIFT transformation if requested
+    if (params.rooting_stage == RootingStage::R_AFTER_POOLING) {
+        // L1 normalize then sqrt (RootSIFT)
+        for (int r = 0; r < descriptors.rows; r++) {
+            cv::Mat row = descriptors.row(r);
+            cv::normalize(row, row, 1.0, 0.0, cv::NORM_L1);
+        }
+        // Apply element-wise sqrt
+        for (int r = 0; r < descriptors.rows; r++) {
+            float* ptr = descriptors.ptr<float>(r);
+            for (int c = 0; c < descriptors.cols; c++) {
+                float v = ptr[c];
+                ptr[c] = (v < 0.0f) ? 0.0f : std::sqrt(v);
+            }
+        }
+    }
+
+    // Final normalization
+    if (params.normalize_after_pooling) {
+        for (int r = 0; r < descriptors.rows; r++) {
+            cv::Mat row = descriptors.row(r);
+            cv::normalize(row, row, 1.0, 0.0, params.norm_type);
+        }
+    }
+
     return descriptors;
 }
 

@@ -1077,6 +1077,63 @@ int DatabaseManager::createIntersectionKeypointSet(const std::string& name,
     return static_cast<int>(sqlite3_last_insert_rowid(impl_->db));
 }
 
+bool DatabaseManager::updateIntersectionKeypointSet(int keypoint_set_id,
+                                                    const std::string& generator_type,
+                                                    const std::string& generation_method,
+                                                    int max_features,
+                                                    const std::string& dataset_path,
+                                                    const std::string& description,
+                                                    int boundary_filter_px,
+                                                    int source_set_a_id,
+                                                    int source_set_b_id,
+                                                    float tolerance_px,
+                                                    const std::string& intersection_method) const {
+    if (!impl_->enabled || !impl_->db) return true;
+
+    const char* sql = R"(
+        UPDATE keypoint_sets
+        SET generator_type = ?,
+            generation_method = ?,
+            max_features = ?,
+            dataset_path = ?,
+            description = ?,
+            boundary_filter_px = ?,
+            source_set_a_id = ?,
+            source_set_b_id = ?,
+            tolerance_px = ?,
+            intersection_method = ?
+        WHERE id = ?
+    )";
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare update intersection keypoint set statement: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    sqlite3_bind_text(stmt, 1, generator_type.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, generation_method.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 3, max_features);
+    sqlite3_bind_text(stmt, 4, dataset_path.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 5, description.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 6, boundary_filter_px);
+    sqlite3_bind_int(stmt, 7, source_set_a_id);
+    sqlite3_bind_int(stmt, 8, source_set_b_id);
+    sqlite3_bind_double(stmt, 9, static_cast<double>(tolerance_px));
+    sqlite3_bind_text(stmt, 10, intersection_method.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 11, keypoint_set_id);
+
+    rc = sqlite3_step(stmt);
+    bool success = (rc == SQLITE_DONE);
+    if (!success) {
+        std::cerr << "Failed to update intersection keypoint set: " << sqlite3_errmsg(impl_->db) << std::endl;
+    }
+
+    sqlite3_finalize(stmt);
+    return success;
+}
+
 bool DatabaseManager::storeLockedKeypointsForSet(int keypoint_set_id, const std::string& scene_name,
                                                  const std::string& image_name, const std::vector<cv::KeyPoint>& keypoints) const {
     if (!impl_->enabled || !impl_->db) return true;
@@ -1425,7 +1482,8 @@ std::optional<DatabaseManager::KeypointSetInfo> DatabaseManager::getKeypointSetI
 
     const char* sql = R"(
         SELECT id, name, generator_type, generation_method, dataset_path,
-               max_features, boundary_filter_px, overlap_filtering, min_distance
+               max_features, boundary_filter_px, overlap_filtering, min_distance,
+               source_set_a_id, source_set_b_id, tolerance_px, intersection_method
         FROM keypoint_sets
         WHERE name = ?
         LIMIT 1
@@ -1452,6 +1510,13 @@ std::optional<DatabaseManager::KeypointSetInfo> DatabaseManager::getKeypointSetI
         result.boundary_filter_px = sqlite3_column_int(stmt, 6);
         result.overlap_filtering = sqlite3_column_int(stmt, 7) != 0;
         result.min_distance = static_cast<float>(sqlite3_column_double(stmt, 8));
+        result.source_set_a_id = sqlite3_column_type(stmt, 9) == SQLITE_NULL ? -1 : sqlite3_column_int(stmt, 9);
+        result.source_set_b_id = sqlite3_column_type(stmt, 10) == SQLITE_NULL ? -1 : sqlite3_column_int(stmt, 10);
+        result.tolerance_px = static_cast<float>(sqlite3_column_double(stmt, 11));
+        const unsigned char* intersection_text = sqlite3_column_text(stmt, 12);
+        if (intersection_text) {
+            result.intersection_method = reinterpret_cast<const char*>(intersection_text);
+        }
         info = result;
     }
 

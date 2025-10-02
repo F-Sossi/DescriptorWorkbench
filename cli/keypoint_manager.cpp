@@ -721,19 +721,39 @@ int main(int argc, char** argv) {
                                     const std::string& partner_name,
                                     int partner_set_id) -> std::optional<int> {
             int existing_id = db.getKeypointSetId(output_name);
+
+            std::ostringstream desc;
+            desc << "Paired subset from " << source_info.name << " matched with " << partner_name
+                 << " (" << tolerance_px << "px tolerance)";
+
             if (existing_id >= 0) {
                 if (!overwrite) {
                     std::cerr << "❌ Output set already exists: " << output_name << " (use --overwrite to replace)" << std::endl;
                     return std::nullopt;
                 }
-                // Pure intersection sets don't use detector attributes
-                db.clearKeypointsForSet(existing_id);
+                if (!db.clearAllDetectorAttributesForSet(existing_id)) {
+                    LOG_WARNING("⚠️  Failed to clear detector attributes for " + output_name + ", proceeding with keypoint overwrite");
+                }
+                if (!db.clearKeypointsForSet(existing_id)) {
+                    std::cerr << "❌ Failed to clear existing keypoints for set: " << output_name << std::endl;
+                    return std::nullopt;
+                }
+                if (!db.updateIntersectionKeypointSet(existing_id,
+                                                       source_info.generator_type,
+                                                       source_info.generation_method,
+                                                       source_info.max_features,
+                                                       source_info.dataset_path,
+                                                       desc.str(),
+                                                       source_info.boundary_filter_px,
+                                                       source_info.id,
+                                                       partner_set_id,
+                                                       static_cast<float>(tolerance_px),
+                                                       "mutual_nearest_neighbor")) {
+                    std::cerr << "❌ Failed to update metadata for existing intersection set: " << output_name << std::endl;
+                    return std::nullopt;
+                }
                 return existing_id;
             }
-
-            std::ostringstream desc;
-            desc << "Paired subset from " << source_info.name << " matched with " << partner_name
-                 << " (" << tolerance_px << "px tolerance)";
 
             int new_id = db.createIntersectionKeypointSet(
                 output_name,
@@ -745,7 +765,7 @@ int main(int argc, char** argv) {
                 source_info.boundary_filter_px,
                 source_info.id,           // source_set_a_id
                 partner_set_id,           // source_set_b_id
-                tolerance_px,             // tolerance_px
+                static_cast<float>(tolerance_px),             // tolerance_px
                 "mutual_nearest_neighbor" // intersection_method
             );
 

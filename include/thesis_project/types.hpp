@@ -64,7 +64,10 @@ namespace thesis_project {
         RGBSIFT,               ///< RGB color SIFT
         vSIFT,                 ///< Vanilla SIFT implementation
         DSPSIFT,               ///< Domain-Size Pooled SIFT (professor's implementation)
-        DSPSIFT_V2,            ///< Pyramid-aware DSP wrapper with configurable aggregation
+        DSPSIFT_V2,            ///< Pyramid-aware DSP wrapper with configurable aggregation (VanillaSIFT only)
+        DSPRGBSIFT_V2,         ///< Pyramid-aware DSP wrapper for RGBSIFT (uses native operator())
+        DSPHOWH_V2,            ///< Pyramid-aware DSP wrapper for HoWH (uses native operator())
+        DSPHONC_V2,            ///< Pyramid-aware DSP wrapper for HoNC (uses native operator())
         VGG,                   ///< VGG descriptor from OpenCV xfeatures2d (non-pooled)
         DNN_PATCH,             ///< ONNX-backed patch descriptor via cv::dnn
         LIBTORCH_HARDNET,      ///< LibTorch HardNet CNN descriptor
@@ -329,9 +332,13 @@ namespace thesis_project {
         std::vector<float> scale_weights; // optional: if provided, use weighted pooling aligned with scales
         ScaleWeighting scale_weighting = ScaleWeighting::UNIFORM; // procedural weighting if explicit weights not provided
         float scale_weight_sigma = 0.15f; // gaussian sigma in log-space (triangular radius proxy)
+
+        // Normalization and rooting (RootSIFT)
         bool normalize_before_pooling = false;
         bool normalize_after_pooling = true;
+        RootingStage rooting_stage = RootingStage::R_NONE; // RootSIFT transformation
         int norm_type = cv::NORM_L2;
+
         bool use_color = false;
         std::string device = "auto";  // "auto", "cpu", "cuda"
 

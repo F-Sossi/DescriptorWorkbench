@@ -1,0 +1,114 @@
+experiment:
+  name: "dsp_color_descriptors_v2"
+  description: "Testing pyramid-aware DSP wrappers for RGBSIFT, HoWH, and HoNC with RootSIFT support"
+  version: "1.0"
+  author: "researcher"
+  note: "Comparing DSP V2 wrappers for color-based SIFT descriptors"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # Use all available scenes
+
+keypoints:
+  generator: "sift"
+  max_features: 2000
+  contrast_threshold: 0.04
+  edge_threshold: 10.0
+  source: "locked_in"
+  keypoint_set_name: "sift_keynet_pairs"
+  use_locked_keypoints: true
+
+descriptors:
+  # ===== BASELINE: DSPSIFT_V2 (grayscale) =====
+  - name: "dspsift_v2_baseline"
+    type: "dspsift_v2"
+    pooling: "none"
+    pooling_aggregation: "max"
+    normalize_after_pooling: true
+    rooting_stage: "none"
+    norm_type: 4  # L2
+    use_color: false
+
+  # ===== DSPRGBSIFT_V2: RGB color SIFT with DSP =====
+  - name: "dsprgbsift_v2_max"
+    type: "dsprgbsift_v2"
+    pooling: "none"
+    pooling_aggregation: "max"
+    normalize_after_pooling: true
+    rooting_stage: "none"
+    norm_type: 4  # L2
+    use_color: true
+
+  # ===== DSPRGBSIFT_V2 + RootSIFT =====
+  - name: "dsprgbsift_v2_rootsift_max"
+    type: "dsprgbsift_v2"
+    pooling: "none"
+    pooling_aggregation: "max"
+    rooting_stage: "after_pooling"
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: true
+
+  # ===== DSPHoWH_V2: Histogram of Weighted Hue with DSP =====
+  - name: "dsphowh_v2_max"
+    type: "dsphowh_v2"
+    pooling: "none"
+    pooling_aggregation: "max"
+    normalize_after_pooling: true
+    rooting_stage: "none"
+    norm_type: 4  # L2
+    use_color: true
+
+  # ===== DSPHoWH_V2 + RootSIFT =====
+  - name: "dsphowh_v2_rootsift_max"
+    type: "dsphowh_v2"
+    pooling: "none"
+    pooling_aggregation: "max"
+    rooting_stage: "after_pooling"
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: true
+
+  # ===== DSPHoNC_V2: Histogram of Normalized Colors with DSP =====
+  - name: "dsphonc_v2_max"
+    type: "dsphonc_v2"
+    pooling: "none"
+    pooling_aggregation: "max"
+    normalize_after_pooling: true
+    rooting_stage: "none"
+    norm_type: 4  # L2
+    use_color: true
+
+  # ===== DSPHoNC_V2 + RootSIFT =====
+  - name: "dsphonc_v2_rootsift_max"
+    type: "dsphonc_v2"
+    pooling: "none"
+    pooling_aggregation: "max"
+    rooting_stage: "after_pooling"
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: true
+
+evaluation:
+  matching:
+    method: "ratio_test"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 3.0
+    min_matches: 10
+
+output:
+  results_path: "results/"
+  save_keypoints: false
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+database:
+  enabled: true
+  connection: "sqlite:///experiments.db"

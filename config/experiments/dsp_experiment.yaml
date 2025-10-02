@@ -1,0 +1,71 @@
+experiment:
+  name: "dsp_experiment"
+  description: "Legacy DSP experiment placeholder using DSPSIFT"
+  version: "1.0"
+  author: "automation"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []
+
+keypoints:
+  generator: "sift"
+  source: "locked_in"
+  keypoint_set_name: "sift_keynet_pairs"
+  use_locked_keypoints: true
+
+descriptors:
+  - name: "dspsift_v2_default"
+    type: "dspsift_v2"
+    pooling: "none"
+    pooling_aggregation: "average"
+    normalize_after_pooling: true
+    norm_type: 4
+
+  - name: "dspsift_v2_weighted"
+    type: "dspsift_v2"
+    pooling: "none"
+    pooling_aggregation: "weighted_avg"
+    scale_weighting: "gaussian"
+    scale_weight_sigma: 0.12
+    normalize_after_pooling: true
+    norm_type: 4
+
+  - name: "dspsift_v2_concat"
+    type: "dspsift_v2"
+    pooling: "none"
+    pooling_aggregation: "concatenate"
+    normalize_after_pooling: true
+    norm_type: 4
+
+  - name: "dspsift_v2_root_before"
+    type: "dspsift_v2"
+    pooling: "none"
+    pooling_aggregation: "average"
+    rooting_stage: "before_pooling"
+    normalize_after_pooling: true
+    norm_type: 4
+
+evaluation:
+  matching:
+    method: "ratio_test"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+output:
+  results_path: "results/"
+  save_keypoints: false
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+database:
+  enabled: true
+  connection: "sqlite:///experiments.db"

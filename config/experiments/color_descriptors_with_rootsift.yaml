@@ -1,0 +1,84 @@
+experiment:
+  name: "color_descriptors_with_rootsift"
+  description: "Testing RootSIFT with DSP-enabled color descriptors (RGBSIFT, HoNC)"
+  version: "1.0"
+  author: "researcher"
+  note: "Color descriptors inherit DSP from DSPSIFT, now with RootSIFT support"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # Use all available scenes
+
+keypoints:
+  generator: "sift"
+  max_features: 2000
+  contrast_threshold: 0.04
+  edge_threshold: 10.0
+  source: "locked_in"
+  keypoint_set_name: "sift_keynet_pairs"
+  use_locked_keypoints: true
+
+descriptors:
+  # ===== BASELINE: DSPSIFT_V2 (grayscale) for comparison =====
+  - name: "dspsift_v2_baseline"
+    type: "dspsift_v2"
+    pooling: "none"
+    pooling_aggregation: "max"
+    normalize_after_pooling: true
+    rooting_stage: "none"
+    norm_type: 4  # L2
+    use_color: false
+
+  # ===== RGBSIFT: RGB color SIFT (inherits DSP from DSPSIFT) =====
+  - name: "rgbsift_baseline"
+    type: "rgbsift"
+    normalize_after_pooling: true
+    rooting_stage: "none"
+    norm_type: 4  # L2
+    use_color: true
+
+  - name: "rgbsift_rootsift"
+    type: "rgbsift"
+    rooting_stage: "after_pooling"
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: true
+
+  # ===== HoNC: Histogram of Normalized Colors (inherits DSP from HoWH->DSPSIFT) =====
+  - name: "honc_baseline"
+    type: "honc"
+    normalize_after_pooling: true
+    rooting_stage: "none"
+    norm_type: 4  # L2
+    use_color: true
+
+  - name: "honc_rootsift"
+    type: "honc"
+    rooting_stage: "after_pooling"
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: true
+
+evaluation:
+  matching:
+    method: "ratio_test"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 3.0
+    min_matches: 10
+
+output:
+  results_path: "results/"
+  save_keypoints: false
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+database:
+  enabled: true
+  connection: "sqlite:///experiments.db"

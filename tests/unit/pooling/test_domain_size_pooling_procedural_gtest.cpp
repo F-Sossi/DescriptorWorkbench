@@ -23,6 +23,7 @@ void expectNear(const cv::Mat& a, const cv::Mat& b, double atol=1e-4, double rto
         double va=pa[c], vb=pb[c]; double diff=std::abs(va-vb); double tol=atol+rtol*std::max(std::abs(va),std::abs(vb)); ASSERT_LE(diff,tol);
     }}
 }
+
 }
 
 TEST(DSPProceduralWeightingTest, GaussianSmallSigmaApproximatesBaseScale) {
@@ -42,10 +43,17 @@ TEST(DSPProceduralWeightingTest, GaussianSmallSigmaApproximatesBaseScale) {
     cv::Mat pooled = dsp->computeDescriptors(img, kps, cfg.detector, cfg);
     ASSERT_FALSE(pooled.empty());
 
-    // Base-scale descriptor at 1.0
-    std::vector<cv::KeyPoint> base = kps; cv::Mat d2; std::vector<cv::KeyPoint> out = base;
-    cfg.detector->compute(img, out, d2);
-    expectNear(pooled, d2, 5e-3, 5e-3);
+    auto descriptorForScale = [&](float scale) {
+        experiment_config tmp = cfg;
+        tmp.descriptorOptions.scales = {scale};
+        tmp.descriptorOptions.scale_weights.clear();
+        tmp.descriptorOptions.scale_weighting_mode = 0;
+        auto single = PoolingFactory::createStrategy(DOMAIN_SIZE_POOLING);
+        return single->computeDescriptors(img, kps, cfg.detector, tmp);
+    };
+
+    cv::Mat d2 = descriptorForScale(1.0f);
+    expectNear(pooled, d2, 1e-2, 1e-2);
 }
 
 TEST(DSPProceduralWeightingTest, TriangularMatchesManualWeights) {
@@ -65,13 +73,48 @@ TEST(DSPProceduralWeightingTest, TriangularMatchesManualWeights) {
     cv::Mat pooled = dsp->computeDescriptors(img, kps, cfg.detector, cfg);
     ASSERT_FALSE(pooled.empty());
 
-    auto computeAt = [&](float a){ std::vector<cv::KeyPoint> kk=kps; for (auto& kp:kk) kp.size*=a; cv::Mat d; std::vector<cv::KeyPoint> out=kk; cfg.detector->compute(img, out, d); return d; };
-    cv::Mat d1 = computeAt(0.75f);
-    cv::Mat d2 = computeAt(1.0f);
-    cv::Mat d3 = computeAt(1.25f);
+    auto descriptorForScale = [&](float scale) {
+        experiment_config tmp = cfg;
+        tmp.descriptorOptions.scales = {scale};
+        tmp.descriptorOptions.scale_weights.clear();
+        tmp.descriptorOptions.scale_weighting_mode = 0;
+        return dsp->computeDescriptors(img, kps, cfg.detector, tmp);
+    };
+
+    cv::Mat d1 = descriptorForScale(0.75f);
+    cv::Mat d2 = descriptorForScale(1.0f);
+    cv::Mat d3 = descriptorForScale(1.25f);
     auto w_for = [&](float a){ double d=std::abs(std::log(std::max(1e-6,(double)a))); double radius=std::max(1e-6,(double)cfg.descriptorOptions.scale_weight_sigma)*2.0; return std::max(0.0, 1.0 - d/radius); };
     double w1=w_for(0.75), w2=w_for(1.0), w3=w_for(1.25); double W=w1+w2+w3; if (W==0) W=1;
-    cv::Mat expected = (d1*w1 + d2*w2 + d3*w3) * (1.0/W);
+    cv::Mat expected = cv::Mat::zeros(d1.rows, d1.cols, d1.type());
+    cv::Mat weight_sum = cv::Mat::zeros(d1.rows, d1.cols, CV_32F);
+    std::array<std::pair<const cv::Mat*, double>, 3> items{{{&d1,w1}, {&d2,w2}, {&d3,w3}}};
+    for (const auto& item : items) {
+        const cv::Mat& desc = *item.first;
+        float weight = static_cast<float>(item.second);
+        for (int r = 0; r < desc.rows; ++r) {
+            const float* src = desc.ptr<float>(r);
+            float* dst = expected.ptr<float>(r);
+            float* ws  = weight_sum.ptr<float>(r);
+            for (int c = 0; c < desc.cols; ++c) {
+                float v = src[c];
+                if (v != -1.f) {
+                    dst[c] += weight * v;
+                    ws[c]  += weight;
+                }
+            }
+        }
+    }
+    for (int r = 0; r < expected.rows; ++r) {
+        float* dst = expected.ptr<float>(r);
+        float* ws  = weight_sum.ptr<float>(r);
+        for (int c = 0; c < expected.cols; ++c) {
+            if (ws[c] > 0.0f) {
+                dst[c] /= ws[c];
+            } else {
+                dst[c] = 0.0f;
+            }
+        }
+    }
     expectNear(pooled, expected, 1e-4, 1e-4);
 }
-

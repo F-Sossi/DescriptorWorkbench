@@ -178,7 +178,12 @@ namespace config {
             if (desc_node["normalize_after_pooling"]) {
                 desc_config.params.normalize_after_pooling = desc_node["normalize_after_pooling"].as<bool>();
             }
-            
+
+            if (desc_node["rooting_stage"]) {
+                desc_config.params.rooting_stage =
+                    stringToRootingStage(desc_node["rooting_stage"].as<std::string>());
+            }
+
             if (desc_node["use_color"]) {
                 desc_config.params.use_color = desc_node["use_color"].as<bool>();
             }
@@ -376,6 +381,9 @@ namespace config {
         if (str == "vgg") return DescriptorType::VGG;
         if (str == "dspsift") return DescriptorType::DSPSIFT;
         if (str == "dspsift_v2") return DescriptorType::DSPSIFT_V2;
+        if (str == "dsprgbsift_v2") return DescriptorType::DSPRGBSIFT_V2;
+        if (str == "dsphowh_v2") return DescriptorType::DSPHOWH_V2;
+        if (str == "dsphonc_v2") return DescriptorType::DSPHONC_V2;
         if (str == "libtorch_hardnet") return DescriptorType::LIBTORCH_HARDNET;
         if (str == "libtorch_sosnet") return DescriptorType::LIBTORCH_SOSNET;
         if (str == "libtorch_l2net") return DescriptorType::LIBTORCH_L2NET;
@@ -399,6 +407,14 @@ namespace config {
         if (str == "weighted_avg" || str == "weighted") return PoolingAggregation::WEIGHTED_AVG;
         // Default to average (don't throw error for backward compatibility)
         return PoolingAggregation::AVERAGE;
+    }
+
+    RootingStage YAMLConfigLoader::stringToRootingStage(const std::string& str) {
+        if (str == "before_pooling" || str == "before") return RootingStage::R_BEFORE_POOLING;
+        if (str == "after_pooling" || str == "after") return RootingStage::R_AFTER_POOLING;
+        if (str == "none" || str.empty()) return RootingStage::R_NONE;
+        // Default to none (don't throw error for backward compatibility)
+        return RootingStage::R_NONE;
     }
 
     KeypointGenerator YAMLConfigLoader::stringToKeypointGenerator(const std::string& str) {

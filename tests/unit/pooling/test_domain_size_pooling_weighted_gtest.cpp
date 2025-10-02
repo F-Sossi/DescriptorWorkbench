@@ -23,6 +23,7 @@ void expectNear(const cv::Mat& a, const cv::Mat& b, double atol=1e-4, double rto
         double va=pa[c], vb=pb[c]; double diff=std::abs(va-vb); double tol=atol+rtol*std::max(std::abs(va),std::abs(vb)); ASSERT_LE(diff,tol);
     }}
 }
+
 }
 
 TEST(DSPWeightedPoolingTest, ManualWeightedAverageMatches) {
@@ -41,12 +42,48 @@ TEST(DSPWeightedPoolingTest, ManualWeightedAverageMatches) {
     cv::Mat pooled = dsp->computeDescriptors(img, kps, cfg.detector, cfg);
     ASSERT_FALSE(pooled.empty());
 
-    auto computeAt = [&](float a){ std::vector<cv::KeyPoint> kk=kps; for (auto& kp:kk) kp.size*=a; cv::Mat d; std::vector<cv::KeyPoint> out=kk; cfg.detector->compute(img, out, d); return d; };
-    cv::Mat d1 = computeAt(0.75f);
-    cv::Mat d2 = computeAt(1.0f);
-    cv::Mat d3 = computeAt(1.25f);
-    cv::Mat expected = (d1*1.0 + d2*2.0 + d3*1.0) * (1.0/4.0);
+    auto descriptorForScale = [&](float scale) {
+        experiment_config tmp = cfg;
+        tmp.descriptorOptions.scales = {scale};
+        tmp.descriptorOptions.scale_weights.clear();
+        tmp.descriptorOptions.scale_weighting_mode = 0;
+        auto single = PoolingFactory::createStrategy(DOMAIN_SIZE_POOLING);
+        return single->computeDescriptors(img, kps, cfg.detector, tmp);
+    };
+
+    cv::Mat d1 = descriptorForScale(0.75f);
+    cv::Mat d2 = descriptorForScale(1.0f);
+    cv::Mat d3 = descriptorForScale(1.25f);
+    cv::Mat expected = cv::Mat::zeros(d1.rows, d1.cols, d1.type());
+    cv::Mat weight_sum = cv::Mat::zeros(d1.rows, d1.cols, CV_32F);
+    std::array<std::pair<const cv::Mat*, float>, 3> terms{{{&d1,1.0f}, {&d2,2.0f}, {&d3,1.0f}}};
+    for (const auto& term : terms) {
+        const cv::Mat& desc = *term.first;
+        float weight = term.second;
+        for (int r = 0; r < desc.rows; ++r) {
+            const float* src = desc.ptr<float>(r);
+            float* dst = expected.ptr<float>(r);
+            float* ws  = weight_sum.ptr<float>(r);
+            for (int c = 0; c < desc.cols; ++c) {
+                float v = src[c];
+                if (v != -1.f) {
+                    dst[c] += weight * v;
+                    ws[c]  += weight;
+                }
+            }
+        }
+    }
+    for (int r = 0; r < expected.rows; ++r) {
+        float* dst = expected.ptr<float>(r);
+        float* ws  = weight_sum.ptr<float>(r);
+        for (int c = 0; c < expected.cols; ++c) {
+            if (ws[c] > 0.0f) {
+                dst[c] /= ws[c];
+            } else {
+                dst[c] = 0.0f;
+            }
+        }
+    }
 
     expectNear(pooled, expected, 1e-4, 1e-4);
 }
-

@@ -1,0 +1,94 @@
+experiment:
+  name: "rootsift_pooling_order"
+  description: "Compare RootSIFT transformation before vs after DSP pooling"
+  version: "1.0"
+  author: "researcher"
+  note: "Testing whether rooting individual scales before pooling improves over rooting the pooled descriptor"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # Use all available scenes
+
+keypoints:
+  generator: "sift"
+  max_features: 2000
+  contrast_threshold: 0.04
+  edge_threshold: 10.0
+  source: "locked_in"
+  keypoint_set_name: "sift_keynet_pairs"
+  use_locked_keypoints: true
+
+descriptors:
+  # ===== BASELINE: No RootSIFT =====
+  - name: "dspsift_v2_baseline_max"
+    type: "dspsift_v2"
+    pooling: "none"
+    pooling_aggregation: "max"
+    normalize_after_pooling: true
+    rooting_stage: "none"
+    norm_type: 4  # L2
+    use_color: false
+
+  # ===== ROOT BEFORE POOLING: Root each scale, then MAX pool =====
+  - name: "dspsift_v2_root_before_max"
+    type: "dspsift_v2"
+    pooling: "none"
+    pooling_aggregation: "max"
+    rooting_stage: "before_pooling"
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: false
+
+  # ===== ROOT AFTER POOLING: MAX pool, then root =====
+  - name: "dspsift_v2_root_after_max"
+    type: "dspsift_v2"
+    pooling: "none"
+    pooling_aggregation: "max"
+    rooting_stage: "after_pooling"
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: false
+
+  # ===== ROOT BEFORE POOLING: Root each scale, then AVERAGE pool =====
+  - name: "dspsift_v2_root_before_avg"
+    type: "dspsift_v2"
+    pooling: "none"
+    pooling_aggregation: "average"
+    rooting_stage: "before_pooling"
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: false
+
+  # ===== ROOT AFTER POOLING: AVERAGE pool, then root =====
+  - name: "dspsift_v2_root_after_avg"
+    type: "dspsift_v2"
+    pooling: "none"
+    pooling_aggregation: "average"
+    rooting_stage: "after_pooling"
+    normalize_after_pooling: true
+    norm_type: 4  # L2
+    use_color: false
+
+evaluation:
+  matching:
+    method: "ratio_test"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 3.0
+    min_matches: 10
+
+output:
+  results_path: "results/"
+  save_keypoints: false
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+database:
+  enabled: true
+  connection: "sqlite:///experiments.db"

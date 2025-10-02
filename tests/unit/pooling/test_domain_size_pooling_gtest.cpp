@@ -74,17 +74,17 @@ TEST_F(DSPPoolingTest, RawAveragingMatchesManualAverage) {
     auto dsp = PoolingFactory::createStrategy(DOMAIN_SIZE_POOLING);
     cv::Mat pooled = dsp->computeDescriptors(image, kps, cfg.detector, cfg);
 
-    // Manually compute two scales and average
-    // Scale keypoint size only (match implementation)
-    auto scaled = [&](float a){
-        std::vector<cv::KeyPoint> kk = kps;
-        for (auto& kp : kk) kp.size *= a;
-        cv::Mat d; std::vector<cv::KeyPoint> out = kk;
-        cfg.detector->compute(image, out, d);
-        return d;
+    auto descriptorForScale = [&](float scale) {
+        experiment_config tmp = cfg;
+        tmp.descriptorOptions.scales = {scale};
+        tmp.descriptorOptions.scale_weights.clear();
+        tmp.descriptorOptions.scale_weighting_mode = 0;
+        auto single = PoolingFactory::createStrategy(DOMAIN_SIZE_POOLING);
+        return single->computeDescriptors(image, kps, cfg.detector, tmp);
     };
-    cv::Mat d1 = scaled(0.75f);
-    cv::Mat d2 = scaled(1.25f);
+
+    cv::Mat d1 = descriptorForScale(0.75f);
+    cv::Mat d2 = descriptorForScale(1.25f);
     ASSERT_FALSE(pooled.empty());
     ASSERT_EQ(pooled.rows, static_cast<int>(kps.size()));
     ASSERT_EQ(d1.rows, pooled.rows);
@@ -92,7 +92,33 @@ TEST_F(DSPPoolingTest, RawAveragingMatchesManualAverage) {
     ASSERT_EQ(d1.cols, 128);
     ASSERT_EQ(d2.cols, 128);
 
-    cv::Mat avg = (d1 + d2) * 0.5;
+    cv::Mat avg = cv::Mat::zeros(d1.rows, d1.cols, d1.type());
+    cv::Mat counts = cv::Mat::zeros(d1.rows, d1.cols, CV_32F);
+    for (const auto& desc : {d1, d2}) {
+        for (int r = 0; r < desc.rows; ++r) {
+            const float* src = desc.ptr<float>(r);
+            float* dst = avg.ptr<float>(r);
+            float* cnt = counts.ptr<float>(r);
+            for (int c = 0; c < desc.cols; ++c) {
+                float v = src[c];
+                if (v != -1.f) {
+                    dst[c] += v;
+                    cnt[c] += 1.0f;
+                }
+            }
+        }
+    }
+    for (int r = 0; r < avg.rows; ++r) {
+        float* dst = avg.ptr<float>(r);
+        float* cnt = counts.ptr<float>(r);
+        for (int c = 0; c < avg.cols; ++c) {
+            if (cnt[c] > 0.0f) {
+                dst[c] /= cnt[c];
+            } else {
+                dst[c] = 0.0f;
+            }
+        }
+    }
     expectNear(pooled, avg, 1e-4, 1e-4);
 }
 

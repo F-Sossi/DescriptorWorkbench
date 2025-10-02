@@ -15,9 +15,8 @@ namespace thesis_project {
  */
 class DSPSIFTWrapperV2 : public IDescriptorExtractor {
 public:
-    DSPSIFTWrapperV2() {
-        wrapper_ = cv::makePtr<DSPVanillaSIFTWrapper<VanillaSIFT>>();
-    }
+    DSPSIFTWrapperV2()
+        : wrapper_(cv::makePtr<DSPVanillaSIFTWrapper<VanillaSIFT>>()) {}
 
     cv::Mat extract(const cv::Mat& image,
                    const std::vector<cv::KeyPoint>& keypoints,
@@ -25,20 +24,15 @@ public:
         cv::Mat descriptors;
         std::vector<cv::KeyPoint> kps = keypoints;  // Non-const copy
 
-        // If no scales provided, use default
-        std::vector<float> scales = params.scales.empty()
-            ? std::vector<float>{0.85f, 1.0f, 1.30f}
-            : params.scales;
+        wrapper_->computeDSP(image, kps, descriptors, params);
 
-        // Use the pyramid-aware DSP compute
-        wrapper_->computeDSP(image, kps, descriptors, scales, params.pooling_aggregation);
+        last_descriptor_size_ = descriptors.empty() ? 0 : descriptors.cols;
 
         return descriptors;
     }
 
     int descriptorSize() const override {
-        // Base SIFT is 128, but concatenate mode increases it
-        return 128;  // Will be 384 for concatenate
+        return last_descriptor_size_;
     }
 
     int descriptorType() const override {
@@ -51,6 +45,7 @@ public:
 
 private:
     cv::Ptr<DSPVanillaSIFTWrapper<VanillaSIFT>> wrapper_;
+    mutable int last_descriptor_size_ = 128;
 };
 
 } // namespace thesis_project

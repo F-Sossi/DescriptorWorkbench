@@ -396,6 +396,9 @@ function(create_gtest_if_exists test_source test_name)
                        src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
                        src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
                        src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
+                       src/core/descriptor/extractors/wrappers/DSPRGBSIFTWrapperV2.cpp
+                       src/core/descriptor/extractors/wrappers/DSPHoWHWrapperV2.cpp
+                       src/core/descriptor/extractors/wrappers/DSPHoNCWrapperV2.cpp
                        src/core/descriptor/extractors/wrappers/VGGWrapper.cpp
                        src/core/descriptor/extractors/wrappers/ORBWrapper.cpp
                        src/core/descriptor/extractors/wrappers/SURFWrapper.cpp
@@ -477,11 +480,25 @@ if(TARGET test_descriptor_factory_gtest)
         src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
         src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
         src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/DSPRGBSIFTWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/DSPHoWHWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/DSPHoNCWrapperV2.cpp
         src/core/descriptor/extractors/wrappers/VGGWrapper.cpp
         src/core/descriptor/extractors/wrappers/ORBWrapper.cpp
         src/core/descriptor/extractors/wrappers/SURFWrapper.cpp)
     target_link_libraries(test_descriptor_factory_gtest keypoints ${OpenCV_LIBRARIES})
     target_include_directories(test_descriptor_factory_gtest PRIVATE src include keypoints descriptor_compare ${OpenCV_INCLUDE_DIRS})
+endif()
+
+# Google Test DSP color wrapper smoke tests
+create_gtest_if_exists("tests/unit/descriptors/test_dsp_color_wrappers_gtest.cpp" "test_dsp_color_wrappers_gtest")
+if(TARGET test_dsp_color_wrappers_gtest)
+    target_sources(test_dsp_color_wrappers_gtest PRIVATE
+        src/core/descriptor/extractors/wrappers/DSPRGBSIFTWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/DSPHoWHWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/DSPHoNCWrapperV2.cpp)
+    target_link_libraries(test_dsp_color_wrappers_gtest keypoints ${OpenCV_LIBRARIES})
+    target_include_directories(test_dsp_color_wrappers_gtest PRIVATE src include keypoints descriptor_compare ${OpenCV_INCLUDE_DIRS})
 endif()
 
 # Google Test keypoint generator tests (Interface upgrade completion)
@@ -656,6 +673,10 @@ if(BUILD_EXPERIMENT_CLI)
         target_sources(experiment_runner PRIVATE src/core/descriptor/extractors/wrappers/ORBWrapper.cpp)
         # SURF wrapper
         target_sources(experiment_runner PRIVATE src/core/descriptor/extractors/wrappers/SURFWrapper.cpp)
+        # DSP V2 wrappers for color descriptors
+        target_sources(experiment_runner PRIVATE src/core/descriptor/extractors/wrappers/DSPRGBSIFTWrapperV2.cpp)
+        target_sources(experiment_runner PRIVATE src/core/descriptor/extractors/wrappers/DSPHoWHWrapperV2.cpp)
+        target_sources(experiment_runner PRIVATE src/core/descriptor/extractors/wrappers/DSPHoNCWrapperV2.cpp)
 
         # LibTorch wrapper (if available)
         if(BUILD_LIBTORCH_DESCRIPTORS)
@@ -758,7 +779,10 @@ if(BUILD_KEYPOINT_MANAGER)
                        src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
                        src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
                        src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
-                       src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp)
+                       src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
+                       src/core/descriptor/extractors/wrappers/DSPRGBSIFTWrapperV2.cpp
+                       src/core/descriptor/extractors/wrappers/DSPHoWHWrapperV2.cpp
+                       src/core/descriptor/extractors/wrappers/DSPHoNCWrapperV2.cpp)
 
         # VGG wrapper (requires OpenCV contrib xfeatures2d)
         target_sources(keypoint_manager PRIVATE src/core/descriptor/extractors/wrappers/VGGWrapper.cpp)

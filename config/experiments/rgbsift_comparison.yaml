@@ -1,0 +1,65 @@
+experiment:
+  name: "rgbsift_comparison"
+  description: "Compare RGBSIFT DSP v2 with RootSIFT options"
+  version: "1.0"
+  author: "automation"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []
+
+keypoints:
+  generator: "sift"
+  source: "locked_in"
+  keypoint_set_name: "sift_keynet_pairs"
+  use_locked_keypoints: true
+
+descriptors:
+  - name: "rgbsift_dsp_max"
+    type: "dsprgbsift_v2"
+    pooling: "none"
+    pooling_aggregation: "max"
+    normalize_after_pooling: true
+    norm_type: 4
+    use_color: true
+
+  - name: "rgbsift_dsp_avg"
+    type: "dsprgbsift_v2"
+    pooling: "none"
+    pooling_aggregation: "average"
+    normalize_after_pooling: true
+    norm_type: 4
+    use_color: true
+
+  - name: "rgbsift_rootsift"
+    type: "dsprgbsift_v2"
+    pooling: "none"
+    pooling_aggregation: "max"
+    rooting_stage: "after_pooling"
+    normalize_after_pooling: true
+    norm_type: 4
+    use_color: true
+
+evaluation:
+  matching:
+    method: "ratio_test"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+output:
+  results_path: "results/"
+  save_keypoints: false
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+database:
+  enabled: true
+  connection: "sqlite:///experiments.db"

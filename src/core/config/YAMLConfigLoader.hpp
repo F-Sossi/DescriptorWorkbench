@@ -56,6 +56,7 @@ namespace config {
         static DescriptorType stringToDescriptorType(const std::string& str);
         static PoolingStrategy stringToPoolingStrategy(const std::string& str);
         static PoolingAggregation stringToPoolingAggregation(const std::string& str);
+        static RootingStage stringToRootingStage(const std::string& str);
         static KeypointGenerator stringToKeypointGenerator(const std::string& str);
         static MatchingMethod stringToMatchingMethod(const std::string& str);
         static ValidationMethod stringToValidationMethod(const std::string& str);

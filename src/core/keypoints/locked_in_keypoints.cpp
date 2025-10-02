@@ -13,6 +13,7 @@
 namespace fs = boost::filesystem;
 
 constexpr int BORDER = 35;  // HPatches compliance: 65px patches need ~35px margin
+constexpr int DEFAULT_MAX_KEYPOINTS = 2000;
 
 void LockedInKeypoints::generateLockedInKeypoints(const std::string& dataFolderPath, const std::string& referenceKeypointsBaseFolder) {
     if (!fs::exists(dataFolderPath) || !fs::is_directory(dataFolderPath)) {
@@ -52,9 +53,8 @@ void LockedInKeypoints::generateLockedInKeypoints(const std::string& dataFolderP
                 return a.response > b.response;
             });
 
-            const int maxKeypoints = 2000;
-            if (keypoints.size() > maxKeypoints) {
-                keypoints.resize(maxKeypoints);
+            if (keypoints.size() > static_cast<size_t>(DEFAULT_MAX_KEYPOINTS)) {
+                keypoints.resize(DEFAULT_MAX_KEYPOINTS);
             }
 
             // Print the number of keypoints and the folder name
@@ -140,9 +140,8 @@ void LockedInKeypoints::generateLockedInKeypointsToDatabase(const std::string& d
                 return a.response > b.response;
             });
 
-            const int maxKeypoints = 2000;
-            if (keypoints.size() > maxKeypoints) {
-                keypoints.resize(maxKeypoints);
+            if (keypoints.size() > static_cast<size_t>(DEFAULT_MAX_KEYPOINTS)) {
+                keypoints.resize(DEFAULT_MAX_KEYPOINTS);
             }
 
             // Print the number of keypoints and the folder name
@@ -236,12 +235,11 @@ void LockedInKeypoints::generateLockedInKeypointsToDatabase(const std::string& d
                        keypoint.pt.x > (image1.cols - BORDER) || keypoint.pt.y > (image1.rows - BORDER);
             }), keypoints.end());
 
-            // Limit to 2000 keypoints (sorted by response)
-            if (keypoints.size() > 2000) {
+            if (max_keypoints > 0 && keypoints.size() > static_cast<size_t>(max_keypoints)) {
                 std::sort(keypoints.begin(), keypoints.end(), [](const cv::KeyPoint& a, const cv::KeyPoint& b) {
                     return a.response > b.response;
                 });
-                keypoints.resize(2000);
+                keypoints.resize(max_keypoints);
             }
 
             std::cout << "Number of keypoints: " << keypoints.size() << " Folder name: " << subfolderName << std::endl;

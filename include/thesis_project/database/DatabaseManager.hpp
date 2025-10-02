@@ -56,6 +56,14 @@ public:
         int boundary_filter_px = 0;
         bool overlap_filtering = false;
         float min_distance = 0.0f;
+        int source_set_a_id = -1;
+        int source_set_b_id = -1;
+        float tolerance_px = 0.0f;
+        std::string intersection_method;
+
+        bool isIntersection() const {
+            return source_set_a_id >= 0 && source_set_b_id >= 0;
+        }
     };
 
     /**
@@ -247,6 +255,21 @@ public:
                                     int source_set_b_id,
                                     float tolerance_px,
                                     const std::string& intersection_method) const;
+
+    /**
+     * @brief Update metadata for an existing intersection keypoint set
+     */
+    bool updateIntersectionKeypointSet(int keypoint_set_id,
+                                       const std::string& generator_type,
+                                       const std::string& generation_method,
+                                       int max_features,
+                                       const std::string& dataset_path,
+                                       const std::string& description,
+                                       int boundary_filter_px,
+                                       int source_set_a_id,
+                                       int source_set_b_id,
+                                       float tolerance_px,
+                                       const std::string& intersection_method) const;
 
     /**
      * @brief Store locked-in keypoints for a specific keypoint set
