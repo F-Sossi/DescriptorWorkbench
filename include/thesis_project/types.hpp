@@ -368,7 +368,6 @@ namespace thesis_project {
     };
 
     struct DatabaseParams {
-        bool enabled = false;
         std::string connection_string = "sqlite:///experiments.db";
         bool save_keypoints = true;
         bool save_descriptors = false;

@@ -44,4 +44,3 @@ evaluation:
   validation_threshold: 3.0
 
 database:
-  enabled: true

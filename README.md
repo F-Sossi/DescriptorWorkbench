@@ -435,17 +435,16 @@ evaluation:
     threshold: 0.05           # Pixel tolerance
     min_matches: 10           # Minimum matches required
 
-output:
-  results_path: "results/"
+database:
+  connection: "sqlite:///experiments.db"
   save_keypoints: false
   save_descriptors: false
   save_matches: false
   save_visualizations: true
 
-database:
-  enabled: true
-  connection: "sqlite:///experiments.db"
 ```
+
+Database tracking is always enabled; toggle individual persistence knobs with the `save_*` flags shown above.
 
 ### Template Configurations
 

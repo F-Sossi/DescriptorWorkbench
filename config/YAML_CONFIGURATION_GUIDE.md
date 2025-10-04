@@ -251,42 +251,20 @@ evaluation:
 | `"cross_image"` | Cross-image validation | Alternative validation |
 | `"none"` | No validation | Speed testing only |
 
-### 6. Output Section (⚠️ DEPRECATED)
-
-> **⚠️ WARNING**: File output options are **DEPRECATED** and **NOT IMPLEMENTED**
->
-> The DescriptorWorkbench has migrated to database-only storage. These options are parsed from YAML but completely ignored by the experiment runner.
->
-> **Use the `database` section instead** for persistent data storage.
-
-```yaml
-output:
-  results_path: "results/"           # DEPRECATED: Not used
-  save_keypoints: false              # DEPRECATED: Use database.save_keypoints
-  save_descriptors: false            # DEPRECATED: Use database.save_descriptors
-  save_matches: false                # DEPRECATED: Use database.save_matches
-  save_visualizations: true          # DEPRECATED: Use database.save_visualizations
-```
-
-**Migration Notes**:
-- All experiment data is stored in SQLite database automatically
-- Access results via database queries instead of CSV files
-- Visualizations are stored as binary data in database when enabled
-- Legacy CSV output functions exist in codebase but are not called
-
-### 7. Database Section
+### 6. Database Section
 
 **Purpose**: Configure persistent experiment tracking.
 
 ```yaml
 database:
-  enabled: true                      # Enable database storage
   connection: "sqlite:///experiments.db"  # Connection string
   save_keypoints: true               # Store keypoints in DB
   save_descriptors: false            # Store descriptors in DB
   save_matches: false                # Store matches in DB
   save_visualizations: true          # Store visualizations in DB
 ```
+
+Database storage is always enabled; toggle individual tables with the `save_*` flags above.
 
 ## Advanced Usage Patterns
 
@@ -325,7 +303,7 @@ dataset:
 descriptors:
   - name: "test_descriptor"          # Single descriptor
     type: "sift"
-output:
+database:
   save_visualizations: false        # Skip outputs
 ```
 
@@ -335,10 +313,8 @@ dataset:
   scenes: []                         # All scenes
 descriptors:
   # Multiple descriptors for comparison
-output:
-  save_visualizations: true
 database:
-  enabled: true                      # Persistent tracking
+  save_visualizations: true          # Persist visual assets
 ```
 
 ## Validation and Error Handling
@@ -536,10 +512,9 @@ The database stores all experiment data:
 
 2. **Enable Verbose Output**:
    ```yaml
-   output:
-     save_visualizations: true        # Visual debugging
    database:
-     enabled: true                    # Track results
+     save_visualizations: true        # Visual debugging
+     save_matches: true               # Inspect matcher output
    ```
 
 3. **Check Database Results**:

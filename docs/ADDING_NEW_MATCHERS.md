@@ -432,16 +432,12 @@ evaluation:
     threshold: 0.05
     min_matches: 10
 
-output:
-  results_path: "results/"
+database:
+  connection: "sqlite:///experiments.db"
   save_keypoints: false
   save_descriptors: false
   save_matches: false
   save_visualizations: false
-
-database:
-  enabled: true
-  connection: "sqlite:///experiments.db"
 ```
 
 ## Step 8: Build and Test

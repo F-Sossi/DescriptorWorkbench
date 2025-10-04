@@ -48,7 +48,6 @@ namespace config {
         static void parseKeypoints(const YAML::Node& node, ExperimentConfig::Keypoints& keypoints);
         static void parseDescriptors(const YAML::Node& node, std::vector<ExperimentConfig::DescriptorConfig>& descriptors);
         static void parseEvaluation(const YAML::Node& node, ExperimentConfig::Evaluation& evaluation);
-        static void parseOutput(const YAML::Node& node, ExperimentConfig::Output& output);
         static void parseDatabase(const YAML::Node& node, DatabaseParams& database);
         // Migration removed in Schema v1
 

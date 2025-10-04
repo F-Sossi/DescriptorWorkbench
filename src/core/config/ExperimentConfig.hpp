@@ -48,15 +48,6 @@ namespace thesis_project::config {
             EvaluationParams params;
         } evaluation;
 
-        // Output configuration
-        struct Output {
-            std::string results_path = "results/";
-            bool save_keypoints = false;
-            bool save_descriptors = false;
-            bool save_matches = false;
-            bool save_visualizations = true;
-        } output;
-
         // Database configuration
         DatabaseParams database;
 

@@ -28,7 +28,7 @@ protected:
         
         required_sections = {
             "experiment:", "dataset:", "keypoints:", "descriptors:",
-            "evaluation:", "output:"
+            "evaluation:", "database:"
         };
     }
     
@@ -192,6 +192,6 @@ INSTANTIATE_TEST_SUITE_P(
         std::make_pair("config/experiments/sift_baseline.yaml", "keypoints:"),
         std::make_pair("config/experiments/sift_baseline.yaml", "descriptors:"),
         std::make_pair("config/experiments/sift_baseline.yaml", "evaluation:"),
-        std::make_pair("config/experiments/sift_baseline.yaml", "output:")
+        std::make_pair("config/experiments/sift_baseline.yaml", "database:")
     )
 );

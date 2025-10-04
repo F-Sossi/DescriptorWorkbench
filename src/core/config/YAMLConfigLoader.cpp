@@ -51,10 +51,6 @@ namespace config {
             parseEvaluation(root["evaluation"], config.evaluation);
         }
         
-        if (root["output"]) {
-            parseOutput(root["output"], config.output);
-        }
-        
         if (root["database"]) {
             parseDatabase(root["database"], config.database);
         }
@@ -352,16 +348,7 @@ namespace config {
         // Legacy keys removed in Schema v1 (no parsing of matching_threshold / validation_method)
     }
     
-    void YAMLConfigLoader::parseOutput(const YAML::Node& node, ExperimentConfig::Output& output) {
-        if (node["results_path"]) output.results_path = node["results_path"].as<std::string>();
-        if (node["save_keypoints"]) output.save_keypoints = node["save_keypoints"].as<bool>();
-        if (node["save_descriptors"]) output.save_descriptors = node["save_descriptors"].as<bool>();
-        if (node["save_matches"]) output.save_matches = node["save_matches"].as<bool>();
-        if (node["save_visualizations"]) output.save_visualizations = node["save_visualizations"].as<bool>();
-    }
-    
     void YAMLConfigLoader::parseDatabase(const YAML::Node& node, DatabaseParams& database) {
-        if (node["enabled"]) database.enabled = node["enabled"].as<bool>();
         if (node["connection"]) database.connection_string = node["connection"].as<std::string>();
         if (node["save_keypoints"]) database.save_keypoints = node["save_keypoints"].as<bool>();
         if (node["save_descriptors"]) database.save_descriptors = node["save_descriptors"].as<bool>();
@@ -510,17 +497,14 @@ namespace config {
         out << YAML::EndMap;
         out << YAML::EndMap;
         
-        // Output section
-        out << YAML::Key << "output";
-        out << YAML::Value << YAML::BeginMap;
-        out << YAML::Key << "results_path" << YAML::Value << config.output.results_path;
-        out << YAML::Key << "save_visualizations" << YAML::Value << config.output.save_visualizations;
-        out << YAML::EndMap;
-        
         // Database section
         out << YAML::Key << "database";
         out << YAML::Value << YAML::BeginMap;
-        out << YAML::Key << "enabled" << YAML::Value << config.database.enabled;
+        out << YAML::Key << "connection" << YAML::Value << config.database.connection_string;
+        out << YAML::Key << "save_keypoints" << YAML::Value << config.database.save_keypoints;
+        out << YAML::Key << "save_descriptors" << YAML::Value << config.database.save_descriptors;
+        out << YAML::Key << "save_matches" << YAML::Value << config.database.save_matches;
+        out << YAML::Key << "save_visualizations" << YAML::Value << config.database.save_visualizations;
         out << YAML::EndMap;
         
         out << YAML::EndMap;

@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
     
     // Optimize database for bulk operations
     if (!db.optimizeForBulkOperations()) {
-        std::cerr << "⚠️  Warning: Failed to apply database optimizations" << std::endl;
+        std::cerr << "Warning: Failed to apply database optimizations" << std::endl;
     }
 
     if (command == "import-csv") {
@@ -78,7 +78,7 @@ int main(int argc, char** argv) {
         }
 
         std::string csv_folder = argv[2];
-        LOG_INFO("🔄 Importing keypoints from CSV folder: " + csv_folder);
+        LOG_INFO("Importing keypoints from CSV folder: " + csv_folder);
 
         namespace fs = boost::filesystem;
         
@@ -94,7 +94,7 @@ int main(int argc, char** argv) {
             if (!fs::is_directory(scene_entry)) continue;
             
             std::string scene_name = scene_entry.path().filename().string();
-            LOG_INFO("📁 Processing scene: " + scene_name);
+            LOG_INFO("Processing scene: " + scene_name);
             
             // Iterate through each CSV file in the scene folder
             for (const auto& csv_entry : fs::directory_iterator(scene_entry)) {
@@ -108,7 +108,7 @@ int main(int argc, char** argv) {
                     
                     if (db.storeLockedKeypoints(scene_name, image_name, keypoints)) {
                         total_imported += keypoints.size();
-                        LOG_INFO("  ✅ " + scene_name + "/" + image_name + ": " + std::to_string(keypoints.size()) + " keypoints");
+                        LOG_INFO( scene_name + "/" + image_name + ": " + std::to_string(keypoints.size()) + " keypoints");
                     } else {
                         LOG_ERROR("  ❌ Failed to store: " + scene_name + "/" + image_name);
                     }
@@ -118,7 +118,7 @@ int main(int argc, char** argv) {
             }
         }
         
-        LOG_INFO("🎉 Import complete! Total keypoints imported: " + std::to_string(total_imported));
+        LOG_INFO("Import complete! Total keypoints imported: " + std::to_string(total_imported));
 
     } else if (command == "generate-projected") {
         if (argc < 3 || argc > 4) {
@@ -156,7 +156,7 @@ int main(int argc, char** argv) {
             return 1;
         }
         
-        LOG_INFO("✅ Created keypoint set with ID: " + std::to_string(set_id));
+        LOG_INFO("Created keypoint set with ID: " + std::to_string(set_id));
         
         // Generate keypoints using homography projection method
         LOG_INFO("🔍 Generating keypoints with homography projection and boundary filtering...");
@@ -182,8 +182,8 @@ int main(int argc, char** argv) {
         std::string data_folder = argv[2];
         std::string set_name = (argc == 4) ? argv[3] : "independent_detection_" + std::to_string(std::time(nullptr));
         
-        LOG_INFO("🔄 Generating independent detection keypoints from: " + data_folder);
-        LOG_INFO("📝 Keypoint set name: " + set_name);
+        LOG_INFO("Generating independent detection keypoints from: " + data_folder);
+        LOG_INFO("Keypoint set name: " + set_name);
         
         namespace fs = boost::filesystem;
         if (!fs::exists(data_folder) || !fs::is_directory(data_folder)) {
@@ -207,7 +207,7 @@ int main(int argc, char** argv) {
             return 1;
         }
         
-        LOG_INFO("✅ Created keypoint set with ID: " + std::to_string(set_id));
+        LOG_INFO("Created keypoint set with ID: " + std::to_string(set_id));
         
         // Generate keypoints using independent detection method
         LOG_INFO("🔍 Generating keypoints with independent detection on each image...");
@@ -266,8 +266,8 @@ int main(int argc, char** argv) {
                 }
             }
             
-            LOG_INFO("🎉 Generation complete! Independent detection keypoints stored in set: " + set_name);
-            LOG_INFO("📊 Total keypoints generated: " + std::to_string(total_keypoints));
+            LOG_INFO("Generation complete! Independent detection keypoints stored in set: " + set_name);
+            LOG_INFO("Total keypoints generated: " + std::to_string(total_keypoints));
             
         } catch (const std::exception& e) {
             LOG_ERROR("❌ Error generating keypoints: " + std::string(e.what()));
@@ -282,7 +282,7 @@ int main(int argc, char** argv) {
         }
         
         std::string data_folder = argv[2];
-        LOG_INFO("🔄 Generating fresh locked keypoints from: " + data_folder);
+        LOG_INFO("Generating fresh locked keypoints from: " + data_folder);
         
         namespace fs = boost::filesystem;
         if (!fs::exists(data_folder) || !fs::is_directory(data_folder)) {
@@ -291,7 +291,7 @@ int main(int argc, char** argv) {
         }
 
         // Clear existing keypoints for all scenes in the data folder
-        LOG_INFO("🗑️  Clearing existing keypoints from database...");
+        LOG_INFO("Clearing existing keypoints from database...");
         for (const auto& scene_entry : fs::directory_iterator(data_folder)) {
             if (!fs::is_directory(scene_entry)) continue;
             std::string scene_name = scene_entry.path().filename().string();
@@ -302,11 +302,11 @@ int main(int argc, char** argv) {
         }
         
         // Generate fresh keypoints using tested boundary-filtering logic
-        LOG_INFO("🔍 Generating new locked keypoints with proper boundary filtering...");
+        LOG_INFO("Generating new locked keypoints with proper boundary filtering...");
         
         try {
             LockedInKeypoints::generateLockedInKeypointsToDatabase(data_folder, db);
-            LOG_INFO("🎉 Generation complete! Keypoints generated with 40px boundary filtering.");
+            LOG_INFO("Generation complete! Keypoints generated with 40px boundary filtering.");
             
         } catch (const std::exception& e) {
             LOG_ERROR("❌ Error generating keypoints: " + std::string(e.what()));
@@ -321,14 +321,14 @@ int main(int argc, char** argv) {
         }
         
         std::string output_folder = argv[2];
-        LOG_INFO("💾 Exporting keypoints to CSV folder: " + output_folder);
+        LOG_INFO("Exporting keypoints to CSV folder: " + output_folder);
         
         // Create output directory
         std::filesystem::create_directories(output_folder);
         
         auto scenes = db.getAvailableScenes();
         if (scenes.empty()) {
-            LOG_INFO("ℹ️  No keypoints found in database to export");
+            LOG_INFO("No keypoints found in database to export");
             return 0;
         }
         
@@ -374,21 +374,21 @@ int main(int argc, char** argv) {
                     
                     file.close();
                     total_exported += keypoints.size();
-                    LOG_INFO("  ✅ " + scene + "/" + csv_filename + ": " + std::to_string(keypoints.size()) + " keypoints");
+                    LOG_INFO( scene + "/" + csv_filename + ": " + std::to_string(keypoints.size()) + " keypoints");
                 }
             }
         }
         
-        LOG_INFO("Export complete! Total keypoints exported: " + std::to_string(total_exported));
+        LOG_INFO("Export complete Total keypoints exported: " + std::to_string(total_exported));
 
     } else if (command == "list-sets") {
         auto sets = db.getAvailableKeypointSets();
-        std::cout << "📋 Available keypoint sets (" << sets.size() << "):" << std::endl;
+        std::cout << "Available keypoint sets (" << sets.size() << "):" << std::endl;
         for (const auto& [id, name, method] : sets) {
             // Count keypoints in this set
             std::string sql = "SELECT COUNT(*) FROM locked_keypoints WHERE keypoint_set_id = " + std::to_string(id);
             // For now, let's show the basic info - we can add counts later if needed
-            std::cout << "  🔧 ID " << id << ": " << name << " (" << method << ")" << std::endl;
+            std::cout << "ID " << id << ": " << name << " (" << method << ")" << std::endl;
         }
         if (sets.empty()) {
             std::cout << "  (No keypoint sets found - use generate-projected or generate-independent to create some)" << std::endl;
@@ -493,7 +493,7 @@ int main(int argc, char** argv) {
             return 1;
         }
 
-        LOG_INFO("✅ Kornia KeyNet generation completed successfully for set: " + set_name);
+        LOG_INFO("Kornia KeyNet generation completed successfully for set: " + set_name);
 
     } else if (command == "generate-detector") {
         if (argc < 4) {
@@ -540,10 +540,10 @@ int main(int argc, char** argv) {
                 return 1;
             }
 
-            LOG_INFO("🔍 Generating keypoints using " + detector_str + " detector");
-            LOG_INFO("📁 Data folder: " + data_folder);
-            LOG_INFO("📝 Keypoint set name: " + set_name);
-            LOG_INFO("🎯 Max features per image: " + std::to_string(max_features > 0 ? max_features : -1));
+            LOG_INFO("Generating keypoints using " + detector_str + " detector");
+            LOG_INFO("Data folder: " + data_folder);
+            LOG_INFO("Keypoint set name: " + set_name);
+            LOG_INFO("Max features per image: " + std::to_string(max_features > 0 ? max_features : -1));
 
             int set_id = db.getKeypointSetId(set_name);
             if (set_id >= 0) {
@@ -551,8 +551,19 @@ int main(int argc, char** argv) {
                     std::cerr << "❌ Keypoint set already exists: " << set_name << " (use --overwrite to replace)" << std::endl;
                     return 1;
                 }
-                db.clearAllDetectorAttributesForSet(set_id);
-                db.clearKeypointsForSet(set_id);
+
+                if (db.clearAllDetectorAttributesForSet(set_id)) {
+                    LOG_INFO("database clear all detector attributes for set: " + set_name);
+                }else {
+                    LOG_INFO("Database clear all detector attributes for set: " + set_name + " failed");
+                }
+
+                if (db.clearKeypointsForSet(set_id)) {
+                    LOG_INFO("Keypoint clear all keypoints for set: " + set_name);
+                }else {
+                    LOG_INFO("Keypoint clear failed for set: " + set_name);
+                }
+
             } else {
                 std::ostringstream desc;
                 desc << detector_str << " detector (independent)";
@@ -595,7 +606,7 @@ int main(int argc, char** argv) {
             for (const auto& scene_entry : fs::directory_iterator(data_folder)) {
                 if (!fs::is_directory(scene_entry)) continue;
                 std::string scene_name = scene_entry.path().filename().string();
-                LOG_INFO("📁 Processing scene: " + scene_name);
+                LOG_INFO("Processing scene: " + scene_name);
 
                 for (int i = 1; i <= 6; ++i) {
                     fs::path image_path = scene_entry.path() / (std::to_string(i) + ".ppm");
@@ -616,15 +627,15 @@ int main(int argc, char** argv) {
                     std::string image_name = std::to_string(i) + ".ppm";
                     if (db.storeLockedKeypointsForSet(set_id, scene_name, image_name, keypoints)) {
                         total_keypoints += static_cast<int>(keypoints.size());
-                        LOG_INFO("  ✅ " + scene_name + "/" + image_name + ": " + std::to_string(keypoints.size()) + " keypoints");
+                        LOG_INFO(scene_name + "/" + image_name + ": " + std::to_string(keypoints.size()) + " keypoints");
                     } else {
                         LOG_ERROR("  ❌ Failed to store keypoints for " + scene_name + "/" + image_name);
                     }
                 }
             }
 
-            LOG_INFO("🎉 Generation complete! " + detector_str + " keypoints stored in set: " + set_name);
-            LOG_INFO("📊 Total keypoints generated: " + std::to_string(total_keypoints));
+            LOG_INFO("Generation complete! " + detector_str + " keypoints stored in set: " + set_name);
+            LOG_INFO("Total keypoints generated: " + std::to_string(total_keypoints));
 
         } catch (const std::exception& e) {
             LOG_ERROR("❌ Error: " + std::string(e.what()));
@@ -711,7 +722,7 @@ int main(int argc, char** argv) {
 
         if (!source_a_info->dataset_path.empty() && !source_b_info->dataset_path.empty() &&
             source_a_info->dataset_path != source_b_info->dataset_path) {
-            LOG_WARNING("⚠️  Source sets reference different datasets: " + source_a_info->dataset_path + " vs " + source_b_info->dataset_path);
+            LOG_WARNING("Source sets reference different datasets: " + source_a_info->dataset_path + " vs " + source_b_info->dataset_path);
         }
 
         // Pure intersection approach - no detector attribute copying needed
@@ -801,7 +812,7 @@ int main(int argc, char** argv) {
             if (scene_lookup_b.count(scene)) {
                 scenes_to_process.push_back(scene);
             } else {
-                LOG_WARNING("⚠️  Skipping scene " + scene + " (missing in " + source_b_info->name + ")");
+                LOG_WARNING("Skipping scene " + scene + " (missing in " + source_b_info->name + ")");
             }
         }
 

@@ -19,6 +19,4 @@ Schema v1 (high level)
 - keypoints: { generator, max_features, contrast_threshold, edge_threshold, sigma, num_octaves, source }
 - descriptors[]: { name, type, pooling, scales[], scale_weights[], scale_weighting, scale_weight_sigma, normalize_before_pooling, normalize_after_pooling, norm_type, use_color, secondary_descriptor, stacking_weight }
 - evaluation: matching { method, norm, cross_check, threshold }, validation { method, threshold, min_matches }
-- output: { results_path, save_keypoints, save_descriptors, save_matches, save_visualizations }
-- database: { enabled, connection }
-
+- database: { connection, save_keypoints, save_descriptors, save_matches, save_visualizations }
