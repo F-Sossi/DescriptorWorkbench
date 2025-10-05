@@ -1,7 +1,6 @@
 #pragma once
 
 #include "MatchingStrategy.hpp"
-#include "src/core/config/experiment_config.hpp"
 #include "include/thesis_project/types.hpp"
 #include <memory>
 #include <vector>
@@ -27,15 +26,6 @@ namespace thesis_project::matching {
 class MatchingFactory {
 public:
     /**
-     * @brief Create a matching strategy based on the experiment configuration
-     *
-     * @param strategy The matching strategy type from the configuration
-     * @return MatchingStrategyPtr Unique pointer to the created strategy
-     * @throws std::runtime_error If the strategy type is unknown
-     */
-    static MatchingStrategyPtr createStrategy(::MatchingStrategy strategy);
-
-    /**
      * @brief Create a matching strategy based on the new MatchingMethod enum
      *
      * @param method The matching method type from the new enum system
@@ -43,18 +33,6 @@ public:
      * @throws std::runtime_error If the method type is unknown
      */
     static MatchingStrategyPtr createStrategy(thesis_project::MatchingMethod method);
-    
-    /**
-     * @brief Create a matching strategy from experiment config
-     * 
-     * Convenience method that extracts the matching strategy from the
-     * experiment configuration and creates the appropriate instance.
-     * 
-     * @param config Experiment configuration containing matching strategy
-     * @return MatchingStrategyPtr Unique pointer to the created strategy
-     */
-    static MatchingStrategyPtr createFromConfig(const experiment_config& config);
-
     /**
      * @brief Get list of all available matching strategy names
      * @return std::vector<std::string> List of strategy names for display/logging

@@ -6,26 +6,6 @@
 
 namespace thesis_project::matching {
 
-MatchingStrategyPtr MatchingFactory::createStrategy(::MatchingStrategy strategy) {
-    switch (strategy) {
-        case BRUTE_FORCE:
-            return std::make_unique<BruteForceMatching>();
-            
-        case FLANN:
-            return std::make_unique<FLANNMatching>();
-            
-        case RATIO_TEST:
-            return std::make_unique<RatioTestMatching>();
-            
-        default:
-            throw std::runtime_error("Unknown matching strategy: " + std::to_string(static_cast<int>(strategy)));
-    }
-}
-
-MatchingStrategyPtr MatchingFactory::createFromConfig(const experiment_config& config) {
-    return createStrategy(config.matchingStrategy);
-}
-
 MatchingStrategyPtr MatchingFactory::createStrategy(thesis_project::MatchingMethod method) {
     switch (method) {
         case thesis_project::MatchingMethod::BRUTE_FORCE:

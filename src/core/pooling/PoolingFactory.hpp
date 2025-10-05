@@ -1,7 +1,6 @@
 #pragma once
 
 #include "PoolingStrategy.hpp"
-#include "src/core/config/experiment_config.hpp"
 #include <memory>
 
 namespace thesis_project::pooling {
@@ -22,18 +21,7 @@ public:
      * @return PoolingStrategyPtr Unique pointer to the created strategy
      * @throws std::runtime_error If the strategy type is unknown
      */
-    static PoolingStrategyPtr createStrategy(::PoolingStrategy strategy);
-    
-    /**
-     * @brief Create a pooling strategy from experiment config
-     * 
-     * Convenience method that extracts the pooling strategy from the
-     * experiment configuration and creates the appropriate instance.
-     * 
-     * @param config Experiment configuration containing pooling strategy
-     * @return PoolingStrategyPtr Unique pointer to the created strategy
-     */
-    static PoolingStrategyPtr createFromConfig(const experiment_config& config);
+    static PoolingStrategyPtr createStrategy(thesis_project::PoolingStrategy strategy);
 
     // New-config overload: create from descriptor configuration (Schema v1)
     static PoolingStrategyPtr createFromConfig(const thesis_project::config::ExperimentConfig::DescriptorConfig& descCfg);

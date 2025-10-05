@@ -6,24 +6,18 @@
 
 namespace thesis_project::pooling {
 
-PoolingStrategyPtr PoolingFactory::createStrategy(::PoolingStrategy strategy) {
+PoolingStrategyPtr PoolingFactory::createStrategy(thesis_project::PoolingStrategy strategy) {
+    using thesis_project::PoolingStrategy;
     switch (strategy) {
-        case NONE:
+        case PoolingStrategy::NONE:
             return std::make_unique<NoPooling>();
-            
-        case DOMAIN_SIZE_POOLING:
+        case PoolingStrategy::DOMAIN_SIZE_POOLING:
             return std::make_unique<DomainSizePooling>();
-            
-        case STACKING:
+        case PoolingStrategy::STACKING:
             return std::make_unique<StackingPooling>();
-            
         default:
             throw std::runtime_error("Unknown pooling strategy: " + std::to_string(static_cast<int>(strategy)));
     }
-}
-
-PoolingStrategyPtr PoolingFactory::createFromConfig(const experiment_config& config) {
-    return createStrategy(config.descriptorOptions.poolingStrategy);
 }
 
 PoolingStrategyPtr PoolingFactory::createFromConfig(const thesis_project::config::ExperimentConfig::DescriptorConfig& descCfg) {

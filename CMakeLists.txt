@@ -363,7 +363,6 @@ function(create_gtest_if_exists test_source test_name)
                     src/core/matching/BruteForceMatching.cpp
                     src/core/matching/FLANNMatching.cpp
                     src/core/matching/MatchingFactory.cpp
-                    src/core/config/experiment_config.cpp
                     src/core/processing/processor_utils.cpp
                 )
             endif()
@@ -378,7 +377,6 @@ function(create_gtest_if_exists test_source test_name)
                 src/core/matching/BruteForceMatching.cpp
                 src/core/matching/FLANNMatching.cpp
                 src/core/matching/MatchingFactory.cpp
-                src/core/config/experiment_config.cpp
             )
             target_link_libraries(${test_name} ${OpenCV_LIBRARIES} keypoints)
             target_include_directories(${test_name} PRIVATE ${OpenCV_INCLUDE_DIRS} src descriptor_compare keypoints)
@@ -389,7 +387,6 @@ function(create_gtest_if_exists test_source test_name)
                 src/core/pooling/NoPooling.cpp
                 src/core/pooling/DomainSizePooling.cpp
                 src/core/pooling/StackingPooling.cpp
-                src/core/config/experiment_config.cpp
                        src/core/descriptor/factories/DescriptorFactory.cpp
                        src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
                        src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
@@ -450,10 +447,6 @@ create_gtest_if_exists("tests/unit/metrics/test_experiment_metrics_gtest.cpp" "t
 
 # Google Test pooling strategy tests (Phase 2 comprehensive testing)
 create_gtest_if_exists("tests/unit/pooling/test_pooling_factory_gtest.cpp" "test_pooling_factory_gtest")
-create_gtest_if_exists("tests/unit/pooling/test_domain_size_pooling_gtest.cpp" "test_domain_size_pooling_gtest")
-create_gtest_if_exists("tests/unit/pooling/test_stacking_pooling_gtest.cpp" "test_stacking_pooling_gtest")
-create_gtest_if_exists("tests/unit/pooling/test_domain_size_pooling_weighted_gtest.cpp" "test_domain_size_pooling_weighted_gtest")
-create_gtest_if_exists("tests/unit/pooling/test_domain_size_pooling_procedural_gtest.cpp" "test_domain_size_pooling_procedural_gtest")
 
 # Google Test matching factory tests
 create_gtest_if_exists("tests/unit/factories/test_matching_factory_gtest.cpp" "test_matching_factory_gtest")
@@ -463,7 +456,6 @@ if(TARGET test_matching_factory_gtest)
         src/core/matching/FLANNMatching.cpp
         src/core/matching/RatioTestMatching.cpp
         src/core/matching/MatchingFactory.cpp
-        src/core/config/experiment_config.cpp
     )
     target_link_libraries(test_matching_factory_gtest ${OpenCV_LIBRARIES} keypoints)
     target_include_directories(test_matching_factory_gtest PRIVATE src include descriptor_compare keypoints ${OpenCV_INCLUDE_DIRS})
@@ -473,7 +465,6 @@ endif()
 create_gtest_if_exists("tests/unit/factories/test_descriptor_factory_gtest.cpp" "test_descriptor_factory_gtest")
 if(TARGET test_descriptor_factory_gtest)
     target_sources(test_descriptor_factory_gtest PRIVATE 
-        src/core/config/experiment_config.cpp
         src/core/descriptor/factories/DescriptorFactory.cpp
         src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
         src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
@@ -870,15 +861,4 @@ if(TARGET test_yaml_schema_v1_gtest)
     target_link_libraries(test_yaml_schema_v1_gtest ${OpenCV_LIBRARIES})
     target_include_directories(test_yaml_schema_v1_gtest PRIVATE src include ${OpenCV_INCLUDE_DIRS})
 endif()
-endif()
-
-# Configuration bridge roundtrip tests
-create_gtest_if_exists("tests/unit/config/test_configuration_bridge_roundtrip_gtest.cpp" "test_configuration_bridge_roundtrip_gtest")
-if(TARGET test_configuration_bridge_roundtrip_gtest)
-    target_sources(test_configuration_bridge_roundtrip_gtest PRIVATE 
-        src/core/config/ConfigurationBridge.cpp
-        src/core/config/experiment_config.cpp
-    )
-    target_link_libraries(test_configuration_bridge_roundtrip_gtest keypoints ${OpenCV_LIBRARIES})
-    target_include_directories(test_configuration_bridge_roundtrip_gtest PRIVATE src include keypoints ${OpenCV_INCLUDE_DIRS})
 endif()

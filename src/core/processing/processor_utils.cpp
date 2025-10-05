@@ -1,9 +1,5 @@
 #include "processor_utils.hpp"
-#include "../config/experiment_config.hpp"
-#include "keypoints/VanillaSIFT.h"
-#include "src/core/pooling/PoolingFactory.hpp"
 #include "src/core/matching/MatchingFactory.hpp"
-#include "src/core/descriptor/factories/DescriptorFactory.hpp"
 #include <opencv2/features2d.hpp>
 #include <opencv2/core.hpp> // For cv::Ptr and core functionalities
 
@@ -21,8 +17,8 @@ double processor_utils::calculateRelativeScalingFactor(const cv::Mat& image) {
 }
 
 double processor_utils::adjustMatchThresholdForImageSet(double baseThreshold, double scaleFactor) {
-    // Use default brute force matching strategy for threshold adjustment
-    auto matchingStrategy = thesis_project::matching::MatchingFactory::createStrategy(BRUTE_FORCE);
+    auto matchingStrategy = thesis_project::matching::MatchingFactory::createStrategy(
+        thesis_project::MatchingMethod::BRUTE_FORCE);
     return matchingStrategy->adjustMatchThreshold(baseThreshold, scaleFactor);
 }
 
@@ -57,9 +53,10 @@ void processor_utils::rootDescriptors(cv::Mat& descriptors) {
     }
 }
 
-std::vector<cv::DMatch> processor_utils::matchDescriptors(const cv::Mat& descriptors1, const cv::Mat& descriptors2, MatchingStrategy strategy) {
-    // Use the specified matching strategy
-    auto matchingStrategy = thesis_project::matching::MatchingFactory::createStrategy(strategy);
+std::vector<cv::DMatch> processor_utils::matchDescriptors(const cv::Mat& descriptors1,
+                                                         const cv::Mat& descriptors2,
+                                                         thesis_project::MatchingMethod method) {
+    auto matchingStrategy = thesis_project::matching::MatchingFactory::createStrategy(method);
     return matchingStrategy->matchDescriptors(descriptors1, descriptors2);
 }
 
@@ -67,8 +64,8 @@ double processor_utils::calculatePrecision(const std::vector<cv::DMatch>& matche
                                            const std::vector<cv::KeyPoint>& keypoints2,
                                            const std::vector<cv::Point2f>& projectedPoints,
                                            double matchThreshold) {
-    // Use default brute force matching strategy for precision calculation
-    auto matchingStrategy = thesis_project::matching::MatchingFactory::createStrategy(BRUTE_FORCE);
+    auto matchingStrategy = thesis_project::matching::MatchingFactory::createStrategy(
+        thesis_project::MatchingMethod::BRUTE_FORCE);
     return matchingStrategy->calculatePrecision(matches, keypoints2, projectedPoints, matchThreshold);
 }
 
@@ -162,68 +159,4 @@ cv::Mat processor_utils::readHomography(const std::string& filePath) {
 
     file.close();
     return H;
-}
-
-
-
-std::pair<std::vector<cv::KeyPoint>, cv::Mat> processor_utils::detectAndComputeWithConfigLocked(const cv::Mat& image, const std::vector<cv::KeyPoint>& lockedKeypoints, const experiment_config &config) {
-    std::pair<std::vector<cv::KeyPoint>, cv::Mat> result;
-
-    if (config.descriptorOptions.UseLockedInKeypoints) {
-        // Use the provided locked-in keypoints
-        result.first = lockedKeypoints;
-    } else {
-        // Detect keypoints using the specified detector
-        result = processor_utils::detectAndCompute(config.detector, image);
-    }
-
-    // New interface routing (default): for supported descriptors and strategies with extractor overloads
-    if (thesis_project::factories::DescriptorFactory::isSupported(config) &&
-        (config.descriptorOptions.poolingStrategy == NONE ||
-         config.descriptorOptions.poolingStrategy == DOMAIN_SIZE_POOLING ||
-         config.descriptorOptions.poolingStrategy == STACKING)) {
-        try {
-            auto extractor = thesis_project::factories::DescriptorFactory::create(config);
-            auto poolingStrategy = thesis_project::pooling::PoolingFactory::createFromConfig(config);
-            result.second = poolingStrategy->computeDescriptors(image, result.first, *extractor, config);
-            return result;
-        } catch (...) {
-            // Fall through to legacy path on any error
-        }
-    }
-
-    // Legacy path using detector interface
-    auto poolingStrategy = thesis_project::pooling::PoolingFactory::createFromConfig(config);
-    result.second = poolingStrategy->computeDescriptors(image, result.first, config.detector, config);
-
-    return result;
-}
-
-std::pair<std::vector<cv::KeyPoint>, cv::Mat> processor_utils::detectAndComputeWithConfig(const cv::Mat& image, const experiment_config &config) {
-    // New interface routing (default): for supported descriptors and strategies with extractor overloads
-    if (thesis_project::factories::DescriptorFactory::isSupported(config) &&
-        (config.descriptorOptions.poolingStrategy == NONE ||
-         config.descriptorOptions.poolingStrategy == DOMAIN_SIZE_POOLING ||
-         config.descriptorOptions.poolingStrategy == STACKING)) {
-        try {
-            // Detect keypoints using the configured detector first
-            auto detected = processor_utils::detectAndCompute(config.detector, image);
-            auto poolingStrategy = thesis_project::pooling::PoolingFactory::createFromConfig(config);
-            auto extractor = thesis_project::factories::DescriptorFactory::create(config);
-            cv::Mat desc = poolingStrategy->computeDescriptors(image, detected.first, *extractor, config);
-            return {detected.first, desc};
-        } catch (...) {
-            // Fall through to legacy path on any error
-        }
-    }
-
-    std::pair<std::vector<cv::KeyPoint>, cv::Mat> result;
-    // Detect keypoints first
-    result = processor_utils::detectAndCompute(config.detector, image);
-    
-    // Use the new pooling strategy system
-    auto poolingStrategy = thesis_project::pooling::PoolingFactory::createFromConfig(config);
-    result.second = poolingStrategy->computeDescriptors(image, result.first, config.detector, config);
-
-    return result;
 }

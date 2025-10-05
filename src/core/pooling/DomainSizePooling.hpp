@@ -29,21 +29,6 @@ public:
     cv::Mat computeDescriptors(
         const cv::Mat& image,
         const std::vector<cv::KeyPoint>& keypoints,
-        const cv::Ptr<cv::Feature2D>& detector,
-        const experiment_config& config
-    ) override;
-
-    // New interface overload: pool using modern extractor API
-    cv::Mat computeDescriptors(
-        const cv::Mat& image,
-        const std::vector<cv::KeyPoint>& keypoints,
-        thesis_project::IDescriptorExtractor& extractor,
-        const experiment_config& config
-    ) override;
-
-    cv::Mat computeDescriptors(
-        const cv::Mat& image,
-        const std::vector<cv::KeyPoint>& keypoints,
         thesis_project::IDescriptorExtractor& extractor,
         const thesis_project::config::ExperimentConfig::DescriptorConfig& descCfg
     ) override;

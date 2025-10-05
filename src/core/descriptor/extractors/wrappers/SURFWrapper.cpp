@@ -9,13 +9,6 @@ SURFWrapper::SURFWrapper() {
     surf_ = cv::xfeatures2d::SURF::create();
 }
 
-SURFWrapper::SURFWrapper(const experiment_config& config)
-    : config_(std::make_unique<experiment_config>(config)) {
-    // Initialize OpenCV SURF with default parameters
-    // SURF parameters can be configured here if needed
-    surf_ = cv::xfeatures2d::SURF::create();
-}
-
 cv::Mat SURFWrapper::extract(const cv::Mat& image,
                             const std::vector<cv::KeyPoint>& keypoints,
                             const DescriptorParams& params) {
@@ -67,9 +60,6 @@ std::string SURFWrapper::getConfiguration() const {
     ss << "  Hessian threshold: " << (surf_ ? surf_->getHessianThreshold() : 400.0) << "\n";
     ss << "  Octaves: " << (surf_ ? surf_->getNOctaves() : 4) << "\n";
     ss << "  Octave layers: " << (surf_ ? surf_->getNOctaveLayers() : 3) << "\n";
-    if (config_) {
-        ss << "  Pooling Strategy: " << static_cast<int>(config_->descriptorOptions.poolingStrategy) << "\n";
-    }
     return ss.str();
 }
 

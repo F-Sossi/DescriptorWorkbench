@@ -37,23 +37,31 @@ ctest -R database --output-on-failure
 ```cpp
 #include "thesis_project/database/DatabaseManager.hpp"
 
-// In your existing image_processor workflow:
+// In your existing experiment workflow:
 void processExperiments() {
-    // Database manager (set enabled=false only if you explicitly want to skip persistence)
     thesis_project::database::DatabaseManager db("experiments.db", true);
+    if (!db.isEnabled()) return;
 
-    // Your existing experiment code unchanged
-    experiment_config config;
-    // ... existing setup ...
+    auto cfg = thesis_project::config::YAMLConfigLoader::loadFromFile(
+        "config/experiments/sift_baseline.yaml");
 
-    // Record experiment when database persistence is active
-    if (db.isEnabled()) {
-        auto db_config = database_integration::toDbConfig(config);
-        int exp_id = db.recordConfiguration(db_config);
+    for (const auto& desc : cfg.descriptors) {
+        thesis_project::database::ExperimentConfig dbConfig;
+        dbConfig.descriptor_type = desc.name;
+        dbConfig.dataset_path = cfg.dataset.path;
+        dbConfig.pooling_strategy = thesis_project::toString(desc.params.pooling);
+        dbConfig.max_features = cfg.keypoints.params.max_features;
+        dbConfig.similarity_threshold = cfg.evaluation.params.match_threshold;
 
-        // After processing...
-        auto results = database_integration::createDbResults(
-            exp_id, "RGBSIFT", "i_ajuntament", map_score, time_ms);
+        int experiment_id = db.recordConfiguration(dbConfig);
+
+        // After running the experiment for this descriptor, persist results
+        thesis_project::database::ExperimentResults results;
+        results.experiment_id = experiment_id;
+        results.descriptor_type = desc.name;
+        results.dataset_name = cfg.dataset.path;
+        results.mean_average_precision = map_score;
+        results.processing_time_ms = time_ms;
         db.recordExperiment(results);
     }
 }
@@ -97,16 +105,6 @@ public:
     std::vector<ExperimentResults> getRecentResults(int limit = 10);
     std::map<std::string, double> getStatistics();
 };
-```
-
-### Helper Functions
-```cpp
-// Convert existing config to database format
-auto db_config = database_integration::toDbConfig(experiment_config);
-
-// Create results structure
-auto results = database_integration::createDbResults(
-    exp_id, descriptor_name, dataset_name, map_score, time_ms);
 ```
 
 ## Benefits

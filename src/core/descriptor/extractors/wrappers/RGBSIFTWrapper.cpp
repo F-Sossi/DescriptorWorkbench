@@ -8,11 +8,6 @@ RGBSIFTWrapper::RGBSIFTWrapper() {
     rgbsift_ = std::make_unique<RGBSIFT>();
 }
 
-RGBSIFTWrapper::RGBSIFTWrapper(const experiment_config& config)
-    : config_(std::make_unique<experiment_config>(config)) {
-    rgbsift_ = std::make_unique<RGBSIFT>();
-}
-
 cv::Mat RGBSIFTWrapper::extract(const cv::Mat& image,
                                const std::vector<cv::KeyPoint>& keypoints,
                                const DescriptorParams& params) {
@@ -55,9 +50,6 @@ std::string RGBSIFTWrapper::getConfiguration() const {
     ss << "RGBSIFT Wrapper Configuration:\n";
     ss << "  RGB SIFT descriptor\n";
     ss << "  Descriptor size: " << descriptorSize() << "\n";
-    if (config_) {
-        ss << "  Pooling Strategy: " << static_cast<int>(config_->descriptorOptions.poolingStrategy) << "\n";
-    }
     return ss.str();
 }
 

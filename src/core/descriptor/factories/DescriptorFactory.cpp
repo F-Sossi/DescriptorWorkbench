@@ -20,57 +20,12 @@
 
 namespace thesis_project::factories {
 
-std::unique_ptr<IDescriptorExtractor> DescriptorFactory::create(const experiment_config& config) {
-    switch (config.descriptorOptions.descriptorType) {
-        case DESCRIPTOR_SIFT:
-            return createSIFT(config);
-        case DESCRIPTOR_RGBSIFT:
-            return createRGBSIFT(config);
-        case DESCRIPTOR_HoNC:
-            return std::make_unique<wrappers::HoNCWrapper>(config);
-        case DESCRIPTOR_vSIFT:
-            return std::make_unique<wrappers::VSIFTWrapper>(config);
-        // DSPSIFT maps to new interface only (legacy maps as SIFT)
-        default:
-            throw std::runtime_error("Unsupported descriptor type in factory");
-    }
-}
-
-std::unique_ptr<IDescriptorExtractor> DescriptorFactory::tryCreate(const experiment_config& config) noexcept {
-    try {
-        return create(config);
-    } catch (...) {
-        return nullptr;
-    }
-}
-
-bool DescriptorFactory::isSupported(const experiment_config& config) {
-    switch (config.descriptorOptions.descriptorType) {
-        case DESCRIPTOR_SIFT:
-        case DESCRIPTOR_RGBSIFT:
-        case DESCRIPTOR_HoNC:
-        case DESCRIPTOR_vSIFT:
-            // DSPSIFT not exposed via legacy enum; use new-config path
-            return true;
-        default:
-            return false;
-    }
-}
-
 std::vector<std::string> DescriptorFactory::getSupportedTypes() {
     std::vector<std::string> types = {"SIFT", "RGBSIFT", "HoNC", "VSIFT", "DSPSIFT"};
 #ifdef HAVE_OPENCV_XFEATURES2D
     types.emplace_back("VGG");
 #endif
     return types;
-}
-
-std::unique_ptr<IDescriptorExtractor> DescriptorFactory::createSIFT(const experiment_config& config) {
-    return std::make_unique<wrappers::SIFTWrapper>(config);
-}
-
-std::unique_ptr<IDescriptorExtractor> DescriptorFactory::createRGBSIFT(const experiment_config& config) {
-    return std::make_unique<wrappers::RGBSIFTWrapper>(config);
 }
 
 // New-config overloads
@@ -148,4 +103,3 @@ std::unique_ptr<IDescriptorExtractor> DescriptorFactory::createRGBSIFT() {
 }
 
 } // namespace thesis_project::factories
-

@@ -3,7 +3,7 @@
 
 #include "src/core/matching/MatchingFactory.hpp"
 #include "src/core/matching/MatchingStrategy.hpp"
-#include "src/core/config/experiment_config.hpp"
+#include "include/thesis_project/types.hpp"
 
 using thesis_project::matching::MatchingFactory;
 
@@ -25,24 +25,13 @@ protected:
 };
 
 TEST_F(MatchingFactoryTest, CreateBruteForceStrategy) {
-    auto strategy = MatchingFactory::createStrategy(BRUTE_FORCE);
+    auto strategy = MatchingFactory::createStrategy(thesis_project::MatchingMethod::BRUTE_FORCE);
     ASSERT_NE(strategy, nullptr);
     EXPECT_EQ(strategy->getName(), "BruteForce");
-}
-
-TEST_F(MatchingFactoryTest, CreateFromConfigDefaultBruteForce) {
-    experiment_config cfg; // default matchingStrategy = BRUTE_FORCE
-    auto strategy = MatchingFactory::createFromConfig(cfg);
-    ASSERT_NE(strategy, nullptr);
-    EXPECT_EQ(strategy->getName(), "BruteForce");
-
-    // Smoke match
-    auto matches = strategy->matchDescriptors(desc1, desc2);
-    EXPECT_EQ(matches.size(), static_cast<size_t>(desc1.rows));
 }
 
 TEST_F(MatchingFactoryTest, CreateRatioTestStrategy) {
-    auto strategy = MatchingFactory::createStrategy(RATIO_TEST);
+    auto strategy = MatchingFactory::createStrategy(thesis_project::MatchingMethod::RATIO_TEST);
     ASSERT_NE(strategy, nullptr);
     EXPECT_EQ(strategy->getName(), "RatioTest");
 
@@ -51,7 +40,7 @@ TEST_F(MatchingFactoryTest, CreateRatioTestStrategy) {
 }
 
 TEST_F(MatchingFactoryTest, CreateFLANNStrategy) {
-    auto strategy = MatchingFactory::createStrategy(FLANN);
+    auto strategy = MatchingFactory::createStrategy(thesis_project::MatchingMethod::FLANN);
     ASSERT_NE(strategy, nullptr);
     EXPECT_EQ(strategy->getName(), "FLANN");
     EXPECT_TRUE(strategy->supportsRatioTest());
@@ -61,10 +50,9 @@ TEST_F(MatchingFactoryTest, CreateFLANNStrategy) {
 }
 
 TEST_F(MatchingFactoryTest, CreateStrategyUnsupportedThrows) {
-    // FLANN is now supported, so it should not throw
-    EXPECT_NO_THROW(MatchingFactory::createStrategy(FLANN));
-    // Test with an actually unsupported enum value
-    EXPECT_THROW(MatchingFactory::createStrategy(static_cast<MatchingStrategy>(99)), std::runtime_error);
+    EXPECT_NO_THROW(MatchingFactory::createStrategy(thesis_project::MatchingMethod::FLANN));
+    auto unsupported = static_cast<thesis_project::MatchingMethod>(99);
+    EXPECT_THROW(MatchingFactory::createStrategy(unsupported), std::runtime_error);
 }
 
 TEST_F(MatchingFactoryTest, GetAvailableStrategiesContainsBruteForce) {

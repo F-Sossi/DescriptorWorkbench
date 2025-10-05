@@ -2,7 +2,6 @@
 
 #include "interfaces/IDescriptorExtractor.hpp"
 #include "keypoints/RGBSIFT.h"
-#include "src/core/config/experiment_config.hpp"
 
 namespace thesis_project {
 namespace wrappers {
@@ -10,11 +9,9 @@ namespace wrappers {
 class RGBSIFTWrapper : public IDescriptorExtractor {
 private:
     std::unique_ptr<RGBSIFT> rgbsift_;
-    std::unique_ptr<experiment_config> config_;
 
 public:
     RGBSIFTWrapper();
-    explicit RGBSIFTWrapper(const experiment_config& config);
 
     cv::Mat extract(const cv::Mat& image,
                    const std::vector<cv::KeyPoint>& keypoints,
@@ -22,7 +19,7 @@ public:
 
     std::string name() const override { return "RGBSIFT"; }
     int descriptorSize() const override { return 384; } // 3 * 128
-    int descriptorType() const override { return DESCRIPTOR_RGBSIFT; }
+    int descriptorType() const override { return static_cast<int>(thesis_project::DescriptorType::RGBSIFT); }
 
     std::string getConfiguration() const;
 };

@@ -295,25 +295,6 @@ Edit `src/core/matching/MatchingFactory.cpp`:
 
 2. **Update createStrategy method**:
 ```cpp
-MatchingStrategyPtr MatchingFactory::createStrategy(::MatchingStrategy strategy) {
-    switch (strategy) {
-        case BRUTE_FORCE:
-            return std::make_unique<BruteForceMatching>();
-
-        case FLANN:
-            return std::make_unique<FLANNMatching>();  // Remove "not implemented" error
-
-        case RATIO_TEST:
-            return std::make_unique<RatioTestMatching>();
-
-        default:
-            throw std::runtime_error("Unknown matching strategy");
-    }
-}
-```
-
-3. **Add new enum overload** (if using new enum system):
-```cpp
 MatchingStrategyPtr MatchingFactory::createStrategy(thesis_project::MatchingMethod method) {
     switch (method) {
         case thesis_project::MatchingMethod::BRUTE_FORCE:
@@ -331,7 +312,7 @@ MatchingStrategyPtr MatchingFactory::createStrategy(thesis_project::MatchingMeth
 }
 ```
 
-4. **Update available strategies list**:
+3. **Update available strategies list**:
 ```cpp
 std::vector<std::string> MatchingFactory::getAvailableStrategies() {
     return {

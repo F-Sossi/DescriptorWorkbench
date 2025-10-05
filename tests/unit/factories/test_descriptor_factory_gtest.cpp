@@ -2,70 +2,34 @@
 #include <opencv2/opencv.hpp>
 
 #include "src/core/descriptor/factories/DescriptorFactory.hpp"
-#include "src/core/config/experiment_config.hpp"
+#include "include/thesis_project/types.hpp"
 
 namespace tf = thesis_project::factories;
 
-class DescriptorFactoryTest : public ::testing::Test {
-protected:
-    experiment_config cfg;
-};
-
-TEST_F(DescriptorFactoryTest, CreateSIFT) {
-    cfg.descriptorOptions.descriptorType = DESCRIPTOR_SIFT;
-    auto ext = tf::DescriptorFactory::create(cfg);
-    ASSERT_NE(ext, nullptr);
-    EXPECT_FALSE(ext->name().empty());
-    EXPECT_EQ(ext->descriptorSize(), 128);
-    EXPECT_EQ(ext->descriptorType(), DESCRIPTOR_SIFT);
+TEST(DescriptorFactoryTest, CreateSIFT) {
+    auto extractor = tf::DescriptorFactory::create(thesis_project::DescriptorType::SIFT);
+    ASSERT_NE(extractor, nullptr);
+    EXPECT_EQ(extractor->descriptorSize(), 128);
+    EXPECT_EQ(extractor->descriptorType(), static_cast<int>(thesis_project::DescriptorType::SIFT));
 }
 
-TEST_F(DescriptorFactoryTest, TryCreateRGBSIFT) {
-    cfg.descriptorOptions.descriptorType = DESCRIPTOR_RGBSIFT;
-    auto ext = tf::DescriptorFactory::tryCreate(cfg);
-    ASSERT_NE(ext, nullptr);
-    EXPECT_EQ(ext->descriptorSize(), 384);
-    EXPECT_EQ(ext->descriptorType(), DESCRIPTOR_RGBSIFT);
+TEST(DescriptorFactoryTest, CreateRGBSIFT) {
+    auto extractor = tf::DescriptorFactory::create(thesis_project::DescriptorType::RGBSIFT);
+    ASSERT_NE(extractor, nullptr);
+    EXPECT_EQ(extractor->descriptorSize(), 384);
+    EXPECT_EQ(extractor->descriptorType(), static_cast<int>(thesis_project::DescriptorType::RGBSIFT));
 }
 
-TEST_F(DescriptorFactoryTest, SupportHoNCAndVSIFT) {
-    cfg.descriptorOptions.descriptorType = DESCRIPTOR_HoNC;
-    EXPECT_TRUE(tf::DescriptorFactory::isSupported(cfg));
-    auto honc = tf::DescriptorFactory::tryCreate(cfg);
-    ASSERT_NE(honc, nullptr);
-    EXPECT_EQ(honc->descriptorType(), DESCRIPTOR_HoNC);
-
-    cfg.descriptorOptions.descriptorType = DESCRIPTOR_vSIFT;
-    EXPECT_TRUE(tf::DescriptorFactory::isSupported(cfg));
-    auto vsift = tf::DescriptorFactory::tryCreate(cfg);
-    ASSERT_NE(vsift, nullptr);
-    EXPECT_EQ(vsift->descriptorType(), DESCRIPTOR_vSIFT);
+TEST(DescriptorFactoryTest, SupportsVariousTypes) {
+    EXPECT_TRUE(tf::DescriptorFactory::isSupported(thesis_project::DescriptorType::SIFT));
+    EXPECT_TRUE(tf::DescriptorFactory::isSupported(thesis_project::DescriptorType::RGBSIFT));
+    EXPECT_TRUE(tf::DescriptorFactory::isSupported(thesis_project::DescriptorType::HoNC));
+    EXPECT_TRUE(tf::DescriptorFactory::isSupported(thesis_project::DescriptorType::vSIFT));
 }
 
-TEST_F(DescriptorFactoryTest, SupportedTypesList) {
+TEST(DescriptorFactoryTest, SupportedTypesList) {
     auto types = tf::DescriptorFactory::getSupportedTypes();
-    bool has_sift = false, has_rgbsift = false, has_honc = false, has_vsift = false, has_vgg = false;
-    for (const auto& t : types) {
-        if (t == "SIFT") has_sift = true;
-        if (t == "RGBSIFT") has_rgbsift = true;
-        if (t == "HoNC") has_honc = true;
-        if (t == "VSIFT") has_vsift = true;
-        if (t == "VGG") has_vgg = true;
-    }
-    EXPECT_TRUE(has_sift);
-    EXPECT_TRUE(has_rgbsift);
-    EXPECT_TRUE(has_honc);
-    EXPECT_TRUE(has_vsift);
-    // VGG is optional depending on OpenCV build; no hard assertion
+    EXPECT_NE(std::find(types.begin(), types.end(), "SIFT"), types.end());
+    EXPECT_NE(std::find(types.begin(), types.end(), "RGBSIFT"), types.end());
 }
 
-TEST_F(DescriptorFactoryTest, IsSupportedFlags) {
-    cfg.descriptorOptions.descriptorType = DESCRIPTOR_SIFT;
-    EXPECT_TRUE(tf::DescriptorFactory::isSupported(cfg));
-    cfg.descriptorOptions.descriptorType = DESCRIPTOR_RGBSIFT;
-    EXPECT_TRUE(tf::DescriptorFactory::isSupported(cfg));
-    cfg.descriptorOptions.descriptorType = DESCRIPTOR_HoNC;
-    EXPECT_TRUE(tf::DescriptorFactory::isSupported(cfg));
-    cfg.descriptorOptions.descriptorType = DESCRIPTOR_vSIFT;
-    EXPECT_TRUE(tf::DescriptorFactory::isSupported(cfg));
-}

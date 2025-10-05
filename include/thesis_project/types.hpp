@@ -13,7 +13,7 @@ namespace thesis_project {
     class IEvaluator;
 
     // ================================
-    // EXTRACTED TYPES FROM experiment_config.hpp
+    // Legacy enums preserved from the original experiment configuration
     // ================================
 
     /**

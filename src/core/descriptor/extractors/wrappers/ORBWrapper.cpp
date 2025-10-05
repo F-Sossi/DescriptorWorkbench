@@ -7,12 +7,6 @@ ORBWrapper::ORBWrapper() {
     orb_ = cv::ORB::create();
 }
 
-ORBWrapper::ORBWrapper(const experiment_config& config)
-    : config_(std::make_unique<experiment_config>(config)) {
-    // Initialize OpenCV ORB with default parameters
-    orb_ = cv::ORB::create();
-}
-
 cv::Mat ORBWrapper::extract(const cv::Mat& image,
                            const std::vector<cv::KeyPoint>& keypoints,
                            const DescriptorParams& params) {
@@ -53,9 +47,6 @@ std::string ORBWrapper::getConfiguration() const {
     ss << "  OpenCV ORB with default parameters\n";
     ss << "  Descriptor size: " << descriptorSize() << " bytes\n";
     ss << "  Descriptor type: Binary (CV_8U)\n";
-    if (config_) {
-        ss << "  Pooling Strategy: " << static_cast<int>(config_->descriptorOptions.poolingStrategy) << "\n";
-    }
     return ss.str();
 }
 

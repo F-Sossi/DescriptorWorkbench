@@ -83,27 +83,24 @@ inline std::string toString(DescriptorType type) {
 
 #include "interfaces/IDescriptorExtractor.hpp"
 #include <opencv4/opencv2/features2d.hpp>
-#include "src/core/config/experiment_config.hpp"
+#include "include/thesis_project/types.hpp"
 
 namespace thesis_project::wrappers {
 
 class YourDescriptorWrapper final : public IDescriptorExtractor {
 private:
-    // Your descriptor implementation (OpenCV or custom)
     cv::Ptr<cv::YourDescriptor> descriptor_;
-    std::unique_ptr<experiment_config> config_;
 
 public:
     YourDescriptorWrapper();
-    explicit YourDescriptorWrapper(const experiment_config& config);
 
     cv::Mat extract(const cv::Mat& image,
                    const std::vector<cv::KeyPoint>& keypoints,
                    const DescriptorParams& params) override;
 
     [[nodiscard]] std::string name() const override { return "YourDescriptor"; }
-    [[nodiscard]] int descriptorSize() const override { return 128; }  // Adjust size
-    [[nodiscard]] int descriptorType() const override { return CV_32F; }  // or CV_8U for binary
+    [[nodiscard]] int descriptorSize() const override { return 128; }
+    [[nodiscard]] int descriptorType() const override { return CV_32F; }
 
     [[nodiscard]] std::string getConfiguration() const;
 };
@@ -120,12 +117,6 @@ public:
 namespace thesis_project::wrappers {
 
 YourDescriptorWrapper::YourDescriptorWrapper() {
-    descriptor_ = cv::YourDescriptor::create();
-}
-
-YourDescriptorWrapper::YourDescriptorWrapper(const experiment_config& config)
-    : config_(std::make_unique<experiment_config>(config)) {
-    // Initialize with parameters from config if needed
     descriptor_ = cv::YourDescriptor::create();
 }
 
@@ -158,9 +149,6 @@ std::string YourDescriptorWrapper::getConfiguration() const {
     ss << "YourDescriptor Wrapper Configuration:\\n";
     ss << "  Descriptor size: " << descriptorSize() << "\\n";
     ss << "  Descriptor type: " << (descriptorType() == CV_32F ? "Float" : "Binary") << "\\n";
-    if (config_) {
-        ss << "  Pooling Strategy: " << static_cast<int>(config_->descriptorOptions.poolingStrategy) << "\\n";
-    }
     return ss.str();
 }
 

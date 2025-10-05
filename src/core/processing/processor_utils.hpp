@@ -8,7 +8,7 @@
 #include <vector>
 #include <fstream>
 #include <random>
-#include "../config/experiment_config.hpp"
+#include "include/thesis_project/types.hpp"
 
 class processor_utils {
 
@@ -22,7 +22,9 @@ public:
 
     static void rootDescriptors(cv::Mat& descriptors);
 
-    static std::vector<cv::DMatch> matchDescriptors(const cv::Mat& descriptors1, const cv::Mat& descriptors2, MatchingStrategy strategy = BRUTE_FORCE);
+    static std::vector<cv::DMatch> matchDescriptors(const cv::Mat& descriptors1,
+                                                   const cv::Mat& descriptors2,
+                                                   thesis_project::MatchingMethod method = thesis_project::MatchingMethod::BRUTE_FORCE);
 
     static void saveResults(const std::string& filePath, const std::vector<std::string>& headers,
                             const std::vector<std::vector<std::string>>& dataRows);
@@ -35,9 +37,6 @@ public:
 
 
 
-    static std::pair<std::vector<cv::KeyPoint>, cv::Mat>
-    detectAndComputeWithConfig(const cv::Mat &image, const experiment_config &config);
-
     static double calculateRelativeScalingFactor(const cv::Mat &image);
 
     static double adjustMatchThresholdForImageSet(double baseThreshold, double scaleFactor);
@@ -45,10 +44,6 @@ public:
     static double calculatePrecision(const std::vector<cv::DMatch> &matches, const std::vector<cv::KeyPoint> &keypoints2,
                               const std::vector<cv::Point2f> &projectedPoints, double matchThreshold);
 
-
-    static std::pair<std::vector<cv::KeyPoint>, cv::Mat>
-    detectAndComputeWithConfigLocked(const cv::Mat &image, const std::vector<cv::KeyPoint> &lockedKeypoints,
-                               const experiment_config &config);
 };
 
 

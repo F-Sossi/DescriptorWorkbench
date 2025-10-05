@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 #include "interfaces/IDescriptorExtractor.hpp"
-#include "src/core/config/experiment_config.hpp"
 
 namespace thesis_project::wrappers {
 

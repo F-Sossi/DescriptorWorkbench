@@ -3,18 +3,15 @@
 #include "interfaces/IDescriptorExtractor.hpp"
 #include <opencv4/opencv2/features2d.hpp>
 #include <opencv4/opencv2/xfeatures2d.hpp>
-#include "src/core/config/experiment_config.hpp"
 
 namespace thesis_project::wrappers {
 
 class SURFWrapper final : public IDescriptorExtractor {
 private:
     cv::Ptr<cv::xfeatures2d::SURF> surf_;
-    std::unique_ptr<experiment_config> config_;
 
 public:
     SURFWrapper();
-    explicit SURFWrapper(const experiment_config& config);
 
     cv::Mat extract(const cv::Mat& image,
                    const std::vector<cv::KeyPoint>& keypoints,

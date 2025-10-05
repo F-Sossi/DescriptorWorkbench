@@ -8,9 +8,6 @@
 #include <stdexcept>
 #include "src/core/config/ExperimentConfig.hpp"
 
-// Forward declaration to avoid circular dependency
-struct experiment_config;
-
 // Forward declare new interface extractor to avoid heavy includes
 namespace thesis_project { class IDescriptorExtractor; }
 
@@ -36,25 +33,6 @@ public:
      * @param config Experiment configuration containing pooling parameters
      * @return cv::Mat Computed descriptors after applying pooling strategy
      */
-    virtual cv::Mat computeDescriptors(
-        const cv::Mat& image,
-        const std::vector<cv::KeyPoint>& keypoints,
-        const cv::Ptr<cv::Feature2D>& detector,
-        const experiment_config& config
-    ) = 0;
-
-    // Optional overload for the Stage 7 new interface
-    virtual cv::Mat computeDescriptors(
-        const cv::Mat& image,
-        const std::vector<cv::KeyPoint>& keypoints,
-        thesis_project::IDescriptorExtractor& extractor,
-        const experiment_config& /*config*/
-    )
-    {
-        throw std::runtime_error("PoolingStrategy new interface path not implemented for this strategy");
-    }
-
-    // New-config overload (Schema v1): compute using descriptor params only
     virtual cv::Mat computeDescriptors(
         const cv::Mat& image,
         const std::vector<cv::KeyPoint>& keypoints,

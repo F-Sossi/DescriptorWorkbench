@@ -1,33 +1,27 @@
 #pragma once
 
 #include "interfaces/IDescriptorExtractor.hpp"
-#include "src/core/config/experiment_config.hpp"
 #include "keypoints/DSPSIFT.h"
 #include <memory>
 
-namespace thesis_project {
-namespace wrappers {
+namespace thesis_project::wrappers {
 
-class DSPSIFTWrapper : public IDescriptorExtractor {
-private:
-    cv::Ptr<DSPSIFT> dspsift_;
-    std::unique_ptr<experiment_config> config_;
+    class DSPSIFTWrapper : public IDescriptorExtractor {
+    private:
+        cv::Ptr<DSPSIFT> dspsift_;
 
-public:
-    DSPSIFTWrapper();
-    explicit DSPSIFTWrapper(const experiment_config& config);
+    public:
+        DSPSIFTWrapper();
 
-    cv::Mat extract(const cv::Mat& image,
-                    const std::vector<cv::KeyPoint>& keypoints,
-                    const DescriptorParams& params = {}) override;
+        cv::Mat extract(const cv::Mat& image,
+                        const std::vector<cv::KeyPoint>& keypoints,
+                        const DescriptorParams& params = {}) override;
 
-    std::string name() const override { return "DSPSIFT"; }
-    int descriptorSize() const override { return 128; }
-    int descriptorType() const override { return DESCRIPTOR_SIFT; }
+        std::string name() const override { return "DSPSIFT"; }
+        int descriptorSize() const override { return 128; }
+        int descriptorType() const override { return static_cast<int>(thesis_project::DescriptorType::DSPSIFT); }
 
-    std::string getConfiguration() const;
-};
+        static std::string getConfiguration();
+    };
 
-} // namespace wrappers
-} // namespace thesis_project
-
+}
