@@ -12,10 +12,9 @@
 #include "src/interfaces/IDescriptorExtractor.hpp"
 #include "include/thesis_project/types.hpp"
 
-namespace thesis_project {
-namespace wrappers {
+namespace thesis_project::wrappers {
 
-/**
+    /**
  * @brief Pyramid-aware DSP wrapper for RGBSIFT
  *
  * This wrapper uses template specialization with DSPVanillaSIFTWrapper<RGBSIFT>
@@ -24,24 +23,23 @@ namespace wrappers {
  * - Color Gaussian pyramid (not grayscale)
  * - Stacked [R|G|B] descriptors (384 dimensions)
  */
-class DSPRGBSIFTWrapperV2 : public IDescriptorExtractor {
-public:
-    DSPRGBSIFTWrapperV2();
+    class DSPRGBSIFTWrapperV2 : public IDescriptorExtractor {
+    public:
+        DSPRGBSIFTWrapperV2();
 
-    cv::Mat extract(const cv::Mat& image,
-                    const std::vector<cv::KeyPoint>& keypoints,
-                    const DescriptorParams& params) override;
+        cv::Mat extract(const cv::Mat& image,
+                        const std::vector<cv::KeyPoint>& keypoints,
+                        const DescriptorParams& params) override;
 
-    int descriptorSize() const override { return last_descriptor_size_; }
-    int descriptorType() const override { return CV_32F; }
-    std::string name() const override { return "DSPRGBSIFT_V2"; }
+        int descriptorSize() const override { return last_descriptor_size_; }
+        int descriptorType() const override { return CV_32F; }
+        std::string name() const override { return "DSPRGBSIFT_V2"; }
 
-private:
-    cv::Ptr<DSPVanillaSIFTWrapper<cv::RGBSIFT>> wrapper_;
-    mutable int last_descriptor_size_ = 384;
-};
+    private:
+        cv::Ptr<DSPVanillaSIFTWrapper<cv::RGBSIFT>> wrapper_;
+        mutable int last_descriptor_size_ = 384;
+    };
 
-} // namespace wrappers
-} // namespace thesis_project
+}
 
 #endif // DSPRGBSIFT_WRAPPER_V2_HPP

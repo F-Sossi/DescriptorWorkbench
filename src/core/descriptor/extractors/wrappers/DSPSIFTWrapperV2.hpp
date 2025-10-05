@@ -3,7 +3,7 @@
 #include "src/interfaces/IDescriptorExtractor.hpp"
 #include "keypoints/DSPVanillaSIFTWrapper.h"
 #include "include/thesis_project/types.hpp"
-#include <opencv2/opencv.hpp>
+#include <opencv4/opencv2/opencv.hpp>
 
 namespace thesis_project {
 
