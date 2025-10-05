@@ -448,6 +448,17 @@ create_gtest_if_exists("tests/unit/metrics/test_experiment_metrics_gtest.cpp" "t
 # Google Test pooling strategy tests (Phase 2 comprehensive testing)
 create_gtest_if_exists("tests/unit/pooling/test_pooling_factory_gtest.cpp" "test_pooling_factory_gtest")
 
+# Experiment helper tests
+create_gtest_if_exists("tests/unit/experiment/test_experiment_helpers_gtest.cpp" "test_experiment_helpers_gtest")
+if(TARGET test_experiment_helpers_gtest)
+    target_sources(test_experiment_helpers_gtest PRIVATE
+        src/core/experiment/ExperimentHelpers.cpp
+        src/core/matching/BruteForceMatching.cpp
+        src/core/metrics/TrueAveragePrecision.cpp)
+    target_link_libraries(test_experiment_helpers_gtest ${OpenCV_LIBRARIES})
+    target_include_directories(test_experiment_helpers_gtest PRIVATE src include ${OpenCV_INCLUDE_DIRS})
+endif()
+
 # Google Test matching factory tests
 create_gtest_if_exists("tests/unit/factories/test_matching_factory_gtest.cpp" "test_matching_factory_gtest")
 if(TARGET test_matching_factory_gtest)
@@ -648,6 +659,7 @@ if(BUILD_EXPERIMENT_CLI)
                        src/core/matching/RatioTestMatching.cpp
                        src/core/matching/MatchingFactory.cpp
                        src/core/metrics/TrueAveragePrecision.cpp
+                       src/core/experiment/ExperimentHelpers.cpp
                        src/core/descriptor/factories/DescriptorFactory.cpp
                        src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
                        src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp

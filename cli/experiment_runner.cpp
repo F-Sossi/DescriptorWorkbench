@@ -4,6 +4,7 @@
 #include "thesis_project/logging.hpp"
 #include "src/core/descriptor/factories/DescriptorFactory.hpp"
 // #include "thesis_project/keypoints/KeypointAttributeAdapter.hpp" // No longer needed with pure intersection sets
+#include "src/core/experiment/ExperimentHelpers.hpp"
 #include "src/core/pooling/PoolingFactory.hpp"
 #include "src/core/matching/MatchingFactory.hpp"
 #include "src/core/metrics/ExperimentMetrics.hpp"
@@ -19,6 +20,7 @@
 #include <fstream>
 
 using namespace thesis_project;
+namespace experiment_helpers = thesis_project::experiment;
 
 // Generate match visualization with correctness color coding
 static cv::Mat generateMatchVisualization(const cv::Mat& img1, const cv::Mat& img2,
@@ -77,6 +79,35 @@ static cv::Mat generateMatchVisualization(const cv::Mat& img1, const cv::Mat& im
     }
 
     return visualization;
+}
+
+static void maybeAccumulateTrueAveragePrecisionFromFile(
+    const std::string& homographyPath,
+    const std::vector<cv::KeyPoint>& keypoints1,
+    const cv::Mat& descriptors1,
+    const std::vector<cv::KeyPoint>& keypoints2,
+    const cv::Mat& descriptors2,
+    const std::string& sceneName,
+    ::ExperimentMetrics& metrics) {
+
+    std::ifstream hfile(homographyPath);
+    if (!hfile.good()) {
+        return;
+    }
+
+    cv::Mat H = cv::Mat::zeros(3, 3, CV_64F);
+    for (int r = 0; r < 3; ++r) {
+        for (int c = 0; c < 3; ++c) {
+            hfile >> H.at<double>(r, c);
+        }
+    }
+
+    if (H.empty()) {
+        return;
+    }
+
+    experiment_helpers::accumulateTrueAveragePrecision(
+        H, keypoints1, descriptors1, keypoints2, descriptors2, sceneName, metrics);
 }
 
 struct ProfilingSummary {
@@ -219,10 +250,10 @@ static ::ExperimentMetrics processDirectoryNew(
                                       cv::Mat& descriptors,
                                       const std::string& log_prefix) -> bool {
             auto t0 = std::chrono::high_resolution_clock::now();
-            try {
-                descriptors = pooling->computeDescriptors(image, keypoints, *extractor, desc_config);
-            } catch (const std::exception& e) {
-                LOG_ERROR("Failed to compute descriptors for " + log_prefix + ": " + std::string(e.what()));
+            descriptors = experiment_helpers::computeDescriptorsWithPooling(
+                image, keypoints, *extractor, *pooling, desc_config);
+            if (descriptors.empty()) {
+                LOG_ERROR("Failed to compute descriptors for " + log_prefix);
                 return false;
             }
             auto t1 = std::chrono::high_resolution_clock::now();
@@ -245,11 +276,10 @@ static ::ExperimentMetrics processDirectoryNew(
                                      const std::string& image_name,
                                      const std::vector<cv::KeyPoint>& keypoints1,
                                      const std::vector<cv::KeyPoint>& keypoints2,
-                                     const std::vector<cv::DMatch>& matches,
-                                     const std::vector<bool>& correctness_flags) {
-            if (!store_matches || matches.empty()) return;
+                                     const experiment_helpers::MatchArtifacts& artifacts) {
+            if (!store_matches || artifacts.matches.empty()) return;
             if (!db_ptr->storeMatches(experiment_id, scene_name, "1.ppm", image_name,
-                                      keypoints1, keypoints2, matches, correctness_flags)) {
+                                      keypoints1, keypoints2, artifacts.matches, artifacts.correctnessFlags)) {
                 LOG_WARNING("Failed to store matches for " + scene_name + "/" + image_name);
             }
         };
@@ -261,72 +291,20 @@ static ::ExperimentMetrics processDirectoryNew(
                                            const cv::Mat& image2,
                                            const std::vector<cv::KeyPoint>& keypoints1,
                                            const std::vector<cv::KeyPoint>& keypoints2,
-                                           const std::vector<cv::DMatch>& matches,
-                                           const std::vector<bool>& correctness_flags,
-                                           int correct_matches) {
-            if (!store_visualizations || matches.empty()) return;
+                                           const experiment_helpers::MatchArtifacts& artifacts) {
+            if (!store_visualizations || artifacts.matches.empty()) return;
             cv::Mat match_viz = generateMatchVisualization(image1, image2, keypoints1, keypoints2,
-                                                           matches, correctness_flags);
+                                                           artifacts.matches, artifacts.correctnessFlags);
             if (match_viz.empty()) return;
 
             std::string image_pair = "1_" + std::to_string(image_index);
-            std::string metadata = "{\"matches\":" + std::to_string(matches.size()) +
-                                  ",\"correct\":" + std::to_string(correct_matches) +
-                                  ",\"precision\":" + std::to_string(matches.empty() ? 0.0 : correct_matches / static_cast<double>(matches.size())) + "}";
+            double precision = artifacts.matches.empty() ? 0.0 : static_cast<double>(artifacts.correctMatches) / artifacts.matches.size();
+            std::string metadata = "{\"matches\":" + std::to_string(artifacts.matches.size()) +
+                                  ",\"correct\":" + std::to_string(artifacts.correctMatches) +
+                                  ",\"precision\":" + std::to_string(precision) + "}";
 
             if (!db_ptr->storeVisualization(experiment_id, scene_name, "matches", image_pair, match_viz, metadata)) {
                 LOG_WARNING("Failed to store visualization for " + scene_name + "/" + image_pair);
-            }
-        };
-
-        auto evaluateTrueMap = [&](const std::string& scene_folder,
-                                   const std::string& scene_name,
-                                   int image_index,
-                                   const std::vector<cv::KeyPoint>& keypoints1,
-                                   const cv::Mat& descriptors1,
-                                   const std::vector<cv::KeyPoint>& keypoints2,
-                                   const cv::Mat& descriptors2,
-                                   ::ExperimentMetrics& metrics) {
-            if (keypoints1.empty() || keypoints2.empty()) return;
-
-            std::string homography_path = scene_folder + "/H_1_" + std::to_string(image_index);
-            std::ifstream hfile(homography_path);
-            if (!hfile.good()) return;
-
-            cv::Mat H = cv::Mat::zeros(3, 3, CV_64F);
-            for (int r = 0; r < 3; ++r) {
-                for (int c = 0; c < 3; ++c) {
-                    hfile >> H.at<double>(r, c);
-                }
-            }
-
-            if (H.empty()) return;
-
-            for (int q = 0; q < static_cast<int>(keypoints1.size()); ++q) {
-                cv::Mat qdesc = descriptors1.row(q);
-                if (qdesc.empty() || cv::norm(qdesc) == 0.0) {
-                    auto dummy = TrueAveragePrecision::QueryAPResult{};
-                    dummy.ap = 0.0;
-                    dummy.has_potential_match = false;
-                    metrics.addQueryAP(scene_name, dummy);
-                    continue;
-                }
-
-                std::vector<double> dists;
-                dists.reserve(keypoints2.size());
-                for (int t = 0; t < static_cast<int>(keypoints2.size()); ++t) {
-                    cv::Mat tdesc = descriptors2.row(t);
-                    if (tdesc.empty()) {
-                        dists.push_back(std::numeric_limits<double>::infinity());
-                        continue;
-                    }
-                    double dist = cv::norm(qdesc, tdesc, cv::NORM_L2SQR);
-                    dists.push_back(dist);
-                }
-
-                auto ap = TrueAveragePrecision::computeQueryAP(
-                    keypoints1[q], H, keypoints2, dists, 3.0);
-                metrics.addQueryAP(scene_name, ap);
             }
         };
 
@@ -401,36 +379,31 @@ static ::ExperimentMetrics processDirectoryNew(
 
                 if (descriptors1.empty() || descriptors2.empty()) continue;
 
-                std::vector<cv::DMatch> matches;
                 auto match_t0 = std::chrono::high_resolution_clock::now();
-                matches = matcher->matchDescriptors(descriptors1, descriptors2);
+                bool evaluateCorrectness = yaml_config.keypoints.params.source == thesis_project::KeypointSource::HOMOGRAPHY_PROJECTION;
+                auto artifacts = experiment_helpers::computeMatches(
+                    descriptors1, descriptors2, *matcher, evaluateCorrectness, keypoints1, keypoints2);
                 auto match_t1 = std::chrono::high_resolution_clock::now();
                 match_ms += std::chrono::duration_cast<std::chrono::milliseconds>(match_t1 - match_t0).count();
 
-                int correct_matches = 0;
-                std::vector<bool> correctness_flags;
-                if (yaml_config.keypoints.params.source == thesis_project::KeypointSource::HOMOGRAPHY_PROJECTION && !matches.empty()) {
-                    correctness_flags.reserve(matches.size());
-                    for (const auto& match : matches) {
-                        bool is_correct = match.queryIdx == match.trainIdx;
-                        if (is_correct) {
-                            ++correct_matches;
-                        }
-                        correctness_flags.push_back(is_correct);
-                    }
-
-                    double precision = matches.empty() ? 0.0 : static_cast<double>(correct_matches) / matches.size();
-                    metrics.addImageResult(scene_name, precision, static_cast<int>(matches.size()), static_cast<int>(keypoints2.size()));
-                } else {
-                    correctness_flags.assign(matches.size(), false);
+                if (evaluateCorrectness && !artifacts.matches.empty()) {
+                    double precision = static_cast<double>(artifacts.correctMatches) / artifacts.matches.size();
+                    metrics.addImageResult(scene_name, precision, static_cast<int>(artifacts.matches.size()), static_cast<int>(keypoints2.size()));
                 }
 
-                maybeStoreMatches(scene_name, image_name, keypoints1, keypoints2, matches, correctness_flags);
+                maybeStoreMatches(scene_name, image_name, keypoints1, keypoints2, artifacts);
                 maybeStoreVisualization(scene_name, image_name, image_index, image1, image2,
-                                         keypoints1, keypoints2, matches, correctness_flags, correct_matches);
+                                         keypoints1, keypoints2, artifacts);
 
-                evaluateTrueMap(scene_folder, scene_name, image_index,
-                                 keypoints1, descriptors1, keypoints2, descriptors2, metrics);
+                std::string homography_path = scene_folder + "/H_1_" + std::to_string(image_index);
+                maybeAccumulateTrueAveragePrecisionFromFile(
+                    homography_path,
+                    keypoints1,
+                    descriptors1,
+                    keypoints2,
+                    descriptors2,
+                    scene_name,
+                    metrics);
             }
 
             metrics.calculateMeanPrecision();
