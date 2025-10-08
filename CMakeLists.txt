@@ -743,6 +743,15 @@ if(BUILD_EXPERIMENT_CLI)
             message(STATUS "Using system yaml-cpp library for experiment runner")
         endif()
 
+        # OpenMP for scene-level parallelism (optional but recommended)
+        find_package(OpenMP)
+        if(OpenMP_CXX_FOUND)
+            target_link_libraries(experiment_runner OpenMP::OpenMP_CXX)
+            message(STATUS "OpenMP enabled for parallel scene processing (configurable via YAML)")
+        else()
+            message(WARNING "OpenMP not found - experiment_runner will run sequentially")
+        endif()
+
         message(STATUS "CLI experiment runner configured")
         
     else()

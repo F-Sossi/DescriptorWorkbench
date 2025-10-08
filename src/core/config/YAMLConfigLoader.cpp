@@ -54,6 +54,10 @@ namespace config {
         if (root["database"]) {
             parseDatabase(root["database"], config.database);
         }
+
+        if (root["performance"]) {
+            parsePerformance(root["performance"], config.performance);
+        }
         // Migration removed: ignore any 'migration' key silently
         
         // Basic validation
@@ -214,7 +218,24 @@ namespace config {
                 if (dnn["std"]) desc_config.params.dnn_std = dnn["std"].as<float>();
                 if (dnn["per_patch_standardize"]) desc_config.params.dnn_per_patch_standardize = dnn["per_patch_standardize"].as<bool>();
             }
-            
+
+            // VGG descriptor config (optional)
+            if (desc_node["vgg"]) {
+                const auto& vgg = desc_node["vgg"];
+                if (vgg["desc_type"]) {
+                    int dt = vgg["desc_type"].as<int>();
+                    // Validate VGG descriptor type (100=VGG_120, 101=VGG_80, 102=VGG_64, 103=VGG_48)
+                    if (dt >= 100 && dt <= 103) {
+                        desc_config.params.vgg_desc_type = dt;
+                    }
+                }
+                if (vgg["isigma"]) desc_config.params.vgg_isigma = vgg["isigma"].as<float>();
+                if (vgg["img_normalize"]) desc_config.params.vgg_img_normalize = vgg["img_normalize"].as<bool>();
+                if (vgg["use_scale_orientation"]) desc_config.params.vgg_use_scale_orientation = vgg["use_scale_orientation"].as<bool>();
+                if (vgg["scale_factor"]) desc_config.params.vgg_scale_factor = vgg["scale_factor"].as<float>();
+                if (vgg["dsc_normalize"]) desc_config.params.vgg_dsc_normalize = vgg["dsc_normalize"].as<bool>();
+            }
+
             descriptors.push_back(desc_config);
         }
     }
@@ -354,6 +375,14 @@ namespace config {
         if (node["save_descriptors"]) database.save_descriptors = node["save_descriptors"].as<bool>();
         if (node["save_matches"]) database.save_matches = node["save_matches"].as<bool>();
         if (node["save_visualizations"]) database.save_visualizations = node["save_visualizations"].as<bool>();
+    }
+
+    void YAMLConfigLoader::parsePerformance(const YAML::Node& node, PerformanceParams& performance) {
+        if (node["num_threads"]) performance.num_threads = node["num_threads"].as<int>();
+        if (node["parallel_scenes"]) performance.parallel_scenes = node["parallel_scenes"].as<bool>();
+        if (node["parallel_images"]) performance.parallel_images = node["parallel_images"].as<bool>();
+        if (node["batch_size"]) performance.batch_size = node["batch_size"].as<int>();
+        if (node["enable_profiling"]) performance.enable_profiling = node["enable_profiling"].as<bool>();
     }
 
     // Migration removed

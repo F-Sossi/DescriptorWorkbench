@@ -27,6 +27,13 @@ descriptors:
     normalize_after_pooling: true
     norm_type: 4  # L2
     use_color: false
+    vgg:
+      desc_type: 100  # VGG_120 (120 dimensions)
+      isigma: 1.4
+      img_normalize: true
+      use_scale_orientation: true
+      scale_factor: 6.25
+      dsc_normalize: false
     
   # ===== POOLING EFFECTS (Grayscale, L2 norm) =====
   - name: "vgg_grayscale_dsp_l2"
@@ -36,13 +43,27 @@ descriptors:
     normalize_after_pooling: true
     norm_type: 4  # L2
     use_color: false
-    
+    vgg:
+      desc_type: 100  # VGG_120 (120 dimensions)
+      isigma: 1.4
+      img_normalize: true
+      use_scale_orientation: true
+      scale_factor: 6.25
+      dsc_normalize: false
+
   - name: "vgg_grayscale_stacking_l2"
     type: "vgg"
     pooling: "stacking"
     normalize_after_pooling: true
     norm_type: 4  # L2
     use_color: false
+    vgg:
+      desc_type: 100  # VGG_120 (120 dimensions)
+      isigma: 1.4
+      img_normalize: true
+      use_scale_orientation: true
+      scale_factor: 6.25
+      dsc_normalize: false
     
   # ===== COLOR EFFECTS (No pooling, L2 norm) =====
   - name: "vgg_baseline_color_none_l2"
@@ -51,7 +72,14 @@ descriptors:
     normalize_after_pooling: true
     norm_type: 4  # L2
     use_color: true
-    
+    vgg:
+      desc_type: 100  # VGG_120 (120 dimensions)
+      isigma: 1.4
+      img_normalize: true
+      use_scale_orientation: true
+      scale_factor: 6.25
+      dsc_normalize: false
+
   # ===== NORMALIZATION EFFECTS (Grayscale, No pooling) =====
   - name: "vgg_baseline_grayscale_none_l1"
     type: "vgg"
@@ -59,6 +87,13 @@ descriptors:
     normalize_after_pooling: true
     norm_type: 1  # L1
     use_color: false
+    vgg:
+      desc_type: 100  # VGG_120 (120 dimensions)
+      isigma: 1.4
+      img_normalize: true
+      use_scale_orientation: true
+      scale_factor: 6.25
+      dsc_normalize: false
     
   # ===== COMBINED EFFECTS =====
   # Color + DSP
@@ -69,7 +104,14 @@ descriptors:
     normalize_after_pooling: true
     norm_type: 4  # L2
     use_color: true
-    
+    vgg:
+      desc_type: 100  # VGG_120 (120 dimensions)
+      isigma: 1.4
+      img_normalize: true
+      use_scale_orientation: true
+      scale_factor: 6.25
+      dsc_normalize: false
+
   # Color + Stacking
   - name: "vgg_color_stacking_l2"
     type: "vgg"
@@ -77,7 +119,14 @@ descriptors:
     normalize_after_pooling: true
     norm_type: 4  # L2
     use_color: true
-    
+    vgg:
+      desc_type: 100  # VGG_120 (120 dimensions)
+      isigma: 1.4
+      img_normalize: true
+      use_scale_orientation: true
+      scale_factor: 6.25
+      dsc_normalize: false
+
   # DSP + L1 norm
   - name: "vgg_grayscale_dsp_l1"
     type: "vgg"
@@ -86,7 +135,14 @@ descriptors:
     normalize_after_pooling: true
     norm_type: 1  # L1
     use_color: false
-    
+    vgg:
+      desc_type: 100  # VGG_120 (120 dimensions)
+      isigma: 1.4
+      img_normalize: true
+      use_scale_orientation: true
+      scale_factor: 6.25
+      dsc_normalize: false
+
   # Stacking + L1 norm
   - name: "vgg_grayscale_stacking_l1"
     type: "vgg"
@@ -94,6 +150,13 @@ descriptors:
     normalize_after_pooling: true
     norm_type: 1  # L1
     use_color: false
+    vgg:
+      desc_type: 100  # VGG_120 (120 dimensions)
+      isigma: 1.4
+      img_normalize: true
+      use_scale_orientation: true
+      scale_factor: 6.25
+      dsc_normalize: false
 
 evaluation:
   matching:

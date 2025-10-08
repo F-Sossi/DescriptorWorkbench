@@ -1,46 +1,37 @@
 experiment:
-  name: "sift_baseline"
-  description: "Baseline SIFT descriptor on locked SIFT keypoints"
+  name: "cnn_descriptor_cpu_keynet_sift_pairs"
+  description: "CNN descriptors on CPU (forced) using KeyNet↔SIFT pair set - performance comparison against GPU execution"
   version: "1.0"
   author: "automation"
 
 dataset:
   type: "hpatches"
   path: "../data/"
-  scenes: []  # use full benchmark
+  scenes: []
 
 keypoints:
-  generator: "sift"
-  source: "locked_in"
-  keypoint_set_name: "sift_keynet_pairs"
-  use_locked_keypoints: true
-
-keypoints_params:
-  max_features: 2000
+  generator: "keynet"
+  max_features: 8000
   contrast_threshold: 0.04
   edge_threshold: 10.0
-
-keypoints:
-  generator: "sift"
-  source: "locked_in"
-  keypoint_set_name: "sift_keynet_pairs"
+  source: "independent_detection"
+  keypoint_set_name: "keynet_sift_pairs"
+  keypoint_set_id: 4
   use_locked_keypoints: true
 
 descriptors:
-  - name: "sift_baseline"
-    type: "sift"
+  - name: "libtorch_hardnet_cpu"
+    type: "libtorch_hardnet"
     pooling: "none"
-    pooling_aggregation: "max"
     normalize_after_pooling: true
-    norm_type: 4  # L2
-
-  - name: "rootsift_baseline"
-    type: "sift"
+    use_color: false
+    device: "cpu"  # Force CPU execution
+  - name: "libtorch_sosnet_cpu"
+    type: "libtorch_sosnet"
     pooling: "none"
-    pooling_aggregation: "max"
-    rooting_stage: "after_pooling"
     normalize_after_pooling: true
-    norm_type: 4
+    use_color: false
+    device: "cpu"  # Force CPU execution
 
 evaluation:
   matching:
@@ -62,7 +53,7 @@ database:
 
 performance:
   num_threads: 0  # 0 = auto-detect (uses all available cores)
-  parallel_scenes: true  # Enable scene-level parallelism with OpenMP
+  parallel_scenes: true  # Enable OpenMP scene-level parallelism for faster processing
   parallel_images: false  # Future enhancement (not yet implemented)
-  batch_size: 512  # Batch size for DNN descriptors
+  batch_size: 2048  # Larger batch size for CNN descriptors
   enable_profiling: false  # Print detailed timing breakdown

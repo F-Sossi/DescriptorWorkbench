@@ -1,0 +1,64 @@
+experiment:
+  name: "debug_dsp_v2"
+  description: "Debug DSPSIFT_V2 implementation"
+  version: "1.0"
+  author: "debug"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: ["i_dome"]  # Just one scene for quick testing
+
+keypoints:
+  generator: "sift"
+  max_features: 8000
+  contrast_threshold: 0.04
+  edge_threshold: 10.0
+  source: "independent_detection"
+  keypoint_set_name: "sift_keynet_pairs"
+  keypoint_set_id: 3
+  use_locked_keypoints: true
+
+descriptors:
+  - name: "sift_test"
+    type: "sift"
+    pooling: "none"
+    normalize_after_pooling: true
+    use_color: false
+    norm_type: 2
+    rooting_stage: "none"
+
+  - name: "dspsift_v2_test"
+    type: "dspsift_v2"
+    pooling: "none"
+    normalize_after_pooling: true
+    use_color: false
+    norm_type: 2
+    rooting_stage: "none"
+    scales: [0.1667, 0.5, 0.75, 1.0, 1.25, 1.333]
+    pooling_aggregation: "max"
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+database:
+  connection: "sqlite:///experiments.db"
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+performance:
+  num_threads: 0
+  parallel_scenes: false  # Disable for easier debugging
+  parallel_images: false
+  batch_size: 512
+  enable_profiling: false

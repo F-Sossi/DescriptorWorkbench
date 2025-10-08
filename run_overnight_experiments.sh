@@ -5,7 +5,7 @@
 # 
 # IMPORTANT: Ensure you have enough disk space and the database is backed up
 # Total estimated time: 4-6 hours depending on hardware
-# Expected experiments: 8 experiment sets (systematic SIFT-based + CNN baselines)
+# Expected experiments: 13 experiment sets (systematic SIFT-family × 2 keypoint sets + CNN baselines)
 
 echo "=========================================="
 echo "OVERNIGHT DESCRIPTOR ANALYSIS STARTING"
@@ -136,17 +136,11 @@ FAILED_EXPERIMENTS=0
 
 # List of essential experiment configs for paper
 EXPERIMENT_CONFIGS=(
-    # SIFT-based systematic analyses
-    "$CONFIG_DIR/sift_systematic_analysis.yaml"
-    "$CONFIG_DIR/honc_systematic_analysis.yaml"
-    "$CONFIG_DIR/vsift_systematic_analysis.yaml"
-    "$CONFIG_DIR/dspsift_systematic_analysis.yaml"
-    "$CONFIG_DIR/vgg_systematic_analysis.yaml"
+    # Comprehensive traditional descriptor ablation (SIFT↔KeyNet locked keypoints)
+    "$CONFIG_DIR/descriptor_processing_sift_keynet_pairs.yaml"
 
-    # Non-SIFT baseline comparisons
-    "$CONFIG_DIR/surf_baseline.yaml"
-    "$CONFIG_DIR/libtorch_hardnet_baseline.yaml"
-    "$CONFIG_DIR/libtorch_sosnet_baseline.yaml"
+    # Reference CNN descriptors on KeyNet↔SIFT locked keypoints
+    "$CONFIG_DIR/cnn_descriptor_reference_keynet_sift_pairs.yaml"
 )
 
 # Run each experiment set

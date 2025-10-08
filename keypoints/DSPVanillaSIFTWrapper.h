@@ -100,7 +100,9 @@ namespace detail {
     }
 
     inline std::vector<float> defaultScales() {
-        return {0.85f, 1.0f, 1.30f};
+        // Match DSPSIFT's linearly interpolated scales: linePoint1=0.85, linePoint2=1.30, numScales=3
+        // yValue[i] = 0.85 + i * (1.30 - 0.85) / 2 = 0.85 + i * 0.225
+        return {0.85f, 1.075f, 1.30f};
     }
 
     inline std::vector<float> buildWeights(const std::vector<float>& scales,
@@ -168,18 +170,39 @@ void DSPVanillaSIFTWrapper<SiftType>::computeDSP(
     const bool apply_root_before = params.rooting_stage == RootingStage::R_BEFORE_POOLING;
 
     // Prepare base image (color-aware where supported)
-    cv::Mat base;
     cv::Mat converted;
+    const cv::Mat* source = &image;
 
     if constexpr (supportsColorDescriptor()) {
-        const cv::Mat* source = &image;
         if (image.channels() == 1) {
             cv::cvtColor(image, converted, cv::COLOR_GRAY2BGR);
             source = &converted;
         }
+    } else {
+        if (image.channels() > 1) {
+            cv::cvtColor(image, converted, cv::COLOR_BGR2GRAY);
+            source = &converted;
+        }
+    }
 
-        base = this->createInitialColorImage(*source, false, static_cast<float>(this->sigma));
+    // Compute firstOctave from keypoints (DSPSIFT logic from lines 254-266)
+    int firstOctave = 0;
+    int maxOctave = INT_MIN;
+    for (const auto& kp : keypoints) {
+        int octave, layer;
+        float scale;
+        this->unpackOctave(kp, octave, layer, scale);
+        firstOctave = std::min(firstOctave, octave);
+        maxOctave = std::max(maxOctave, octave);
+    }
+    firstOctave = std::min(firstOctave, 0);  // Ensure firstOctave <= 0
+    int actualNOctaves = maxOctave - firstOctave + 1;
 
+    // Prepare the base image after knowing the octave configuration so we can match legacy DSPSIFT.
+    const bool doubleImage = firstOctave < 0;
+    cv::Mat base;
+    if constexpr (supportsColorDescriptor()) {
+        base = this->createInitialColorImage(*source, doubleImage, static_cast<float>(this->sigma));
         if (base.channels() != 3) {
             cv::cvtColor(base, base, cv::COLOR_GRAY2BGR);
         }
@@ -187,14 +210,7 @@ void DSPVanillaSIFTWrapper<SiftType>::computeDSP(
             base.convertTo(base, CV_32F);
         }
     } else {
-        const cv::Mat* source = &image;
-        if (image.channels() > 1) {
-            cv::cvtColor(image, converted, cv::COLOR_BGR2GRAY);
-            source = &converted;
-        }
-
-        base = this->createInitialImage(*source, false, static_cast<float>(this->sigma));
-
+        base = this->createInitialImage(*source, doubleImage, static_cast<float>(this->sigma));
         if (base.channels() != 1) {
             cv::cvtColor(base, base, cv::COLOR_BGR2GRAY);
         }
@@ -205,11 +221,17 @@ void DSPVanillaSIFTWrapper<SiftType>::computeDSP(
 
     // Build Gaussian pyramid using inherited method (matches descriptor expectations)
     std::vector<cv::Mat> gpyr;
-    int nOctaves = cvRound(std::log(static_cast<double>(std::min(base.cols, base.rows))) / std::log(2.0) - 2.0);
+    int nOctaves = actualNOctaves > 0 ? actualNOctaves : cvRound(std::log(static_cast<double>(std::min(base.cols, base.rows))) / std::log(2.0) - 2.0) - firstOctave;
+
+    // Expand pyramid if using scales < 1.0 (DSPSIFT logic line 277)
+    auto minScale = *std::min_element(scales.begin(), scales.end());
+    if (scales.size() > 1 && minScale < 1.0f) {
+        nOctaves += 1;
+    }
+
     this->buildGaussianPyramid(base, gpyr, nOctaves);
 
-    // Extract first octave info from keypoints to get nOctaveLayers
-    int firstOctave = 0;
+    // Get nOctaveLayers
     int nOctaveLayers = this->nOctaveLayers;
 
     // Collect descriptors for each scale (following DSPSIFT logic)
@@ -230,7 +252,8 @@ void DSPVanillaSIFTWrapper<SiftType>::computeDSP(
             int octave, layer;
             float scale;
 
-            // Calculate octave/layer for this scale (DSPSIFT logic from lines 160-165)
+            // Use DSPSIFT multi-scale method (lines 159-162): recalculate octave/layer from scaled size
+            // This is different from single-scale SIFT which uses unpackOctave!
             float size = static_cast<float>(kpt.size * scale_factor);
             float floatOctave = static_cast<float>(log2(size / (2 * this->sigma)));
             octave = static_cast<int>(floor(floatOctave));

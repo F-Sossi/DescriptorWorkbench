@@ -59,7 +59,14 @@ CREATE TABLE IF NOT EXISTS keypoint_sets (
     -- Non-overlapping constraint support (NEW: for CNN optimization)
     overlap_filtering BOOLEAN DEFAULT FALSE,  -- Whether non-overlapping constraint was applied
     min_distance REAL DEFAULT 0.0,          -- Minimum distance in pixels (0 = no constraint)
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    -- Intersection set support (NEW: for paired detector keypoint sets)
+    source_set_a_id INTEGER DEFAULT NULL,   -- Reference to first source set for intersection
+    source_set_b_id INTEGER DEFAULT NULL,   -- Reference to second source set for intersection
+    tolerance_px REAL DEFAULT NULL,         -- Spatial tolerance in pixels for intersection matching
+    intersection_method TEXT DEFAULT NULL,  -- Method used for intersection (e.g., "spatial_nearest")
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(source_set_a_id) REFERENCES keypoint_sets(id),
+    FOREIGN KEY(source_set_b_id) REFERENCES keypoint_sets(id)
 );
 
 -- Locked-in keypoints storage with keypoint set reference

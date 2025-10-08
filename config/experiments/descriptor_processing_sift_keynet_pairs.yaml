@@ -1,0 +1,972 @@
+experiment:
+  name: "descriptor_processing_sift_keynet_pairs"
+  description: "Ablation of pooling, rooting, normalization, and color combos for SIFT-family descriptors on SIFT↔KeyNet set"
+  version: "1.0"
+  author: "automation"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []
+
+keypoints:
+  generator: "sift"
+  max_features: 2000
+  contrast_threshold: 0.04
+  edge_threshold: 10.0
+  source: "independent_detection"
+  keypoint_set_name: "sift_keynet_pairs"
+  keypoint_set_id: 15
+  use_locked_keypoints: true
+
+descriptors:
+  # === SIFT (grayscale) variations ===
+- name: "sift_plain_l1_root_none"
+  type: "sift"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "none"
+  use_color: false
+- name: "sift_plain_l1_root_before"
+  type: "sift"
+  pooling: "none"
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 1
+  rooting_stage: "before_pooling"
+  use_color: false
+- name: "sift_plain_l1_root_after"
+  type: "sift"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "after_pooling"
+  use_color: false
+- name: "sift_plain_l2_root_none"
+  type: "sift"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "none"
+  use_color: false
+- name: "sift_plain_l2_root_before"
+  type: "sift"
+  pooling: "none"
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 4
+  rooting_stage: "before_pooling"
+  use_color: false
+- name: "sift_plain_l2_root_after"
+  type: "sift"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "after_pooling"
+  use_color: false
+  # === SIFT (color flag) variations ===
+- name: "sift_plain_color_l1_root_none"
+  type: "sift"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "none"
+  use_color: true
+- name: "sift_plain_color_l1_root_before"
+  type: "sift"
+  pooling: "none"
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 1
+  rooting_stage: "before_pooling"
+  use_color: true
+- name: "sift_plain_color_l1_root_after"
+  type: "sift"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "after_pooling"
+  use_color: true
+- name: "sift_plain_color_l2_root_none"
+  type: "sift"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "none"
+  use_color: true
+- name: "sift_plain_color_l2_root_before"
+  type: "sift"
+  pooling: "none"
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 4
+  rooting_stage: "before_pooling"
+  use_color: true
+- name: "sift_plain_color_l2_root_after"
+  type: "sift"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "after_pooling"
+  use_color: true
+  # === DSPSIFT v2 (grayscale) ===
+- name: "sift_dsp_l1_root_none"
+  type: "dspsift_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "none"
+  use_color: false
+- name: "sift_dsp_l1_root_before"
+  type: "dspsift_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 1
+  rooting_stage: "before_pooling"
+  use_color: false
+- name: "sift_dsp_l1_root_after"
+  type: "dspsift_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "after_pooling"
+  use_color: false
+- name: "sift_dsp_l2_root_none"
+  type: "dspsift_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "none"
+  use_color: false
+- name: "sift_dsp_l2_root_before"
+  type: "dspsift_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 4
+  rooting_stage: "before_pooling"
+  use_color: false
+- name: "sift_dsp_l2_root_after"
+  type: "dspsift_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "after_pooling"
+  use_color: false
+  # === DSPSIFT v2 (color via RGBSIFT wrapper) ===
+- name: "sift_dsp_color_l1_root_none"
+  type: "dsprgbsift_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "none"
+  use_color: true
+- name: "sift_dsp_color_l1_root_before"
+  type: "dsprgbsift_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 1
+  rooting_stage: "before_pooling"
+  use_color: true
+- name: "sift_dsp_color_l1_root_after"
+  type: "dsprgbsift_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "after_pooling"
+  use_color: true
+- name: "sift_dsp_color_l2_root_none"
+  type: "dsprgbsift_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "none"
+  use_color: true
+- name: "sift_dsp_color_l2_root_before"
+  type: "dsprgbsift_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 4
+  rooting_stage: "before_pooling"
+  use_color: true
+- name: "sift_dsp_color_l2_root_after"
+  type: "dsprgbsift_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "after_pooling"
+  use_color: true
+  # === DSPSIFT v2 stacking (multi-scale concatenate) ===
+- name: "sift_dsp_stack_l1_root_none"
+  type: "dspsift_v2"
+  pooling: "none"
+  pooling_aggregation: "concatenate"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "none"
+  use_color: false
+- name: "sift_dsp_stack_l1_root_before"
+  type: "dspsift_v2"
+  pooling: "none"
+  pooling_aggregation: "concatenate"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 1
+  rooting_stage: "before_pooling"
+  use_color: false
+- name: "sift_dsp_stack_l1_root_after"
+  type: "dspsift_v2"
+  pooling: "none"
+  pooling_aggregation: "concatenate"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "after_pooling"
+  use_color: false
+- name: "sift_dsp_stack_l2_root_none"
+  type: "dspsift_v2"
+  pooling: "none"
+  pooling_aggregation: "concatenate"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "none"
+  use_color: false
+- name: "sift_dsp_stack_l2_root_before"
+  type: "dspsift_v2"
+  pooling: "none"
+  pooling_aggregation: "concatenate"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 4
+  rooting_stage: "before_pooling"
+  use_color: false
+- name: "sift_dsp_stack_l2_root_after"
+  type: "dspsift_v2"
+  pooling: "none"
+  pooling_aggregation: "concatenate"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "after_pooling"
+  use_color: false
+  # === RGBSIFT base (color) ===
+- name: "rgbsift_plain_l1_root_none"
+  type: "rgbsift"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "none"
+  use_color: true
+- name: "rgbsift_plain_l1_root_before"
+  type: "rgbsift"
+  pooling: "none"
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 1
+  rooting_stage: "before_pooling"
+  use_color: true
+- name: "rgbsift_plain_l1_root_after"
+  type: "rgbsift"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "after_pooling"
+  use_color: true
+- name: "rgbsift_plain_l2_root_none"
+  type: "rgbsift"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "none"
+  use_color: true
+- name: "rgbsift_plain_l2_root_before"
+  type: "rgbsift"
+  pooling: "none"
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 4
+  rooting_stage: "before_pooling"
+  use_color: true
+- name: "rgbsift_plain_l2_root_after"
+  type: "rgbsift"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "after_pooling"
+  use_color: true
+  # === RGBSIFT with DSP wrapper ===
+- name: "rgbsift_dsp_l1_root_none"
+  type: "dsprgbsift_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "none"
+  use_color: true
+- name: "rgbsift_dsp_l1_root_before"
+  type: "dsprgbsift_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 1
+  rooting_stage: "before_pooling"
+  use_color: true
+- name: "rgbsift_dsp_l1_root_after"
+  type: "dsprgbsift_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "after_pooling"
+  use_color: true
+- name: "rgbsift_dsp_l2_root_none"
+  type: "dsprgbsift_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "none"
+  use_color: true
+- name: "rgbsift_dsp_l2_root_before"
+  type: "dsprgbsift_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 4
+  rooting_stage: "before_pooling"
+  use_color: true
+- name: "rgbsift_dsp_l2_root_after"
+  type: "dsprgbsift_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "after_pooling"
+  use_color: true
+  # === SIFT + RGBSIFT stacking ===
+- name: "sift_rgb_stack_l1_root_none"
+  type: "sift"
+  pooling: "stacking"
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "none"
+  secondary_descriptor: "rgbsift"
+  use_color: false
+- name: "sift_rgb_stack_l1_root_before"
+  type: "sift"
+  pooling: "stacking"
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 1
+  rooting_stage: "before_pooling"
+  secondary_descriptor: "rgbsift"
+  use_color: false
+- name: "sift_rgb_stack_l1_root_after"
+  type: "sift"
+  pooling: "stacking"
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "after_pooling"
+  secondary_descriptor: "rgbsift"
+  use_color: false
+- name: "sift_rgb_stack_l2_root_none"
+  type: "sift"
+  pooling: "stacking"
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "none"
+  secondary_descriptor: "rgbsift"
+  use_color: false
+- name: "sift_rgb_stack_l2_root_before"
+  type: "sift"
+  pooling: "stacking"
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 4
+  rooting_stage: "before_pooling"
+  secondary_descriptor: "rgbsift"
+  use_color: false
+- name: "sift_rgb_stack_l2_root_after"
+  type: "sift"
+  pooling: "stacking"
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "after_pooling"
+  secondary_descriptor: "rgbsift"
+  use_color: false
+  # === HoNC base (color) ===
+- name: "honc_plain_l1_root_none"
+  type: "honc"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "none"
+  use_color: true
+- name: "honc_plain_l1_root_before"
+  type: "honc"
+  pooling: "none"
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 1
+  rooting_stage: "before_pooling"
+  use_color: true
+- name: "honc_plain_l1_root_after"
+  type: "honc"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "after_pooling"
+  use_color: true
+- name: "honc_plain_l2_root_none"
+  type: "honc"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "none"
+  use_color: true
+- name: "honc_plain_l2_root_before"
+  type: "honc"
+  pooling: "none"
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 4
+  rooting_stage: "before_pooling"
+  use_color: true
+- name: "honc_plain_l2_root_after"
+  type: "honc"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "after_pooling"
+  use_color: true
+  # === HoNC DSP wrapper ===
+- name: "honc_dsp_l1_root_none"
+  type: "dsphonc_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "none"
+  use_color: true
+- name: "honc_dsp_l1_root_before"
+  type: "dsphonc_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 1
+  rooting_stage: "before_pooling"
+  use_color: true
+- name: "honc_dsp_l1_root_after"
+  type: "dsphonc_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "after_pooling"
+  use_color: true
+- name: "honc_dsp_l2_root_none"
+  type: "dsphonc_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "none"
+  use_color: true
+- name: "honc_dsp_l2_root_before"
+  type: "dsphonc_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 4
+  rooting_stage: "before_pooling"
+  use_color: true
+- name: "honc_dsp_l2_root_after"
+  type: "dsphonc_v2"
+  pooling: "none"
+  pooling_aggregation: "average"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "after_pooling"
+  use_color: true
+  # === HoNC stacking with SIFT (color + gray) ===
+- name: "honc_sift_stack_l1_root_none"
+  type: "honc"
+  pooling: "stacking"
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "none"
+  secondary_descriptor: "sift"
+  use_color: true
+- name: "honc_sift_stack_l1_root_before"
+  type: "honc"
+  pooling: "stacking"
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 1
+  rooting_stage: "before_pooling"
+  secondary_descriptor: "sift"
+  use_color: true
+- name: "honc_sift_stack_l1_root_after"
+  type: "honc"
+  pooling: "stacking"
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "after_pooling"
+  secondary_descriptor: "sift"
+  use_color: true
+- name: "honc_sift_stack_l2_root_none"
+  type: "honc"
+  pooling: "stacking"
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "none"
+  secondary_descriptor: "sift"
+  use_color: true
+- name: "honc_sift_stack_l2_root_before"
+  type: "honc"
+  pooling: "stacking"
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 4
+  rooting_stage: "before_pooling"
+  secondary_descriptor: "sift"
+  use_color: true
+- name: "honc_sift_stack_l2_root_after"
+  type: "honc"
+  pooling: "stacking"
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "after_pooling"
+  secondary_descriptor: "sift"
+  use_color: true
+  # === VGG grayscale and color ===
+- name: "vgg_gray_plain_l1_root_none"
+  type: "vgg"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "none"
+  use_color: false
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_color_plain_l1_root_none"
+  type: "vgg"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "none"
+  use_color: true
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_gray_plain_l1_root_before"
+  type: "vgg"
+  pooling: "none"
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 1
+  rooting_stage: "before_pooling"
+  use_color: false
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_color_plain_l1_root_before"
+  type: "vgg"
+  pooling: "none"
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 1
+  rooting_stage: "before_pooling"
+  use_color: true
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_gray_plain_l1_root_after"
+  type: "vgg"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "after_pooling"
+  use_color: false
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_color_plain_l1_root_after"
+  type: "vgg"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "after_pooling"
+  use_color: true
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_gray_plain_l2_root_none"
+  type: "vgg"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "none"
+  use_color: false
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_color_plain_l2_root_none"
+  type: "vgg"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "none"
+  use_color: true
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_gray_plain_l2_root_before"
+  type: "vgg"
+  pooling: "none"
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 4
+  rooting_stage: "before_pooling"
+  use_color: false
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_color_plain_l2_root_before"
+  type: "vgg"
+  pooling: "none"
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 4
+  rooting_stage: "before_pooling"
+  use_color: true
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_gray_plain_l2_root_after"
+  type: "vgg"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "after_pooling"
+  use_color: false
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_color_plain_l2_root_after"
+  type: "vgg"
+  pooling: "none"
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "after_pooling"
+  use_color: true
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+  # === VGG with DSP pooling (domain-size) ===
+- name: "vgg_gray_dsp_l1_root_none"
+  type: "vgg"
+  pooling: "domain_size_pooling"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "none"
+  use_color: false
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_color_dsp_l1_root_none"
+  type: "vgg"
+  pooling: "domain_size_pooling"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "none"
+  use_color: true
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_gray_dsp_l1_root_before"
+  type: "vgg"
+  pooling: "domain_size_pooling"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 1
+  rooting_stage: "before_pooling"
+  use_color: false
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_color_dsp_l1_root_before"
+  type: "vgg"
+  pooling: "domain_size_pooling"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 1
+  rooting_stage: "before_pooling"
+  use_color: true
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_gray_dsp_l1_root_after"
+  type: "vgg"
+  pooling: "domain_size_pooling"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "after_pooling"
+  use_color: false
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_color_dsp_l1_root_after"
+  type: "vgg"
+  pooling: "domain_size_pooling"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 1
+  rooting_stage: "after_pooling"
+  use_color: true
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_gray_dsp_l2_root_none"
+  type: "vgg"
+  pooling: "domain_size_pooling"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "none"
+  use_color: false
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_color_dsp_l2_root_none"
+  type: "vgg"
+  pooling: "domain_size_pooling"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "none"
+  use_color: true
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_gray_dsp_l2_root_before"
+  type: "vgg"
+  pooling: "domain_size_pooling"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 4
+  rooting_stage: "before_pooling"
+  use_color: false
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_color_dsp_l2_root_before"
+  type: "vgg"
+  pooling: "domain_size_pooling"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  normalize_before_pooling: true
+  norm_type: 4
+  rooting_stage: "before_pooling"
+  use_color: true
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_gray_dsp_l2_root_after"
+  type: "vgg"
+  pooling: "domain_size_pooling"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "after_pooling"
+  use_color: false
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+- name: "vgg_color_dsp_l2_root_after"
+  type: "vgg"
+  pooling: "domain_size_pooling"
+  scales: [0.85, 1.00, 1.30]
+  normalize_after_pooling: true
+  norm_type: 4
+  rooting_stage: "after_pooling"
+  use_color: true
+  vgg:
+    desc_type: 100  # VGG_120 (120 dimensions)
+    isigma: 1.4
+    img_normalize: true
+    use_scale_orientation: true
+    scale_factor: 6.25
+    dsc_normalize: false
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+database:
+  connection: "sqlite:///experiments.db"
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+performance:
+  num_threads: 0  # 0 = auto-detect (uses all available cores)
+  parallel_scenes: true  # Enable OpenMP scene-level parallelism for faster processing
+  parallel_images: false  # Future enhancement (not yet implemented)
+  batch_size: 512  # Batch size for DNN descriptors
+  enable_profiling: false  # Print detailed timing breakdown

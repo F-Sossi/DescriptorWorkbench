@@ -51,6 +51,9 @@ namespace thesis_project::config {
         // Database configuration
         DatabaseParams database;
 
+        // Performance configuration
+        PerformanceParams performance;
+
         // Migration removed: new pipeline is the default
     };
 

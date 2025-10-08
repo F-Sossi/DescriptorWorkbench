@@ -1,0 +1,86 @@
+experiment:
+  name: "dsp_implementation_comparison"
+  description: "Compare DSPSIFT original vs DSPSIFT_V2 pyramid-aware vs SIFT baseline to verify DSP implementation quality"
+  version: "1.0"
+  author: "debug"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []
+
+keypoints:
+  generator: "sift"
+  max_features: 8000
+  contrast_threshold: 0.04
+  edge_threshold: 10.0
+  source: "independent_detection"
+  keypoint_set_name: "sift_keynet_pairs"
+  keypoint_set_id: 3
+  use_locked_keypoints: true
+
+descriptors:
+  # Baseline: Regular SIFT (no DSP)
+  - name: "sift_baseline"
+    type: "sift"
+    pooling: "none"
+    normalize_after_pooling: true
+    use_color: false
+    norm_type: 2
+    rooting_stage: "none"
+
+  # Original DSPSIFT implementation (from keypoints/)
+  - name: "dspsift_original"
+    type: "dspsift"
+    pooling: "none"  # DSP is built into the descriptor
+    normalize_after_pooling: true
+    use_color: false
+    norm_type: 2
+    rooting_stage: "none"
+
+  # New pyramid-aware DSPSIFT_V2 with MAX pooling (best aggregation)
+  - name: "dspsift_v2_max_pooling"
+    type: "dspsift_v2"
+    pooling: "none"  # DSP is built into the descriptor
+    normalize_after_pooling: true
+    use_color: false
+    norm_type: 2
+    rooting_stage: "none"
+    pooling_aggregation: "max"
+    # Uses default scales {0.85, 1.0, 1.30} to match DSPSIFT
+
+  # DSPSIFT_V2 with AVERAGE pooling (DSPSIFT default)
+  - name: "dspsift_v2_avg_pooling"
+    type: "dspsift_v2"
+    pooling: "none"
+    normalize_after_pooling: true
+    use_color: false
+    norm_type: 2
+    rooting_stage: "none"
+    pooling_aggregation: "average"
+    # Uses default scales {0.85, 1.0, 1.30} to match DSPSIFT
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+database:
+  connection: "sqlite:///experiments.db"
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+performance:
+  num_threads: 0
+  parallel_scenes: true
+  parallel_images: false
+  batch_size: 512
+  enable_profiling: false

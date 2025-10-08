@@ -100,7 +100,13 @@ public:
                 boundary_filter_px INTEGER DEFAULT 40,
                 overlap_filtering BOOLEAN DEFAULT FALSE,
                 min_distance REAL DEFAULT 0.0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                source_set_a_id INTEGER DEFAULT NULL,
+                source_set_b_id INTEGER DEFAULT NULL,
+                tolerance_px REAL DEFAULT NULL,
+                intersection_method TEXT DEFAULT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(source_set_a_id) REFERENCES keypoint_sets(id),
+                FOREIGN KEY(source_set_b_id) REFERENCES keypoint_sets(id)
             );
         )";
 

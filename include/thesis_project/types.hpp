@@ -354,6 +354,14 @@ namespace thesis_project {
         float dnn_mean = 0.0f;        // simple mean/std normalization
         float dnn_std = 1.0f;
         bool dnn_per_patch_standardize = false; // if true, standardize each patch (zero mean, unit var)
+
+        // VGG descriptor params (optional)
+        int vgg_desc_type = 100;      // 100=VGG_120, 101=VGG_80, 102=VGG_64, 103=VGG_48
+        float vgg_isigma = 1.4f;      // Gaussian sigma for patch extraction
+        bool vgg_img_normalize = true; // Normalize image before descriptor extraction
+        bool vgg_use_scale_orientation = true; // Use keypoint scale and orientation
+        float vgg_scale_factor = 6.25f; // Sampling window scale (6.25 for KAZE/SURF, 6.75 for SIFT)
+        bool vgg_dsc_normalize = false; // Normalize descriptor after extraction
     };
 
     struct EvaluationParams {
@@ -373,6 +381,18 @@ namespace thesis_project {
         bool save_descriptors = false;
         bool save_matches = false;
         bool save_visualizations = true;
+    };
+
+    // ================================
+    // PERFORMANCE CONFIGURATION
+    // ================================
+
+    struct PerformanceParams {
+        int num_threads = 0;              // 0 = auto-detect (std::thread::hardware_concurrency)
+        bool parallel_scenes = true;      // Enable scene-level parallelism (OpenMP)
+        bool parallel_images = false;     // Enable image-level parallelism (future enhancement)
+        int batch_size = 512;             // Batch size for DNN descriptors
+        bool enable_profiling = false;    // Print detailed timing breakdown
     };
 
     // ================================

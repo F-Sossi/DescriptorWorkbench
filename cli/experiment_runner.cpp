@@ -6,7 +6,9 @@
 // #include "thesis_project/keypoints/KeypointAttributeAdapter.hpp" // No longer needed with pure intersection sets
 #include "src/core/experiment/ExperimentHelpers.hpp"
 #include "src/core/pooling/PoolingFactory.hpp"
+#include "src/core/pooling/PoolingStrategy.hpp"
 #include "src/core/matching/MatchingFactory.hpp"
+#include "src/core/matching/MatchingStrategy.hpp"
 #include "src/core/metrics/ExperimentMetrics.hpp"
 #include "src/core/metrics/TrueAveragePrecision.hpp"
 #include "thesis_project/types.hpp"
@@ -18,6 +20,10 @@
 #include <limits>
 #include <chrono>
 #include <fstream>
+#ifdef _OPENMP
+#include <omp.h>
+#include <thread>
+#endif
 
 using namespace thesis_project;
 namespace experiment_helpers = thesis_project::experiment;
@@ -117,12 +123,250 @@ struct ProfilingSummary {
     long total_images = 0;
     long total_kps = 0;
 };
+
+// Context for scene processing (all dependencies needed for parallel execution)
+struct SceneProcessingContext {
+    const config::ExperimentConfig& yaml_config;
+    const config::ExperimentConfig::DescriptorConfig& desc_config;
+    thesis_project::database::DatabaseManager* db_ptr;
+    int experiment_id;
+    IDescriptorExtractor& extractor;
+    pooling::PoolingStrategy& pooling;
+    matching::MatchingStrategy& matcher;
+    bool use_db_keypoints;
+    int keypoint_set_id;
+    bool store_descriptors;
+    bool store_matches;
+    bool store_visualizations;
+    const std::string& processing_method;
+};
+
+// Thread-local profiling accumulator
+struct ThreadLocalProfiling {
+    double detect_ms = 0.0;
+    double compute_ms = 0.0;
+    double match_ms = 0.0;
+    long total_images = 0;
+    long total_kps = 0;
+};
+
 // Create a simple SIFT detector for independent detection
 static cv::Ptr<cv::Feature2D> makeDetector(const thesis_project::config::ExperimentConfig& cfg) {
     // Only SIFT supported here for simplicity; extend as needed
     int maxf = cfg.keypoints.params.max_features;
     if (maxf > 0) return cv::SIFT::create(maxf);
     return cv::SIFT::create();
+}
+
+/**
+ * @brief Process a single scene (6 images) - THREAD-SAFE for OpenMP parallelization
+ *
+ * This function processes one scene independently and can be called in parallel.
+ * Each thread gets its own detector and profiling accumulator.
+ */
+static std::pair<::ExperimentMetrics, ThreadLocalProfiling> processSingleScene(
+    const std::string& scene_folder,
+    const std::string& scene_name,
+    const SceneProcessingContext& ctx
+) {
+    namespace fs = std::filesystem;
+    ::ExperimentMetrics metrics;
+    ThreadLocalProfiling prof;
+
+    // Thread-local detector (not shared between threads)
+    cv::Ptr<cv::Feature2D> detector;
+    auto ensureDetector = [&]() -> cv::Ptr<cv::Feature2D> {
+        if (!detector) {
+            detector = makeDetector(ctx.yaml_config);
+        }
+        return detector;
+    };
+
+    auto detectKeypoints = [&](const cv::Mat& image,
+                              const std::string& scene_name,
+                              const std::string& image_name,
+                              std::vector<cv::KeyPoint>& keypoints) {
+        auto det = ensureDetector();
+        auto t0 = std::chrono::high_resolution_clock::now();
+        det->detect(image, keypoints);
+        auto t1 = std::chrono::high_resolution_clock::now();
+        prof.detect_ms += std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+        if (image_name == "1.ppm") {
+            LOG_INFO("Detected " + std::to_string(keypoints.size()) + " keypoints for " + scene_name + "/" + image_name);
+        }
+    };
+
+    auto loadKeypointsFromDatabase = [&](const std::string& scene_name,
+                                         const std::string& image_name,
+                                         std::vector<cv::KeyPoint>& keypoints) -> bool {
+        if (!ctx.db_ptr) return false;
+        auto& db = *ctx.db_ptr;
+        bool loaded = false;
+        if (ctx.keypoint_set_id >= 0) {
+            keypoints = db.getLockedKeypointsFromSet(ctx.keypoint_set_id, scene_name, image_name);
+            loaded = !keypoints.empty();
+        } else {
+            keypoints = db.getLockedKeypoints(scene_name, image_name);
+            loaded = !keypoints.empty();
+            LOG_INFO("Experiment not using specified keypoint set");
+        }
+
+        if (!loaded) {
+            LOG_ERROR("No locked keypoints for " + scene_name + "/" + image_name);
+            return false;
+        }
+        return true;
+    };
+
+    auto computeDescriptors = [&](const cv::Mat& image,
+                                  const std::vector<cv::KeyPoint>& keypoints,
+                                  cv::Mat& descriptors,
+                                  const std::string& log_prefix) -> bool {
+        auto t0 = std::chrono::high_resolution_clock::now();
+        descriptors = experiment_helpers::computeDescriptorsWithPooling(
+            image, keypoints, ctx.extractor, ctx.pooling, ctx.desc_config);
+        if (descriptors.empty()) {
+            LOG_ERROR("Failed to compute descriptors for " + log_prefix);
+            return false;
+        }
+        auto t1 = std::chrono::high_resolution_clock::now();
+        prof.compute_ms += std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+        return true;
+    };
+
+    auto maybeStoreDescriptors = [&](const std::string& scene_name,
+                                     const std::string& image_name,
+                                     const std::vector<cv::KeyPoint>& keypoints,
+                                     const cv::Mat& descriptors) {
+        if (!ctx.store_descriptors || descriptors.empty() || !ctx.db_ptr) return;
+        if (!ctx.db_ptr->storeDescriptors(ctx.experiment_id, scene_name, image_name,
+                                      keypoints, descriptors, ctx.processing_method)) {
+            LOG_WARNING("Failed to store descriptors for " + scene_name + "/" + image_name);
+        }
+    };
+
+    auto maybeStoreMatches = [&](const std::string& scene_name,
+                                 const std::string& image_name,
+                                 const std::vector<cv::KeyPoint>& keypoints1,
+                                 const std::vector<cv::KeyPoint>& keypoints2,
+                                 const experiment_helpers::MatchArtifacts& artifacts) {
+        if (!ctx.store_matches || artifacts.matches.empty() || !ctx.db_ptr) return;
+        if (!ctx.db_ptr->storeMatches(ctx.experiment_id, scene_name, "1.ppm", image_name,
+                                  keypoints1, keypoints2, artifacts.matches, artifacts.correctnessFlags)) {
+            LOG_WARNING("Failed to store matches for " + scene_name + "/" + image_name);
+        }
+    };
+
+    auto maybeStoreVisualization = [&](const std::string& scene_name,
+                                       const std::string& image_name,
+                                       int image_index,
+                                       const cv::Mat& image1,
+                                       const cv::Mat& image2,
+                                       const std::vector<cv::KeyPoint>& keypoints1,
+                                       const std::vector<cv::KeyPoint>& keypoints2,
+                                       const experiment_helpers::MatchArtifacts& artifacts) {
+        if (!ctx.store_visualizations || artifacts.matches.empty() || !ctx.db_ptr) return;
+        cv::Mat match_viz = generateMatchVisualization(image1, image2, keypoints1, keypoints2,
+                                                       artifacts.matches, artifacts.correctnessFlags);
+        if (match_viz.empty()) return;
+
+        std::string image_pair = "1_" + std::to_string(image_index);
+        double precision = artifacts.matches.empty() ? 0.0 : static_cast<double>(artifacts.correctMatches) / artifacts.matches.size();
+        std::string metadata = "{\"matches\":" + std::to_string(artifacts.matches.size()) +
+                              ",\"correct\":" + std::to_string(artifacts.correctMatches) +
+                              ",\"precision\":" + std::to_string(precision) + "}";
+
+        if (!ctx.db_ptr->storeVisualization(ctx.experiment_id, scene_name, "matches", image_pair, match_viz, metadata)) {
+            LOG_WARNING("Failed to store visualization for " + scene_name + "/" + image_pair);
+        }
+    };
+
+    // Process reference image (1.ppm)
+    const std::string base_image_name = "1.ppm";
+    const std::string base_image_path = scene_folder + "/" + base_image_name;
+    cv::Mat image1 = cv::imread(base_image_path, cv::IMREAD_COLOR);
+    if (image1.empty()) return {metrics, prof};
+    if (!ctx.desc_config.params.use_color && image1.channels() > 1) {
+        cv::cvtColor(image1, image1, cv::COLOR_BGR2GRAY);
+    }
+
+    std::vector<cv::KeyPoint> keypoints1;
+    if (ctx.use_db_keypoints) {
+        if (!loadKeypointsFromDatabase(scene_name, base_image_name, keypoints1)) {
+            return {metrics, prof};
+        }
+    } else {
+        detectKeypoints(image1, scene_name, base_image_name, keypoints1);
+    }
+
+    cv::Mat descriptors1;
+    if (!computeDescriptors(image1, keypoints1, descriptors1, scene_name + "/" + base_image_name)) {
+        return {metrics, prof};
+    }
+
+    maybeStoreDescriptors(scene_name, base_image_name, keypoints1, descriptors1);
+    prof.total_images += 1;
+    prof.total_kps += static_cast<long>(keypoints1.size());
+
+    // Process images 2-6
+    for (int image_index = 2; image_index <= 6; ++image_index) {
+        const std::string image_name = std::to_string(image_index) + ".ppm";
+        const std::string image_path = scene_folder + "/" + image_name;
+        cv::Mat image2 = cv::imread(image_path, cv::IMREAD_COLOR);
+        if (image2.empty()) continue;
+        if (!ctx.desc_config.params.use_color && image2.channels() > 1) {
+            cv::cvtColor(image2, image2, cv::COLOR_BGR2GRAY);
+        }
+
+        std::vector<cv::KeyPoint> keypoints2;
+        if (ctx.use_db_keypoints) {
+            if (!loadKeypointsFromDatabase(scene_name, image_name, keypoints2)) {
+                continue;
+            }
+        } else {
+            detectKeypoints(image2, scene_name, image_name, keypoints2);
+        }
+
+        cv::Mat descriptors2;
+        if (!computeDescriptors(image2, keypoints2, descriptors2, scene_name + "/" + image_name)) {
+            continue;
+        }
+
+        maybeStoreDescriptors(scene_name, image_name, keypoints2, descriptors2);
+        prof.total_images += 1;
+        prof.total_kps += static_cast<long>(keypoints2.size());
+
+        if (descriptors1.empty() || descriptors2.empty()) continue;
+
+        auto match_t0 = std::chrono::high_resolution_clock::now();
+        bool evaluateCorrectness = ctx.yaml_config.keypoints.params.source == thesis_project::KeypointSource::HOMOGRAPHY_PROJECTION;
+        auto artifacts = experiment_helpers::computeMatches(
+            descriptors1, descriptors2, ctx.matcher, evaluateCorrectness, keypoints1, keypoints2);
+        auto match_t1 = std::chrono::high_resolution_clock::now();
+        prof.match_ms += std::chrono::duration_cast<std::chrono::milliseconds>(match_t1 - match_t0).count();
+
+        if (evaluateCorrectness && !artifacts.matches.empty()) {
+            double precision = static_cast<double>(artifacts.correctMatches) / artifacts.matches.size();
+            metrics.addImageResult(scene_name, precision, static_cast<int>(artifacts.matches.size()), static_cast<int>(keypoints2.size()));
+        }
+
+        maybeStoreMatches(scene_name, image_name, keypoints1, keypoints2, artifacts);
+        maybeStoreVisualization(scene_name, image_name, image_index, image1, image2,
+                                 keypoints1, keypoints2, artifacts);
+
+        std::string homography_path = scene_folder + "/H_1_" + std::to_string(image_index);
+        maybeAccumulateTrueAveragePrecisionFromFile(
+            homography_path,
+            keypoints1,
+            descriptors1,
+            keypoints2,
+            descriptors2,
+            scene_name,
+            metrics);
+    }
+
+    metrics.calculateMeanPrecision();
+    return {metrics, prof};
 }
 
 static ::ExperimentMetrics processDirectoryNew(
@@ -195,125 +439,29 @@ static ::ExperimentMetrics processDirectoryNew(
                                 std::to_string(desc_config.params.norm_type);
         }
 
-        // Profiling accumulators
-        double detect_ms = 0.0;
-        double compute_ms = 0.0;
-        double match_ms = 0.0;
-        long total_images = 0;
-        long total_kps = 0;
-
-        cv::Ptr<cv::Feature2D> detector;
-        auto ensureDetector = [&]() -> cv::Ptr<cv::Feature2D> {
-            if (!detector) {
-                detector = makeDetector(yaml_config);
-            }
-            return detector;
+        // Create scene processing context for parallel execution
+        SceneProcessingContext ctx{
+            yaml_config,
+            desc_config,
+            db_ptr,
+            experiment_id,
+            *extractor,
+            *pooling,
+            *matcher,
+            use_db_keypoints,
+            keypoint_set_id,
+            store_descriptors,
+            store_matches,
+            store_visualizations,
+            processing_method
         };
 
-        auto detectKeypoints = [&](const cv::Mat& image,
-                                   const std::string& scene_name,
-                                   const std::string& image_name,
-                                   std::vector<cv::KeyPoint>& keypoints) {
-            auto det = ensureDetector();
-            auto t0 = std::chrono::high_resolution_clock::now();
-            det->detect(image, keypoints);
-            auto t1 = std::chrono::high_resolution_clock::now();
-            detect_ms += std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
-            if (image_name == "1.ppm") {
-                LOG_INFO("Detected " + std::to_string(keypoints.size()) + " keypoints for " + scene_name + "/" + image_name);
-            }
-        };
-
-        auto loadKeypointsFromDatabase = [&](const std::string& scene_name,
-                                             const std::string& image_name,
-                                             std::vector<cv::KeyPoint>& keypoints) -> bool {
-            auto& db = *db_ptr;
-            bool loaded = false;
-            if (keypoint_set_id >= 0) {
-                keypoints = db.getLockedKeypointsFromSet(keypoint_set_id, scene_name, image_name);
-                loaded = !keypoints.empty();
-            } else {
-                keypoints = db.getLockedKeypoints(scene_name, image_name);
-                loaded = !keypoints.empty();
-                LOG_INFO("Experiment not using specified keypoint set");
-            }
-
-            if (!loaded) {
-                LOG_ERROR("No locked keypoints for " + scene_name + "/" + image_name);
-                return false;
-            }
-            return true;
-        };
-
-        auto computeDescriptors = [&](const cv::Mat& image,
-                                      const std::vector<cv::KeyPoint>& keypoints,
-                                      cv::Mat& descriptors,
-                                      const std::string& log_prefix) -> bool {
-            auto t0 = std::chrono::high_resolution_clock::now();
-            descriptors = experiment_helpers::computeDescriptorsWithPooling(
-                image, keypoints, *extractor, *pooling, desc_config);
-            if (descriptors.empty()) {
-                LOG_ERROR("Failed to compute descriptors for " + log_prefix);
-                return false;
-            }
-            auto t1 = std::chrono::high_resolution_clock::now();
-            compute_ms += std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
-            return true;
-        };
-
-        auto maybeStoreDescriptors = [&](const std::string& scene_name,
-                                         const std::string& image_name,
-                                         const std::vector<cv::KeyPoint>& keypoints,
-                                         const cv::Mat& descriptors) {
-            if (!store_descriptors || descriptors.empty()) return;
-            if (!db_ptr->storeDescriptors(experiment_id, scene_name, image_name,
-                                          keypoints, descriptors, processing_method)) {
-                LOG_WARNING("Failed to store descriptors for " + scene_name + "/" + image_name);
-            }
-        };
-
-        auto maybeStoreMatches = [&](const std::string& scene_name,
-                                     const std::string& image_name,
-                                     const std::vector<cv::KeyPoint>& keypoints1,
-                                     const std::vector<cv::KeyPoint>& keypoints2,
-                                     const experiment_helpers::MatchArtifacts& artifacts) {
-            if (!store_matches || artifacts.matches.empty()) return;
-            if (!db_ptr->storeMatches(experiment_id, scene_name, "1.ppm", image_name,
-                                      keypoints1, keypoints2, artifacts.matches, artifacts.correctnessFlags)) {
-                LOG_WARNING("Failed to store matches for " + scene_name + "/" + image_name);
-            }
-        };
-
-        auto maybeStoreVisualization = [&](const std::string& scene_name,
-                                           const std::string& image_name,
-                                           int image_index,
-                                           const cv::Mat& image1,
-                                           const cv::Mat& image2,
-                                           const std::vector<cv::KeyPoint>& keypoints1,
-                                           const std::vector<cv::KeyPoint>& keypoints2,
-                                           const experiment_helpers::MatchArtifacts& artifacts) {
-            if (!store_visualizations || artifacts.matches.empty()) return;
-            cv::Mat match_viz = generateMatchVisualization(image1, image2, keypoints1, keypoints2,
-                                                           artifacts.matches, artifacts.correctnessFlags);
-            if (match_viz.empty()) return;
-
-            std::string image_pair = "1_" + std::to_string(image_index);
-            double precision = artifacts.matches.empty() ? 0.0 : static_cast<double>(artifacts.correctMatches) / artifacts.matches.size();
-            std::string metadata = "{\"matches\":" + std::to_string(artifacts.matches.size()) +
-                                  ",\"correct\":" + std::to_string(artifacts.correctMatches) +
-                                  ",\"precision\":" + std::to_string(precision) + "}";
-
-            if (!db_ptr->storeVisualization(experiment_id, scene_name, "matches", image_pair, match_viz, metadata)) {
-                LOG_WARNING("Failed to store visualization for " + scene_name + "/" + image_pair);
-            }
-        };
-
+        // Collect all scene paths that match the filter
+        std::vector<std::pair<std::string, std::string>> scenes_to_process;
         for (const auto& entry : fs::directory_iterator(yaml_config.dataset.path)) {
             if (!entry.is_directory()) continue;
 
-            const std::string scene_folder = entry.path().string();
             const std::string scene_name = entry.path().filename().string();
-
             if (!yaml_config.dataset.scenes.empty()) {
                 bool scene_allowed = std::find(
                     yaml_config.dataset.scenes.begin(),
@@ -322,92 +470,59 @@ static ::ExperimentMetrics processDirectoryNew(
                 if (!scene_allowed) continue;
             }
 
-            ::ExperimentMetrics metrics;
+            scenes_to_process.emplace_back(entry.path().string(), scene_name);
+        }
 
-            const std::string base_image_name = "1.ppm";
-            const std::string base_image_path = scene_folder + "/" + base_image_name;
-            cv::Mat image1 = cv::imread(base_image_path, cv::IMREAD_COLOR);
-            if (image1.empty()) continue;
-            if (!desc_config.params.use_color && image1.channels() > 1) {
-                cv::cvtColor(image1, image1, cv::COLOR_BGR2GRAY);
+        // Determine thread count for OpenMP
+        const bool use_parallel = yaml_config.performance.parallel_scenes;
+        int num_threads = yaml_config.performance.num_threads;
+
+#ifdef _OPENMP
+        if (use_parallel) {
+            if (num_threads <= 0) {
+                num_threads = std::thread::hardware_concurrency();
+                if (num_threads <= 0) num_threads = 4; // Fallback
             }
+            omp_set_num_threads(num_threads);
+            LOG_INFO("OpenMP enabled: processing " + std::to_string(scenes_to_process.size()) +
+                     " scenes with " + std::to_string(num_threads) + " threads");
+        } else {
+            LOG_INFO("Sequential processing: parallel_scenes disabled in configuration");
+        }
+#else
+        if (use_parallel) {
+            LOG_WARNING("OpenMP not available - running sequentially despite configuration");
+        }
+#endif
 
-            std::vector<cv::KeyPoint> keypoints1;
-            if (use_db_keypoints) {
-                if (!loadKeypointsFromDatabase(scene_name, base_image_name, keypoints1)) {
-                    continue;
-                }
-            } else {
-                detectKeypoints(image1, scene_name, base_image_name, keypoints1);
-            }
+        // Process scenes (parallel or sequential based on configuration)
+        std::vector<::ExperimentMetrics> scene_metrics(scenes_to_process.size());
+        std::vector<ThreadLocalProfiling> scene_profiling(scenes_to_process.size());
 
-            cv::Mat descriptors1;
-            if (!computeDescriptors(image1, keypoints1, descriptors1, scene_name + "/" + base_image_name)) {
-                continue;
-            }
+#ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic) if(use_parallel)
+#endif
+        for (size_t i = 0; i < scenes_to_process.size(); ++i) {
+            const auto& [scene_folder, scene_name] = scenes_to_process[i];
+            auto result = processSingleScene(scene_folder, scene_name, ctx);
+            scene_metrics[i] = result.first;
+            scene_profiling[i] = result.second;
+        }
 
-            maybeStoreDescriptors(scene_name, base_image_name, keypoints1, descriptors1);
-            total_images += 1;
-            total_kps += static_cast<long>(keypoints1.size());
+        // Merge all scene results
+        double detect_ms = 0.0;
+        double compute_ms = 0.0;
+        double match_ms = 0.0;
+        long total_images = 0;
+        long total_kps = 0;
 
-            for (int image_index = 2; image_index <= 6; ++image_index) {
-                const std::string image_name = std::to_string(image_index) + ".ppm";
-                const std::string image_path = scene_folder + "/" + image_name;
-                cv::Mat image2 = cv::imread(image_path, cv::IMREAD_COLOR);
-                if (image2.empty()) continue;
-                if (!desc_config.params.use_color && image2.channels() > 1) {
-                    cv::cvtColor(image2, image2, cv::COLOR_BGR2GRAY);
-                }
-
-                std::vector<cv::KeyPoint> keypoints2;
-                if (use_db_keypoints) {
-                    if (!loadKeypointsFromDatabase(scene_name, image_name, keypoints2)) {
-                        continue;
-                    }
-                } else {
-                    detectKeypoints(image2, scene_name, image_name, keypoints2);
-                }
-
-                cv::Mat descriptors2;
-                if (!computeDescriptors(image2, keypoints2, descriptors2, scene_name + "/" + image_name)) {
-                    continue;
-                }
-
-                maybeStoreDescriptors(scene_name, image_name, keypoints2, descriptors2);
-                total_images += 1;
-                total_kps += static_cast<long>(keypoints2.size());
-
-                if (descriptors1.empty() || descriptors2.empty()) continue;
-
-                auto match_t0 = std::chrono::high_resolution_clock::now();
-                bool evaluateCorrectness = yaml_config.keypoints.params.source == thesis_project::KeypointSource::HOMOGRAPHY_PROJECTION;
-                auto artifacts = experiment_helpers::computeMatches(
-                    descriptors1, descriptors2, *matcher, evaluateCorrectness, keypoints1, keypoints2);
-                auto match_t1 = std::chrono::high_resolution_clock::now();
-                match_ms += std::chrono::duration_cast<std::chrono::milliseconds>(match_t1 - match_t0).count();
-
-                if (evaluateCorrectness && !artifacts.matches.empty()) {
-                    double precision = static_cast<double>(artifacts.correctMatches) / artifacts.matches.size();
-                    metrics.addImageResult(scene_name, precision, static_cast<int>(artifacts.matches.size()), static_cast<int>(keypoints2.size()));
-                }
-
-                maybeStoreMatches(scene_name, image_name, keypoints1, keypoints2, artifacts);
-                maybeStoreVisualization(scene_name, image_name, image_index, image1, image2,
-                                         keypoints1, keypoints2, artifacts);
-
-                std::string homography_path = scene_folder + "/H_1_" + std::to_string(image_index);
-                maybeAccumulateTrueAveragePrecisionFromFile(
-                    homography_path,
-                    keypoints1,
-                    descriptors1,
-                    keypoints2,
-                    descriptors2,
-                    scene_name,
-                    metrics);
-            }
-
-            metrics.calculateMeanPrecision();
-            overall.merge(metrics);
+        for (size_t i = 0; i < scenes_to_process.size(); ++i) {
+            overall.merge(scene_metrics[i]);
+            detect_ms += scene_profiling[i].detect_ms;
+            compute_ms += scene_profiling[i].compute_ms;
+            match_ms += scene_profiling[i].match_ms;
+            total_images += scene_profiling[i].total_images;
+            total_kps += scene_profiling[i].total_kps;
         }
 
         overall.calculateMeanPrecision();
