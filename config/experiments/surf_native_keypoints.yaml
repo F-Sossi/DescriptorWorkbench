@@ -1,0 +1,43 @@
+experiment:
+  name: "surf_native_keypoints"
+  description: "SURF descriptor with native SURF Hessian keypoints - fair comparison"
+  version: "1.0"
+  author: "researcher"
+  note: "SURF using its own native keypoint detector for fair performance evaluation"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # Use all available scenes
+
+keypoints:
+  generator: "surf"
+  max_features: 2000
+  source: "independent_detection"
+  keypoint_set_name: "surf_keypoints"
+  use_locked_keypoints: true
+
+descriptors:
+  - name: "surf_native_baseline"
+    type: "surf"
+    pooling: "none"
+    normalize_after_pooling: true
+
+evaluation:
+  matching:
+    method: "ratio_test"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 3.0
+    min_matches: 10
+
+database:
+  connection: "sqlite:///experiments.db"
+
+performance:
+  parallel_scenes: true
+  num_threads: 0  # Auto-detect

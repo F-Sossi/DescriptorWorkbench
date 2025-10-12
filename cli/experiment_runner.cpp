@@ -620,6 +620,10 @@ int main(int argc, char** argv) {
                 dbConfig.parameters["pooling_strategy"] = toString(desc_config.params.pooling);
                 dbConfig.parameters["norm_type"] = std::to_string(desc_config.params.norm_type);
 
+                // Record keypoint tracking information
+                dbConfig.keypoint_set_id = yaml_config.keypoints.params.keypoint_set_id;
+                dbConfig.keypoint_source = toString(yaml_config.keypoints.params.source);
+
                 start_time = std::chrono::high_resolution_clock::now();
                 experiment_id = db.recordConfiguration(dbConfig);
             }

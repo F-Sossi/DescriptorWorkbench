@@ -63,6 +63,12 @@ public:
     static std::unique_ptr<IKeypointGenerator> createORB();
 
     /**
+     * @brief Create a SURF detector with default parameters
+     * @return Unique pointer to SURF detector
+     */
+    static std::unique_ptr<IKeypointGenerator> createSURF();
+
+    /**
      * @brief Create a KeyNet detector with default parameters
      * @return Unique pointer to KeyNet detector
      */

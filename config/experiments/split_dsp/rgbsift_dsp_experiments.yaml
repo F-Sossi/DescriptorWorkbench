@@ -1,0 +1,108 @@
+experiment:
+  name: rgbsift_dsp_experiments
+  description: DSP-enabled RGB-SIFT (dsprgbsift_v2) normalization and rooting variations
+  version: "1.0"
+  author: automation
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []
+
+keypoints:
+  generator: "sift"
+  max_features: 8000
+  contrast_threshold: 0.04
+  edge_threshold: 10.0
+  source: "independent_detection"
+  keypoint_set_name: "sift_keynet_pairs"
+  keypoint_set_id: 15
+  use_locked_keypoints: true
+
+descriptors:
+  - name: "rgbsift_dsp_l1_root_none"
+    type: "dsprgbsift_v2"
+    pooling: "none"
+    pooling_aggregation: "average"
+    scales: [0.85, 1.0, 1.3]
+    normalize_after_pooling: true
+    norm_type: 1
+    rooting_stage: "none"
+    use_color: true
+
+  - name: "rgbsift_dsp_l1_root_before"
+    type: "dsprgbsift_v2"
+    pooling: "none"
+    pooling_aggregation: "average"
+    scales: [0.85, 1.0, 1.3]
+    normalize_after_pooling: true
+    normalize_before_pooling: true
+    norm_type: 1
+    rooting_stage: "before_pooling"
+    use_color: true
+
+  - name: "rgbsift_dsp_l1_root_after"
+    type: "dsprgbsift_v2"
+    pooling: "none"
+    pooling_aggregation: "average"
+    scales: [0.85, 1.0, 1.3]
+    normalize_after_pooling: true
+    norm_type: 1
+    rooting_stage: "after_pooling"
+    use_color: true
+
+  - name: "rgbsift_dsp_l2_root_none"
+    type: "dsprgbsift_v2"
+    pooling: "none"
+    pooling_aggregation: "average"
+    scales: [0.85, 1.0, 1.3]
+    normalize_after_pooling: true
+    norm_type: 4
+    rooting_stage: "none"
+    use_color: true
+
+  - name: "rgbsift_dsp_l2_root_before"
+    type: "dsprgbsift_v2"
+    pooling: "none"
+    pooling_aggregation: "average"
+    scales: [0.85, 1.0, 1.3]
+    normalize_after_pooling: true
+    normalize_before_pooling: true
+    norm_type: 4
+    rooting_stage: "before_pooling"
+    use_color: true
+
+  - name: "rgbsift_dsp_l2_root_after"
+    type: "dsprgbsift_v2"
+    pooling: "none"
+    pooling_aggregation: "average"
+    scales: [0.85, 1.0, 1.3]
+    normalize_after_pooling: true
+    norm_type: 4
+    rooting_stage: "after_pooling"
+    use_color: true
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+database:
+  connection: "sqlite:///experiments.db"
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+performance:
+  num_threads: 0
+  parallel_scenes: true
+  parallel_images: false
+  batch_size: 512
+  enable_profiling: false

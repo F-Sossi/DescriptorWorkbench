@@ -2,6 +2,7 @@
 #include "detectors/SIFTKeypointGenerator.hpp"
 #include "detectors/HarrisKeypointGenerator.hpp"
 #include "detectors/ORBKeypointGenerator.hpp"
+#include "detectors/SURFKeypointGenerator.hpp"
 #include "detectors/NonOverlappingKeypointGenerator.hpp"
 #include "generators/KeynetDetector.hpp"
 #include <stdexcept>
@@ -20,13 +21,17 @@ std::unique_ptr<IKeypointGenerator> KeypointGeneratorFactory::create(
         case KeypointGenerator::SIFT:
             detector = createSIFT();
             break;
-            
+
         case KeypointGenerator::HARRIS:
             detector = createHarris();
             break;
-            
+
         case KeypointGenerator::ORB:
             detector = createORB();
+            break;
+
+        case KeypointGenerator::SURF:
+            detector = createSURF();
             break;
 
         case KeypointGenerator::KEYNET:
@@ -69,6 +74,10 @@ std::unique_ptr<IKeypointGenerator> KeypointGeneratorFactory::createORB() {
     return std::make_unique<ORBKeypointGenerator>();
 }
 
+std::unique_ptr<IKeypointGenerator> KeypointGeneratorFactory::createSURF() {
+    return std::make_unique<SURFKeypointGenerator>();
+}
+
 std::unique_ptr<IKeypointGenerator> KeypointGeneratorFactory::createKeyNet() {
     return std::make_unique<KeynetDetector>();
 }
@@ -90,13 +99,15 @@ std::unique_ptr<IKeypointGenerator> KeypointGeneratorFactory::makeNonOverlapping
 KeypointGenerator KeypointGeneratorFactory::parseDetectorType(const std::string& detector_str) {
     std::string lower_str = detector_str;
     std::transform(lower_str.begin(), lower_str.end(), lower_str.begin(), ::tolower);
-    
+
     if (lower_str == "sift") {
         return KeypointGenerator::SIFT;
     } else if (lower_str == "harris") {
         return KeypointGenerator::HARRIS;
     } else if (lower_str == "orb") {
         return KeypointGenerator::ORB;
+    } else if (lower_str == "surf") {
+        return KeypointGenerator::SURF;
     } else if (lower_str == "keynet") {
         return KeypointGenerator::KEYNET;
     } else if (lower_str == "locked_in") {
@@ -107,7 +118,7 @@ KeypointGenerator KeypointGeneratorFactory::parseDetectorType(const std::string&
 }
 
 std::vector<std::string> KeypointGeneratorFactory::getSupportedDetectors() {
-    return {"sift", "harris", "orb", "keynet"};
+    return {"sift", "harris", "orb", "surf", "keynet"};
 }
 
 bool KeypointGeneratorFactory::isSupported(KeypointGenerator type) {
@@ -115,6 +126,7 @@ bool KeypointGeneratorFactory::isSupported(KeypointGenerator type) {
         case KeypointGenerator::SIFT:
         case KeypointGenerator::HARRIS:
         case KeypointGenerator::ORB:
+        case KeypointGenerator::SURF:
         case KeypointGenerator::KEYNET:
             return true;
         case KeypointGenerator::LOCKED_IN:
@@ -131,14 +143,18 @@ float KeypointGeneratorFactory::getRecommendedMinDistance(
     switch (type) {
         case KeypointGenerator::SIFT:
             return static_cast<float>(descriptor_patch_size);
-            
+
         case KeypointGenerator::HARRIS:
             // Harris corners are typically more sparse
             return static_cast<float>(descriptor_patch_size * 0.8f);
-            
+
         case KeypointGenerator::ORB:
             // ORB uses 31x31 patches by default
             return static_cast<float>(std::max(descriptor_patch_size, 31));
+
+        case KeypointGenerator::SURF:
+            // SURF typically uses ~20px patches
+            return static_cast<float>(descriptor_patch_size);
 
         case KeypointGenerator::KEYNET:
             // KeyNet is designed for CNN descriptors with typical patch sizes

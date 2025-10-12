@@ -1,14 +1,19 @@
 -- Database schema for descriptor research experiments
 -- This matches the schema defined in DatabaseManager.cpp
 --
--- SCHEMA VERSION: v2.0 (September 2025)
--- MAJOR UPGRADE: True IR-style mAP metrics promoted to first-class columns
--- 
--- Migration notes:
--- - true_map_macro/micro are now primary evaluation metrics  
+-- SCHEMA VERSION: v3.0 (October 2025)
+-- MAJOR UPGRADE: Keypoint tracking integration for experiments
+--
+-- Migration notes (v3.0):
+-- - Added keypoint_set_id and keypoint_source columns to experiments table
+-- - Foreign key relationship: experiments.keypoint_set_id → keypoint_sets.id
+-- - Enables tracking which keypoint set was used for each experiment
+-- - Use database/migrate_to_v3_keypoint_tracking.sql to upgrade existing databases
+--
+-- Previous migration notes (v2.0):
+-- - true_map_macro/micro are now primary evaluation metrics
 -- - legacy_mean_precision preserves backward compatibility
 -- - mean_average_precision serves as primary display metric
--- - Use migrate_database.py to upgrade existing databases
 
 CREATE TABLE IF NOT EXISTS experiments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -18,7 +23,10 @@ CREATE TABLE IF NOT EXISTS experiments (
     similarity_threshold REAL,
     max_features INTEGER,
     timestamp TEXT NOT NULL,
-    parameters TEXT
+    parameters TEXT,
+    keypoint_set_id INTEGER DEFAULT NULL,
+    keypoint_source TEXT DEFAULT NULL,
+    FOREIGN KEY(keypoint_set_id) REFERENCES keypoint_sets(id)
 );
 
 CREATE TABLE IF NOT EXISTS results (

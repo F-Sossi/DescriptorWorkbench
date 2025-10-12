@@ -57,7 +57,10 @@ public:
                 similarity_threshold REAL,
                 max_features INTEGER,
                 timestamp TEXT NOT NULL,
-                parameters TEXT
+                parameters TEXT,
+                keypoint_set_id INTEGER DEFAULT NULL,
+                keypoint_source TEXT DEFAULT NULL,
+                FOREIGN KEY(keypoint_set_id) REFERENCES keypoint_sets(id)
             );
         )";
 
@@ -381,8 +384,9 @@ int DatabaseManager::recordConfiguration(const ExperimentConfig& config) const {
 
     const char* sql = R"(
         INSERT INTO experiments (descriptor_type, dataset_name, pooling_strategy,
-                               similarity_threshold, max_features, timestamp, parameters)
-        VALUES (?, ?, ?, ?, ?, ?, ?);
+                               similarity_threshold, max_features, timestamp, parameters,
+                               keypoint_set_id, keypoint_source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
     )";
 
     sqlite3_stmt* stmt;
@@ -399,7 +403,7 @@ int DatabaseManager::recordConfiguration(const ExperimentConfig& config) const {
     }
     std::string params_str = params_ss.str();
 
-    // Bind parameters
+    // Bind parameters (9 total now)
     sqlite3_bind_text(stmt, 1, config.descriptor_type.c_str(), -1, SQLITE_STATIC);
     sqlite3_bind_text(stmt, 2, config.dataset_path.c_str(), -1, SQLITE_STATIC);
     sqlite3_bind_text(stmt, 3, config.pooling_strategy.c_str(), -1, SQLITE_STATIC);
@@ -407,6 +411,19 @@ int DatabaseManager::recordConfiguration(const ExperimentConfig& config) const {
     sqlite3_bind_int(stmt, 5, config.max_features);
     sqlite3_bind_text(stmt, 6, impl_->getCurrentTimestamp().c_str(), -1, SQLITE_STATIC);
     sqlite3_bind_text(stmt, 7, params_str.c_str(), -1, SQLITE_STATIC);
+
+    // Bind keypoint tracking fields (NULL if not set)
+    if (config.keypoint_set_id > 0) {
+        sqlite3_bind_int(stmt, 8, config.keypoint_set_id);
+    } else {
+        sqlite3_bind_null(stmt, 8);
+    }
+
+    if (!config.keypoint_source.empty()) {
+        sqlite3_bind_text(stmt, 9, config.keypoint_source.c_str(), -1, SQLITE_STATIC);
+    } else {
+        sqlite3_bind_null(stmt, 9);
+    }
 
     rc = sqlite3_step(stmt);
     int experiment_id = -1;

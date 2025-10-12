@@ -551,6 +551,8 @@ struct ExperimentConfig {
     int max_features = 1000;
     std::map<std::string, std::string> parameters;
     std::string timestamp;
+    int keypoint_set_id = -1;           // ID of keypoint set used (or -1 if none)
+    std::string keypoint_source;        // Source of keypoints (e.g., "homography_projection", "independent_detection")
 };
 
 } // namespace database

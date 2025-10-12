@@ -462,7 +462,7 @@ endif()
 # Google Test matching factory tests
 create_gtest_if_exists("tests/unit/factories/test_matching_factory_gtest.cpp" "test_matching_factory_gtest")
 if(TARGET test_matching_factory_gtest)
-    target_sources(test_matching_factory_gtest PRIVATE 
+    target_sources(test_matching_factory_gtest PRIVATE
         src/core/matching/BruteForceMatching.cpp
         src/core/matching/FLANNMatching.cpp
         src/core/matching/RatioTestMatching.cpp
@@ -470,6 +470,20 @@ if(TARGET test_matching_factory_gtest)
     )
     target_link_libraries(test_matching_factory_gtest ${OpenCV_LIBRARIES} keypoints)
     target_include_directories(test_matching_factory_gtest PRIVATE src include descriptor_compare keypoints ${OpenCV_INCLUDE_DIRS})
+endif()
+
+# Google Test SNN ratio test matching tests (Core matching algorithm validation)
+create_gtest_if_exists("tests/unit/matching/test_snn_ratio_test_gtest.cpp" "test_snn_ratio_test_gtest")
+if(TARGET test_snn_ratio_test_gtest)
+    target_sources(test_snn_ratio_test_gtest PRIVATE
+        src/core/matching/RatioTestMatching.cpp
+        src/core/matching/BruteForceMatching.cpp
+        src/core/matching/FLANNMatching.cpp
+        src/core/matching/MatchingFactory.cpp
+        src/core/processing/processor_utils.cpp
+    )
+    target_link_libraries(test_snn_ratio_test_gtest ${OpenCV_LIBRARIES})
+    target_include_directories(test_snn_ratio_test_gtest PRIVATE src include ${OpenCV_INCLUDE_DIRS})
 endif()
 
 # Google Test descriptor factory tests
@@ -503,13 +517,21 @@ if(TARGET test_dsp_color_wrappers_gtest)
     target_include_directories(test_dsp_color_wrappers_gtest PRIVATE src include keypoints descriptor_compare ${OpenCV_INCLUDE_DIRS})
 endif()
 
+# Google Test DSP SIFT Wrapper V2 (pyramid reuse validation tests)
+create_gtest_if_exists("tests/unit/descriptors/test_dsp_sift_wrapper_v2_gtest.cpp" "test_dsp_sift_wrapper_v2_gtest")
+if(TARGET test_dsp_sift_wrapper_v2_gtest)
+    target_link_libraries(test_dsp_sift_wrapper_v2_gtest keypoints ${OpenCV_LIBRARIES})
+    target_include_directories(test_dsp_sift_wrapper_v2_gtest PRIVATE src include keypoints descriptor_compare ${OpenCV_INCLUDE_DIRS})
+endif()
+
 # Google Test keypoint generator tests (Interface upgrade completion)
 create_gtest_if_exists("tests/unit/keypoints/test_keypoint_generators.cpp" "test_keypoint_generators_gtest")
 if(TARGET test_keypoint_generators_gtest)
-    target_sources(test_keypoint_generators_gtest PRIVATE 
+    target_sources(test_keypoint_generators_gtest PRIVATE
         src/core/keypoints/detectors/SIFTKeypointGenerator.cpp
         src/core/keypoints/detectors/HarrisKeypointGenerator.cpp
         src/core/keypoints/detectors/ORBKeypointGenerator.cpp
+        src/core/keypoints/detectors/SURFKeypointGenerator.cpp
         src/core/keypoints/detectors/NonOverlappingKeypointGenerator.cpp
         src/core/keypoints/KeypointGeneratorFactory.cpp
         src/core/keypoints/generators/KeynetDetector.cpp)
@@ -775,6 +797,7 @@ if(BUILD_KEYPOINT_MANAGER)
                        src/core/keypoints/detectors/SIFTKeypointGenerator.cpp
                        src/core/keypoints/detectors/HarrisKeypointGenerator.cpp
                        src/core/keypoints/detectors/ORBKeypointGenerator.cpp
+                       src/core/keypoints/detectors/SURFKeypointGenerator.cpp
                        src/core/keypoints/detectors/NonOverlappingKeypointGenerator.cpp
                        src/core/keypoints/generators/KeynetDetector.cpp
                        src/core/processing/processor_utils.cpp

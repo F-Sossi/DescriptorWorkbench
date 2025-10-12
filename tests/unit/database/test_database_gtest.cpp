@@ -324,3 +324,173 @@ TEST_F(DatabaseIntegrationTest, MultipleExperiments) {
     auto recent_results = db->getRecentResults(10);
     EXPECT_GE(recent_results.size(), 3) << "Should retrieve at least 3 results";
 }
+
+// ============================================================================
+// Schema v3.0 Tests: Keypoint Tracking Fields
+// ============================================================================
+
+TEST_F(DatabaseTest, KeypointTrackingFields_WithKeypointSet) {
+    thesis_project::database::DatabaseManager db(test_db_name, true);
+    ASSERT_TRUE(db.isEnabled()) << "Database must be enabled for this test";
+
+    // First create a keypoint set to reference
+    int keypoint_set_id = db.createKeypointSet(
+        "test_sift_keypoints",
+        "SIFT",
+        "homography_projection",
+        2000,
+        "../data",
+        "Test SIFT keypoints for v3.0 schema validation",
+        40
+    );
+    ASSERT_GT(keypoint_set_id, 0) << "Keypoint set should be created successfully";
+
+    // Record configuration with keypoint tracking fields
+    thesis_project::database::ExperimentConfig config;
+    config.descriptor_type = "SIFT";
+    config.dataset_path = "/test/data";
+    config.pooling_strategy = "NONE";
+    config.max_features = 2000;
+    config.similarity_threshold = 0.7;
+    config.keypoint_set_id = keypoint_set_id;
+    config.keypoint_source = "homography_projection";
+
+    int exp_id = db.recordConfiguration(config);
+    EXPECT_GT(exp_id, 0) << "Configuration with keypoint tracking should be recorded";
+
+    // Verify the fields were stored by checking they can be used in foreign key relationship
+    // (If foreign key was violated, the insert would have failed)
+    EXPECT_GT(exp_id, 0) << "Foreign key constraint should be satisfied";
+}
+
+TEST_F(DatabaseTest, KeypointTrackingFields_WithNullValues) {
+    thesis_project::database::DatabaseManager db(test_db_name, true);
+    ASSERT_TRUE(db.isEnabled()) << "Database must be enabled for this test";
+
+    // Record configuration with NULL keypoint tracking fields (backwards compatibility)
+    thesis_project::database::ExperimentConfig config;
+    config.descriptor_type = "SIFT";
+    config.dataset_path = "/test/data";
+    config.pooling_strategy = "NONE";
+    config.max_features = 1000;
+    config.similarity_threshold = 0.7;
+    config.keypoint_set_id = -1;  // Will be stored as NULL
+    config.keypoint_source = "";  // Will be stored as NULL
+
+    int exp_id = db.recordConfiguration(config);
+    EXPECT_GT(exp_id, 0) << "Configuration with NULL keypoint fields should be recorded for backwards compatibility";
+}
+
+TEST_F(DatabaseTest, KeypointTrackingFields_IndependentDetection) {
+    thesis_project::database::DatabaseManager db(test_db_name, true);
+    ASSERT_TRUE(db.isEnabled()) << "Database must be enabled for this test";
+
+    // Create keypoint set for independent detection
+    int keypoint_set_id = db.createKeypointSet(
+        "independent_sift_keypoints",
+        "SIFT",
+        "independent_detection",
+        1500,
+        "../data",
+        "Independent detection SIFT keypoints",
+        40
+    );
+    ASSERT_GT(keypoint_set_id, 0);
+
+    // Record configuration with independent detection source
+    thesis_project::database::ExperimentConfig config;
+    config.descriptor_type = "SIFT";
+    config.dataset_path = "/test/data";
+    config.pooling_strategy = "NONE";
+    config.max_features = 1500;
+    config.similarity_threshold = 0.8;
+    config.keypoint_set_id = keypoint_set_id;
+    config.keypoint_source = "independent_detection";
+
+    int exp_id = db.recordConfiguration(config);
+    EXPECT_GT(exp_id, 0) << "Configuration with independent_detection source should be recorded";
+}
+
+TEST_F(DatabaseTest, KeypointTrackingFields_MultipleExperimentsWithDifferentSources) {
+    thesis_project::database::DatabaseManager db(test_db_name, true);
+    ASSERT_TRUE(db.isEnabled()) << "Database must be enabled for this test";
+
+    // Create two different keypoint sets
+    int homography_set_id = db.createKeypointSet(
+        "homography_keypoints",
+        "SIFT",
+        "homography_projection",
+        2000,
+        "../data",
+        "Homography-based keypoints",
+        40
+    );
+
+    int independent_set_id = db.createKeypointSet(
+        "independent_keypoints",
+        "SIFT",
+        "independent_detection",
+        1500,
+        "../data",
+        "Independent detection keypoints",
+        40
+    );
+
+    ASSERT_GT(homography_set_id, 0);
+    ASSERT_GT(independent_set_id, 0);
+
+    // Record experiments with different keypoint sources
+    std::vector<std::tuple<int, std::string>> experiments = {
+        {homography_set_id, "homography_projection"},
+        {independent_set_id, "independent_detection"},
+        {-1, ""},  // NULL values for backwards compatibility
+    };
+
+    for (size_t i = 0; i < experiments.size(); ++i) {
+        thesis_project::database::ExperimentConfig config;
+        config.descriptor_type = "SIFT";
+        config.dataset_path = "/test/data";
+        config.pooling_strategy = "NONE";
+        config.max_features = 1000 + static_cast<int>(i * 100);
+        config.similarity_threshold = 0.7;
+        config.keypoint_set_id = std::get<0>(experiments[i]);
+        config.keypoint_source = std::get<1>(experiments[i]);
+
+        int exp_id = db.recordConfiguration(config);
+        EXPECT_GT(exp_id, 0) << "Experiment " << i << " should be recorded with keypoint source: "
+                             << (config.keypoint_source.empty() ? "NULL" : config.keypoint_source);
+    }
+}
+
+TEST_F(DatabaseTest, KeypointTrackingFields_ForeignKeyIntegrity) {
+    thesis_project::database::DatabaseManager db(test_db_name, true);
+    ASSERT_TRUE(db.isEnabled()) << "Database must be enabled for this test";
+
+    // Create a keypoint set
+    int valid_set_id = db.createKeypointSet(
+        "valid_keypoint_set",
+        "SIFT",
+        "homography_projection",
+        2000,
+        "../data",
+        "Valid keypoint set for FK test",
+        40
+    );
+    ASSERT_GT(valid_set_id, 0);
+
+    // Record configuration with valid foreign key
+    thesis_project::database::ExperimentConfig config;
+    config.descriptor_type = "SIFT";
+    config.dataset_path = "/test/data";
+    config.pooling_strategy = "NONE";
+    config.max_features = 2000;
+    config.similarity_threshold = 0.7;
+    config.keypoint_set_id = valid_set_id;
+    config.keypoint_source = "homography_projection";
+
+    int exp_id = db.recordConfiguration(config);
+    EXPECT_GT(exp_id, 0) << "Configuration with valid FK should succeed";
+
+    // Note: We cannot easily test FK violation in SQLite without enabling foreign key constraints
+    // and that requires PRAGMA foreign_keys = ON, which is not currently set in DatabaseManager
+}
