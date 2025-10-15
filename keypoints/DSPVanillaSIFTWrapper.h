@@ -53,9 +53,7 @@ public:
      * @param image Input image
      * @param keypoints Keypoints to describe
      * @param descriptors Output descriptor matrix
-     * @param scales Scale factors for domain pooling (e.g., {0.85, 1.0, 1.30})
-     * @param aggregation Aggregation method (AVERAGE, MAX, MIN, CONCATENATE)
-     * @param apply_rooting Apply RootSIFT to each scale before pooling
+     * @param params experiment parameters for DSP
      */
     void computeDSP(const cv::Mat& image,
                     std::vector<cv::KeyPoint>& keypoints,

@@ -19,33 +19,51 @@ DescriptorWorkbench is a production-ready research platform for evaluating image
 
 ## Quick Start
 
-### Prerequisites
+### Prerequisites (common)
+* OpenCV ≥ 4.12.0 (with contrib for SIFT/VGG/xfeatures2d)
+* CMake ≥ 3.15
+* C++17-capable compiler
+* SQLite3
+* Boost ≥ 1.70
+* yaml-cpp
 
-- **OpenCV 4.12.0+** (with contrib modules for SIFT, VGG, xfeatures2d)
-- **CMake 3.15+**
-- **C++17 compiler**
-- **SQLite3**
-- **Boost 1.70+**
-- **yaml-cpp**
-
-### Build Instructions
-
+### Five-minute setup
 ```bash
-# Clone and build
+# 1. Clone
 git clone <repository-url>
 cd DescriptorWorkbench
-mkdir build && cd build
 
-# Configure with system packages (recommended). Database integration is always enabled.
+# 2. Fetch HPatches (idempotent; place dataset under ./data/)
+./scripts/download_hpatches.sh
+
+# 3. Configure + build
+mkdir -p build && cd build
 cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF
-
-# Build (all tests should pass: 20/20)
 make -j$(nproc)
 
-# Verify installation
+# 4. Run tests
 ctest --output-on-failure
-# Expected: 100% tests passed, 0 tests failed out of 20
+
+# 5. Run a sample experiment (writes results to build/experiments.db)
+./experiment_runner ../config/experiments/sift_baseline.yaml
 ```
+
+# Running Descriptor Sweeps
+
+After building, you can exercise the full descriptor suites directly:
+
+```bash
+# DSP variations (SIFT, RGBSIFT, HoNC, SURF)
+./run_dsp_experiments.sh
+./run_dsp_experiments.sh surf      # SURF only
+./run_dsp_experiments.sh parallel  # run all groups concurrently
+
+# Individual configs
+./experiment_runner ../config/experiments/descriptor_processing_sift_keynet_pairs.yaml
+./experiment_runner ../config/experiments/split/surf_experiments.yaml
+```
+
+All results land in `build/experiments.db` for downstream notebook analysis.
 
 ### Native Installation (Platform-Specific)
 
@@ -55,13 +73,13 @@ ctest --output-on-failure
 sudo pacman -S base-devel cmake git python python-pip
 sudo pacman -S opencv boost tbb intel-tbb sqlite yaml-cpp
 
-# Install OpenCV contrib (for SIFT support)
+# Install OpenCV contrib (for SIFT/SURF support)
 yay -S opencv-contrib  # or paru -S opencv-contrib
 
 # Clone and build
 git clone <repository-url>
 cd DescriptorWorkbench
-python3 setup.py  # Download HPatches dataset
+./scripts/download_hpatches.sh  # Download HPatches dataset into ./data
 mkdir build && cd build
 # Configure (database support builds automatically)
 cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF
@@ -79,7 +97,7 @@ sudo apt install libboost-all-dev libtbb-dev libsqlite3-dev libyaml-cpp-dev
 # Clone and build
 git clone <repository-url>
 cd DescriptorWorkbench
-python3 setup.py  # Download HPatches dataset
+./scripts/download_hpatches.sh  # Download HPatches dataset into ./data
 mkdir build && cd build
 # Configure (database support builds automatically)
 cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF
@@ -97,7 +115,7 @@ brew install cmake opencv boost tbb python3 sqlite yaml-cpp
 # Clone and build
 git clone <repository-url>
 cd DescriptorWorkbench
-python3 setup.py  # Download HPatches dataset
+./scripts/download_hpatches.sh  # Download HPatches dataset into ./data
 mkdir build && cd build
 # Configure (database support builds automatically)
 cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF
@@ -108,7 +126,7 @@ make -j$(nproc)
 
 **Option 1: Docker (Recommended for Windows)**
 ```powershell
-# Install Docker Desktop, then follow Docker instructions above
+# Install Docker Desktop, then follow Docker instructions below
 ```
 
 **Option 2: Native Windows with vcpkg**
@@ -129,7 +147,7 @@ cd vcpkg
 # Clone and build project
 git clone <repository-url>
 cd DescriptorWorkbench
-python setup.py  # Download HPatches dataset
+./scripts/download_hpatches.sh  # Download HPatches dataset into ./data
 mkdir build && cd build
 cmake .. -DCMAKE_TOOLCHAIN_FILE=C:/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
 cmake --build . --config Release
@@ -156,8 +174,9 @@ sudo apt install libopencv-dev libopencv-contrib-dev libboost-all-dev libtbb-dev
 
 ```bash
 # Development environment (user-safe, no permission conflicts)
-export USER_ID=$(id -u) && export GROUP_ID=$(id -g)
-docker-compose -f docker-compose.dev.yml build --no-cache
+export UID=$(id -u)
+export GID=$(id -g)
+docker-compose -f docker-compose.dev.yml build --no-cache  # builds OpenCV 4.10 w/contrib (~10 min)
 docker-compose -f docker-compose.dev.yml up -d
 docker-compose -f docker-compose.dev.yml exec descriptor-dev bash
 
@@ -195,6 +214,22 @@ brew install docker docker-compose
 # Enable WSL2 integration if using WSL2
 # Ensure virtualization in BIOS if needed
 ```
+
+## Running Descriptor Sweeps
+
+After building, the provided helper scripts can execute the core descriptor suites:
+
+```bash
+# SIFT/RGBSIFT/HoNC DSP ablations
+./run_dsp_experiments.sh           # sequential
+./run_dsp_experiments.sh surf      # SURF-only variations
+
+# Individual configs (examples)
+./experiment_runner ../config/experiments/split/surf_experiments.yaml
+./experiment_runner ../config/experiments/descriptor_processing_sift_keynet_pairs.yaml
+```
+
+Results are automatically recorded in `build/experiments.db` and surfaced in the notebooks under `analysis/notebooks/`.
 
 ## Keypoint Generation & Management
 
@@ -259,11 +294,11 @@ cd build
 
 ### Dataset Setup
 
-The framework expects HPatches dataset in `data/` directory:
+The framework expects HPatches dataset unpacked under `data/`:
 
 ```bash
-# Download HPatches dataset automatically
-python3 setup.py
+# Downloads and extracts to ./data/hpatches-sequences-release
+./scripts/download_hpatches.sh
 ```
 
 ## Architecture Overview

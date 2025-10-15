@@ -6,40 +6,45 @@ ENV TZ=UTC
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
-    git \
-    python3 \
-    python3-pip \
-    pkg-config \
-    wget \
-    curl \
-    # OpenCV dependencies
-    libopencv-dev \
-    libopencv-contrib-dev \
-    opencv-data \
-    python3-opencv \
-    # Boost
-    libboost-all-dev \
-    # Threading
-    libtbb-dev \
-    # X11 for potential GUI operations
-    libx11-dev \
-    libxext-dev \
-    libxrender-dev \
-    libxtst-dev \
-    # ==================== ADD SQLITE3 HERE ====================
-    # SQLite3 development package
-    libsqlite3-dev \
-    sqlite3 \
-    # YAML-cpp for experiment configuration
-    libyaml-cpp-dev \
-    # ==========================================================
-    # Additional utilities
-    htop \
-    vim \
-    nano \
+    build-essential cmake git python3 python3-pip pkg-config wget curl \
+    libboost-all-dev libtbb-dev libeigen3-dev \
+    libjpeg-dev libpng-dev libtiff-dev libopenexr-dev libwebp-dev \
+    libgtk-3-dev libcanberra-gtk3-module libdc1394-dev libv4l-dev \
+    libavcodec-dev libavformat-dev libswscale-dev libxvidcore-dev libx264-dev \
+    libx11-dev libxext-dev libxrender-dev libxtst-dev \
+    libsqlite3-dev sqlite3 libyaml-cpp-dev \
+    libgtest-dev ninja-build htop vim nano \
     && rm -rf /var/lib/apt/lists/*
+
+# Build GoogleTest (Ubuntu ships sources only)
+RUN cmake -S /usr/src/googletest -B /usr/src/googletest/build && \
+    cmake --build /usr/src/googletest/build && \
+    cmake --install /usr/src/googletest/build
+
+# Build OpenCV with contrib (includes xfeatures2d / nonfree)
+ENV OPENCV_VERSION=4.10.0
+RUN mkdir -p /tmp/opencv-build && cd /tmp/opencv-build && \
+    wget -q https://github.com/opencv/opencv/archive/${OPENCV_VERSION}.tar.gz -O opencv.tar.gz && \
+    wget -q https://github.com/opencv/opencv_contrib/archive/${OPENCV_VERSION}.tar.gz -O opencv_contrib.tar.gz && \
+    tar -xf opencv.tar.gz && tar -xf opencv_contrib.tar.gz && \
+    mkdir -p opencv-${OPENCV_VERSION}/build && cd opencv-${OPENCV_VERSION}/build && \
+    cmake -G Ninja \
+        -D CMAKE_BUILD_TYPE=Release \
+        -D CMAKE_INSTALL_PREFIX=/usr/local \
+        -D OPENCV_EXTRA_MODULES_PATH=/tmp/opencv-build/opencv_contrib-${OPENCV_VERSION}/modules \
+        -D OPENCV_ENABLE_NONFREE=ON \
+        -D BUILD_EXAMPLES=OFF \
+        -D BUILD_TESTS=OFF \
+        -D BUILD_DOCS=OFF \
+        -D BUILD_opencv_python3=ON \
+        -D BUILD_opencv_java=OFF \
+        -D WITH_CUDA=OFF \
+        -D WITH_OPENCL=OFF \
+        -D WITH_IPP=ON \
+        .. && \
+    cmake --build . --target install && \
+    ldconfig && \
+    rm -rf /tmp/opencv-build
 
 # Create user matching host user to avoid permission issues
 ARG USER_ID=1000

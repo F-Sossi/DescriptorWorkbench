@@ -24,6 +24,33 @@ namespace cv {
     class KeyPoint;
 }
 
+static void printUsage(const std::string& binaryName) {
+    std::cout << "Usage: " << binaryName << " <command> [options]" << std::endl;
+    std::cout << "Options:" << std::endl;
+    std::cout << "  -h, --help                                Show this help message and exit" << std::endl;
+    std::cout << "Commands:" << std::endl;
+    std::cout << "  Keypoint Generation:" << std::endl;
+    std::cout << "    generate-projected <data_folder> [name]   - Generate keypoints using homography projection (controlled)" << std::endl;
+    std::cout << "    generate-independent <data_folder> [name] - Generate keypoints using independent detection (realistic)" << std::endl;
+    std::cout << "    generate <data_folder>                    - Legacy: Generate homography projected keypoints" << std::endl;
+    std::cout << "  Advanced Detector Generation:" << std::endl;
+    std::cout << "    generate-detector <data_folder> <detector> [name]                    - Generate keypoints using specific detector (sift|harris|orb)" << std::endl;
+    std::cout << "    generate-non-overlapping <data_folder> <detector> <min_distance> [name] - Generate non-overlapping keypoints" << std::endl;
+    std::cout << "    generate-kornia-keynet <data_folder> [set_name] [max_kp] [device] [--mode independent|projected] [--overwrite]" << std::endl;
+    std::cout << "                         Run Kornia KeyNet detector via Python (independent or homography projected)" << std::endl;
+    // attribute-detector removed - using pure intersection sets instead
+    std::cout << "    build-intersection --source-a <set> --source-b <set> --out-a <set> --out-b <set> [--tolerance px] [--overwrite]" << std::endl;
+    std::cout << "                         Create paired subsets where two detectors agree spatially" << std::endl;
+    std::cout << "  Import/Export:" << std::endl;
+    std::cout << "    import-csv <csv_folder> [set_name]        - Import keypoints from CSV files" << std::endl;
+    std::cout << "    export-csv <output_folder> [set_id]       - Export keypoints from DB to CSV" << std::endl;
+    std::cout << "  Information:" << std::endl;
+    std::cout << "    list-sets                                 - List all available keypoint sets" << std::endl;
+    std::cout << "    list-scenes [set_id]                      - List scenes in database (optionally for specific set)" << std::endl;
+    std::cout << "    count <scene> <image> [set_id]            - Count keypoints for specific scene/image" << std::endl;
+    std::cout << "    list-detectors                            - List supported detector types" << std::endl;
+}
+
 using namespace thesis_project;
 
 /**
@@ -31,32 +58,15 @@ using namespace thesis_project;
  */
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::cout << "Usage: " << argv[0] << " <command> [options]" << std::endl;
-        std::cout << "Commands:" << std::endl;
-        std::cout << "  Keypoint Generation:" << std::endl;
-        std::cout << "    generate-projected <data_folder> [name]   - Generate keypoints using homography projection (controlled)" << std::endl;
-        std::cout << "    generate-independent <data_folder> [name] - Generate keypoints using independent detection (realistic)" << std::endl;
-        std::cout << "    generate <data_folder>                    - Legacy: Generate homography projected keypoints" << std::endl;
-        std::cout << "  Advanced Detector Generation:" << std::endl;
-        std::cout << "    generate-detector <data_folder> <detector> [name]                    - Generate keypoints using specific detector (sift|harris|orb)" << std::endl;
-        std::cout << "    generate-non-overlapping <data_folder> <detector> <min_distance> [name] - Generate non-overlapping keypoints" << std::endl;
-        std::cout << "    generate-kornia-keynet <data_folder> [set_name] [max_kp] [device] [--mode independent|projected] [--overwrite]" << std::endl;
-        std::cout << "                         Run Kornia KeyNet detector via Python (independent or homography projected)" << std::endl;
-        // attribute-detector removed - using pure intersection sets instead
-        std::cout << "    build-intersection --source-a <set> --source-b <set> --out-a <set> --out-b <set> [--tolerance px] [--overwrite]" << std::endl;
-        std::cout << "                         Create paired subsets where two detectors agree spatially" << std::endl;
-        std::cout << "  Import/Export:" << std::endl;
-        std::cout << "    import-csv <csv_folder> [set_name]        - Import keypoints from CSV files" << std::endl;
-        std::cout << "    export-csv <output_folder> [set_id]       - Export keypoints from DB to CSV" << std::endl;
-        std::cout << "  Information:" << std::endl;
-        std::cout << "    list-sets                                 - List all available keypoint sets" << std::endl;
-        std::cout << "    list-scenes [set_id]                      - List scenes in database (optionally for specific set)" << std::endl;
-        std::cout << "    count <scene> <image> [set_id]            - Count keypoints for specific scene/image" << std::endl;
-        std::cout << "    list-detectors                            - List supported detector types" << std::endl;
+        printUsage(argv[0]);
         return 1;
     }
 
     std::string command = argv[1];
+    if (command == "--help" || command == "-h") {
+        printUsage(argv[0]);
+        return 0;
+    }
 
     // Initialize database
     database::DatabaseManager db("experiments.db", true);

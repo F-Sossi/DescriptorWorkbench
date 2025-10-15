@@ -25,6 +25,14 @@
 #include <thread>
 #endif
 
+static void printUsage(const std::string& binaryName) {
+    std::cout << "Usage: " << binaryName << " <config.yaml>" << std::endl;
+    std::cout << "Options:" << std::endl;
+    std::cout << "  -h, --help        Show this help message and exit" << std::endl;
+    std::cout << "Example:" << std::endl;
+    std::cout << "  " << binaryName << " ../config/experiments/sift_baseline.yaml" << std::endl;
+}
+
 using namespace thesis_project;
 namespace experiment_helpers = thesis_project::experiment;
 
@@ -546,9 +554,19 @@ static ::ExperimentMetrics processDirectoryNew(
  * while using existing image processing code.
  */
 int main(int argc, char** argv) {
+    if (argc < 2) {
+        printUsage(argv[0]);
+        return 1;
+    }
+
+    std::string firstArg = argv[1];
+    if (firstArg == "--help" || firstArg == "-h") {
+        printUsage(argv[0]);
+        return 0;
+    }
+
     if (argc != 2) {
-        std::cout << "Usage: " << argv[0] << " <config.yaml>" << std::endl;
-        std::cout << "Example: " << argv[0] << " config/experiments/sift_baseline.yaml" << std::endl;
+        printUsage(argv[0]);
         return 1;
     }
 
