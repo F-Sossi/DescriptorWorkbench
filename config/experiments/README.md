@@ -130,6 +130,32 @@ descriptors:
     normalize_after_pooling: true
     norm_type: 1|4  # L1 or L2
     rooting_stage: none|before_pooling|after_pooling
+
+evaluation:
+  matching:
+    method: brute_force
+    threshold: 0.8
+  image_retrieval:
+    enabled: false          # Defaults to false; opt in explicitly
+    scorer: total_matches   # Alternatives: correct_matches*, ratio_sum
+
+```
+
+### Image Retrieval MAP (Optional)
+
+Setting `evaluation.image_retrieval.enabled: true` triggers a dataset-wide image-level
+Mean Average Precision computation. Scorers:
+
+- `total_matches` (default) – rank candidates by surviving match count.
+- `ratio_sum` – distance-weighted match votes (`∑ 1/(1+d)`).
+- `correct_matches` – only meaningful when using homography-projected keypoints (the
+  independent-detection path will report zero because correctness cannot be assessed).
+
+When enabled the runner caches every query/candidate match list in memory so each query
+image (typically `1.ppm` per scene) can be ranked against every other image in the dataset.
+Results are written to `results.image_retrieval_map`; when the toggle is off the column is
+set to `-1` for downstream filtering. Expect extra runtime/memory due to cross-scene
+matching.
 ```
 
 ## Keypoint Set Generation Status

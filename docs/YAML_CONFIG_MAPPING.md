@@ -212,6 +212,10 @@ evaluation:
     method: "homography"           # or "cross_image", "none"
     threshold: 0.05                # Pixel threshold for homography validation
     min_matches: 10
+
+  image_retrieval:
+    enabled: true                  # Optional dataset-level retrieval MAP
+    scorer: "total_matches"        # "total_matches" (default), "ratio_sum", or "correct_matches"
 ```
 
 ### Code Flow:
@@ -244,6 +248,21 @@ evaluation:
 - **Parsing**: `YAMLConfigLoader.cpp:339-341`
 - **Storage**: `types.hpp:366` → Pixel threshold for geometric validation
 - **Usage**: `experiment_runner.cpp:398-406` → `maybeAccumulateTrueAveragePrecisionFromFile()`
+
+#### **Image Retrieval Metric** (image_retrieval.*):
+- **Parsing**: `YAMLConfigLoader.cpp:369-378`
+- **Storage**: `types.hpp:369-374` → `ImageRetrievalParams`
+- **Default Scorer**: `"total_matches"` in `types.hpp`
+- **Runtime Toggle**: `experiment_runner.cpp:648-759` instantiates `ImageRetrievalAccumulator`
+- **Scorers**:
+  - `total_matches` → raw match count (`cli/experiment_runner.cpp:314-330`, window line ~320)
+  - `ratio_sum` → ∑ 1/(1 + distance)
+  - `correct_matches` → requires `homography_projection` keypoints; otherwise 0
+  - Unknown strings fall back to `total_matches`
+- **Ranking Logic**: accumulator recomputes query vs candidate matches, sorts by score, builds relevance list via scene match, computes AP (`cli/experiment_runner.cpp:204-348`)
+- **Aggregation**: per-query retrieval AP stored in `ExperimentMetrics::addImageRetrievalAP` (`src/core/metrics/ExperimentMetrics.hpp:295`); final MAP computed in `calculateMeanPrecision` (`src/core/metrics/ExperimentMetrics.hpp:241-248`)
+- **Database**: stored as `results.image_retrieval_map` (`database/schema.sql:33-42`, `src/core/database/DatabaseManager.cpp:445-486`)
+- **Performance Note**: Enables full cross-scene matching; OpenMP disabled for this mode (`cli/experiment_runner.cpp:705-719`)
 
 ---
 

@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <numeric>
 #include "TrueAveragePrecision.hpp"
 
 /**
@@ -49,6 +50,12 @@ struct ExperimentMetrics {
     std::map<std::string, int> per_scene_excluded;                 // Count R=0 queries per scene
     int total_queries_processed = 0;                               // Total queries with potential matches
     int total_queries_excluded = 0;                                // Queries excluded (R=0)
+
+    // Image-retrieval MAP storage
+    std::vector<double> image_retrieval_ap_per_query;
+    std::map<std::string, std::vector<double>> image_retrieval_ap_per_scene;
+    double image_retrieval_map = -1.0;
+    int image_retrieval_queries = 0;
     
     // Rank data for Precision@K/Recall@K calculation
     std::vector<int> ranks_per_query;                              // Rank of true match for each query (1-based, -1 if R=0)
@@ -75,6 +82,8 @@ struct ExperimentMetrics {
         true_map_macro_by_scene = 0.0;
         true_map_micro_including_zeros = 0.0;
         true_map_macro_by_scene_including_zeros = 0.0;
+        image_retrieval_map = -1.0;
+        image_retrieval_queries = static_cast<int>(image_retrieval_ap_per_query.size());
         
         // Reset Precision@K and Recall@K metrics
         precision_at_1 = 0.0;
@@ -228,6 +237,16 @@ struct ExperimentMetrics {
                           << " P@10=" << precision_at_10 << std::endl;
             }
         }
+
+        if (!image_retrieval_ap_per_query.empty()) {
+            double retrieval_sum = std::accumulate(
+                image_retrieval_ap_per_query.begin(),
+                image_retrieval_ap_per_query.end(),
+                0.0);
+            image_retrieval_map = retrieval_sum / static_cast<double>(image_retrieval_ap_per_query.size());
+        } else {
+            image_retrieval_map = -1.0;
+        }
     }
     
     /**
@@ -271,6 +290,17 @@ struct ExperimentMetrics {
             per_scene_excluded[scene_name]++; // Track R=0 queries per scene
             ranks_per_query.push_back(-1);    // R=0 query (no rank)
         }
+    }
+
+    /**
+     * @brief Add image-retrieval AP for a query image
+     * @param scene_name Scene identifier for the query
+     * @param ap Average precision for the ranked candidate list
+     */
+    void addImageRetrievalAP(const std::string& scene_name, double ap) {
+        image_retrieval_ap_per_query.push_back(ap);
+        image_retrieval_ap_per_scene[scene_name].push_back(ap);
+        image_retrieval_queries = static_cast<int>(image_retrieval_ap_per_query.size());
     }
 
     /**
@@ -346,6 +376,19 @@ struct ExperimentMetrics {
             other.ranks_per_query.begin(),
             other.ranks_per_query.end()
         );
+
+        image_retrieval_ap_per_query.insert(
+            image_retrieval_ap_per_query.end(),
+            other.image_retrieval_ap_per_query.begin(),
+            other.image_retrieval_ap_per_query.end()
+        );
+
+        for (const auto& [scene_name, aps] : other.image_retrieval_ap_per_scene) {
+            auto& bucket = image_retrieval_ap_per_scene[scene_name];
+            bucket.insert(bucket.end(), aps.begin(), aps.end());
+        }
+
+        image_retrieval_queries = static_cast<int>(image_retrieval_ap_per_query.size());
     }
 
     /**

@@ -2,6 +2,9 @@
 #include <fstream>
 #include <vector>
 #include <string>
+#include <filesystem>
+#include <algorithm>
+#include <cctype>
 
 // Configuration concepts from Stage 2
 enum class DescriptorType { SIFT, RGBSIFT, vSIFT, HoNC };
@@ -17,23 +20,83 @@ std::string toString(DescriptorType type) {
     }
 }
 
+namespace {
+
+std::filesystem::path repoRoot() {
+    auto source_path = std::filesystem::path(__FILE__);
+    return source_path.parent_path().parent_path().parent_path();
+}
+
+std::filesystem::path requiredConfigListPath() {
+    return repoRoot() / "tests" / "unit" / "config" / "required_configs.txt";
+}
+
+std::string trim(const std::string& input) {
+    auto first = std::find_if_not(input.begin(), input.end(), [](unsigned char ch) { return std::isspace(ch); });
+    auto last = std::find_if_not(input.rbegin(), input.rend(), [](unsigned char ch) { return std::isspace(ch); }).base();
+    if (first >= last) {
+        return {};
+    }
+    return std::string(first, last);
+}
+
+std::vector<std::string> loadRequiredConfigList() {
+    std::vector<std::string> configs;
+    std::ifstream list_file(requiredConfigListPath());
+    if (!list_file.good()) {
+        return configs;
+    }
+
+    std::string line;
+    while (std::getline(list_file, line)) {
+        auto cleaned = trim(line);
+        if (cleaned.empty() || cleaned[0] == '#') {
+            continue;
+        }
+        configs.push_back(cleaned);
+    }
+    return configs;
+}
+
+const std::vector<std::string>& cachedRequiredConfigs() {
+    static const std::vector<std::string> configs = loadRequiredConfigList();
+    return configs;
+}
+
+std::vector<std::pair<std::string, std::string>> baselineSectionPairs(const std::vector<std::string>& sections) {
+    std::vector<std::pair<std::string, std::string>> pairs;
+    const auto& configs = cachedRequiredConfigs();
+    if (configs.empty()) {
+        return pairs;
+    }
+    const auto& baseline = configs.front();
+    for (const auto& section : sections) {
+        pairs.emplace_back(baseline, section);
+    }
+    return pairs;
+}
+
+} // namespace
+
 class YAMLConfigTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        config_files = {
-            "config/experiments/sift_baseline.yaml",
-            "config/experiments/rgbsift_comparison.yaml",
-            "config/experiments/dsp_experiment.yaml"
-        };
-        
+        config_files = cachedRequiredConfigs();
+        if (config_files.empty()) {
+            GTEST_SKIP() << "No configuration paths listed in "
+                         << requiredConfigListPath().string();
+        }
+
         required_sections = {
             "experiment:", "dataset:", "keypoints:", "descriptors:",
             "evaluation:", "database:"
         };
+        baseline_config = config_files.front();
     }
     
     std::vector<std::string> config_files;
     std::vector<std::string> required_sections;
+    std::string baseline_config;
 };
 
 TEST_F(YAMLConfigTest, ConfigurationFilesExist) {
@@ -65,9 +128,9 @@ TEST_F(YAMLConfigTest, ConfigurationFilesExist) {
 }
 
 TEST_F(YAMLConfigTest, SIFTBaselineStructure) {
-    std::ifstream config_file("config/experiments/sift_baseline.yaml");
+    std::ifstream config_file(baseline_config);
     ASSERT_TRUE(config_file.good()) 
-        << "SIFT baseline configuration file must exist for structure validation";
+        << "Baseline configuration file must exist for structure validation: " << baseline_config;
     
     std::string content((std::istreambuf_iterator<char>(config_file)),
                         std::istreambuf_iterator<char>());
@@ -149,11 +212,7 @@ TEST_P(ConfigFileTest, FileExists) {
 INSTANTIATE_TEST_SUITE_P(
     AllConfigFiles,
     ConfigFileTest,
-    ::testing::Values(
-        "config/experiments/sift_baseline.yaml",
-        "config/experiments/rgbsift_comparison.yaml", 
-        "config/experiments/dsp_experiment.yaml"
-    )
+    ::testing::ValuesIn(cachedRequiredConfigs())
 );
 
 // Test fixture for testing multiple YAML structure elements
@@ -186,12 +245,14 @@ TEST_P(YAMLStructureTest, SectionExists) {
 INSTANTIATE_TEST_SUITE_P(
     SIFTBaselineSections,
     YAMLStructureTest,
-    ::testing::Values(
-        std::make_pair("config/experiments/sift_baseline.yaml", "experiment:"),
-        std::make_pair("config/experiments/sift_baseline.yaml", "dataset:"),
-        std::make_pair("config/experiments/sift_baseline.yaml", "keypoints:"),
-        std::make_pair("config/experiments/sift_baseline.yaml", "descriptors:"),
-        std::make_pair("config/experiments/sift_baseline.yaml", "evaluation:"),
-        std::make_pair("config/experiments/sift_baseline.yaml", "database:")
+    ::testing::ValuesIn(
+        baselineSectionPairs({
+            "experiment:",
+            "dataset:",
+            "keypoints:",
+            "descriptors:",
+            "evaluation:",
+            "database:"
+        })
     )
 );

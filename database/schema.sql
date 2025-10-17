@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS results (
     true_map_macro REAL,                    -- Scene-balanced mAP (primary metric)
     true_map_micro REAL,                    -- Overall mAP weighted by query count
     true_map_macro_with_zeros REAL,         -- Conservative: includes R=0 queries as AP=0
-    true_map_micro_with_zeros REAL,         -- Conservative: includes R=0 queries as AP=0  
+    true_map_micro_with_zeros REAL,         -- Conservative: includes R=0 queries as AP=0
+    image_retrieval_map REAL DEFAULT -1,    -- Image-level retrieval MAP (optional; -1 when disabled)
     -- Legacy/compatibility metrics
     mean_average_precision REAL,            -- Primary display metric (uses true_map_macro when available)
     legacy_mean_precision REAL,             -- Original arithmetic mean for backward compatibility

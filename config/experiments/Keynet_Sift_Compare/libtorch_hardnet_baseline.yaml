@@ -36,5 +36,9 @@ evaluation:
     threshold: 0.05
     min_matches: 10
 
+  image_retrieval:
+    enabled: false
+    scorer: "total_matches"
+
 database:
   connection: "sqlite:///experiments.db"

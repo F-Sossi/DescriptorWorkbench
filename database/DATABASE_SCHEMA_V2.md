@@ -24,6 +24,19 @@ The migration:
 - Preserves all existing data with backward compatibility
 - Creates automatic backup before migration
 
+## Migration to v3.1 (Image Retrieval MAP)
+
+Schema v3.1 introduces the optional `image_retrieval_map` column on the `results` table.
+To upgrade an existing database, run:
+
+```bash
+sqlite3 experiments.db < database/migrate_to_v4_image_retrieval.sql
+```
+
+The migration simply adds the new column with a default value of `-1`, preserving
+existing rows. New experiments run with `evaluation.image_retrieval.enabled: true`
+will overwrite the placeholder with the computed MAP.
+
 ## Table Schemas
 
 ### experiments
@@ -66,6 +79,11 @@ Stores experiment results with IR-style mAP metrics as primary columns.
 | `precision_at_5` | REAL | Precision at rank 5 |
 | `recall_at_1` | REAL | Recall at rank 1 |
 | `recall_at_5` | REAL | Recall at rank 5 |
+
+#### Image Retrieval Metrics (NEW in v3.1)
+| Column | Type | Description |
+|--------|------|-------------|
+| `image_retrieval_map` | REAL | Dataset-wide image retrieval MAP (defaults to `-1` when disabled) |
 
 #### Experiment Metadata
 | Column | Type | Description |

@@ -524,6 +524,7 @@ struct ExperimentResults {
     double true_map_micro = 0.0;           // Overall mAP
     double true_map_macro_with_zeros = 0.0; // Conservative: includes R=0 queries
     double true_map_micro_with_zeros = 0.0; // Conservative: includes R=0 queries
+    double image_retrieval_map = -1.0;     // Optional image-level retrieval MAP
     // Precision@K metrics
     double precision_at_1 = 0.0;
     double precision_at_5 = 0.0;

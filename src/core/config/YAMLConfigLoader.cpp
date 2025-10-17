@@ -4,8 +4,8 @@
 #include <sstream>
 #include <unordered_set>
 
-namespace thesis_project {
-namespace config {
+
+namespace thesis_project::config {
 
     ExperimentConfig YAMLConfigLoader::loadFromFile(const std::string& yaml_path) {
         try {
@@ -365,6 +365,19 @@ namespace config {
                 evaluation.params.min_matches_for_homography = validation["min_matches"].as<int>();
             }
         }
+
+        // Parse image retrieval evaluation parameters
+        if (node["image_retrieval"]) {
+            const auto& retrieval = node["image_retrieval"];
+
+            if (retrieval["enabled"]) {
+                evaluation.params.image_retrieval.enabled = retrieval["enabled"].as<bool>();
+            }
+
+            if (retrieval["scorer"]) {
+                evaluation.params.image_retrieval.scorer = retrieval["scorer"].as<std::string>();
+            }
+        }
         
         // Legacy keys removed in Schema v1 (no parsing of matching_threshold / validation_method)
     }
@@ -544,5 +557,5 @@ namespace config {
         file << out.c_str();
     }
 
-} // namespace config
-} // namespace thesis_project
+} // namespace thesis_project::config
+

@@ -366,6 +366,11 @@ namespace thesis_project {
         bool vgg_dsc_normalize = false; // Normalize descriptor after extraction
     };
 
+    struct ImageRetrievalParams {
+        bool enabled = false;
+        std::string scorer = "total_matches";
+    };
+
     struct EvaluationParams {
         MatchingMethod matching_method = MatchingMethod::BRUTE_FORCE;
         int norm_type = cv::NORM_L2;
@@ -375,6 +380,7 @@ namespace thesis_project {
         ValidationMethod validation_method = ValidationMethod::HOMOGRAPHY;
         float validation_threshold = 0.05f; // pixels
         int min_matches_for_homography = 10;
+        ImageRetrievalParams image_retrieval;
     };
 
     struct DatabaseParams {

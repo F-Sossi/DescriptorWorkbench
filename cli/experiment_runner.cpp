@@ -20,6 +20,8 @@
 #include <limits>
 #include <chrono>
 #include <fstream>
+#include <unordered_map>
+#include <map>
 #ifdef _OPENMP
 #include <omp.h>
 #include <thread>
@@ -132,6 +134,8 @@ struct ProfilingSummary {
     long total_kps = 0;
 };
 
+struct ImageRetrievalAccumulator;
+
 // Context for scene processing (all dependencies needed for parallel execution)
 struct SceneProcessingContext {
     const config::ExperimentConfig& yaml_config;
@@ -141,6 +145,7 @@ struct SceneProcessingContext {
     IDescriptorExtractor& extractor;
     pooling::PoolingStrategy& pooling;
     matching::MatchingStrategy& matcher;
+    ImageRetrievalAccumulator* retrieval_accumulator;
     bool use_db_keypoints;
     int keypoint_set_id;
     bool store_descriptors;
@@ -156,6 +161,222 @@ struct ThreadLocalProfiling {
     double match_ms = 0.0;
     long total_images = 0;
     long total_kps = 0;
+};
+
+struct ImageRetrievalAccumulator {
+    struct ImageFeatures {
+        std::vector<cv::KeyPoint> keypoints;
+        cv::Mat descriptors;
+    };
+
+    struct QueryKey {
+        std::string scene;
+        std::string image;
+    };
+
+    void registerImage(const std::string& scene_name,
+                       const std::string& image_name,
+                       const std::vector<cv::KeyPoint>& keypoints,
+                       const cv::Mat& descriptors,
+                       bool is_query_image) {
+        if (descriptors.empty()) {
+            return;
+        }
+
+        auto& scene_bucket = feature_store_[scene_name];
+        auto& features = scene_bucket[image_name];
+        features.keypoints = keypoints;
+        features.descriptors = descriptors.clone();
+
+        if (is_query_image) {
+            queries_.push_back({scene_name, image_name});
+        }
+    }
+
+    void compute(const thesis_project::config::ExperimentConfig& config,
+                 const std::string& scorer,
+                 ::ExperimentMetrics& metrics) {
+        if (computed_) {
+            return;
+        }
+        computed_ = true;
+
+        if (queries_.empty()) {
+            return;
+        }
+
+        const bool scorer_uses_correctness = (scorer == "correct_matches");
+        const bool can_evaluate_correctness =
+            scorer_uses_correctness &&
+            config.keypoints.params.source == thesis_project::KeypointSource::HOMOGRAPHY_PROJECTION;
+
+        const std::size_t query_count = queries_.size();
+        LOG_INFO("Computing image-retrieval candidates for " + std::to_string(query_count) + " queries");
+
+        std::vector<double> ap_per_query(query_count, 0.0);
+        std::vector<std::string> scene_per_query(query_count);
+        const std::size_t total_candidates = totalCandidateCount();
+
+#ifdef _OPENMP
+        bool parallel_queries = config.performance.parallel_scenes && query_count > 1;
+#else
+        bool parallel_queries = false;
+#endif
+
+#ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic) if(parallel_queries)
+#endif
+        for (std::size_t idx = 0; idx < query_count; ++idx) {
+            const auto& query = queries_[idx];
+            const ImageFeatures* query_features = findFeatures(query.scene, query.image);
+            if (!query_features) {
+                scene_per_query[idx] = query.scene;
+                ap_per_query[idx] = 0.0;
+                continue;
+            }
+
+            auto matcher = thesis_project::matching::MatchingFactory::createStrategy(
+                config.evaluation.params.matching_method);
+
+            struct CandidateScore {
+                double score = 0.0;
+                bool relevant = false;
+                std::string scene;
+                std::string image;
+            };
+
+            std::vector<CandidateScore> candidates;
+            if (total_candidates > 0) {
+                candidates.reserve(total_candidates - 1); // exclude self
+            }
+
+            for (const auto& [candidate_scene, images] : feature_store_) {
+                for (const auto& [candidate_image, candidate_features] : images) {
+                    if (candidate_scene == query.scene && candidate_image == query.image) {
+                        continue; // skip self
+                    }
+
+                    bool evaluate_correctness = can_evaluate_correctness && (candidate_scene == query.scene);
+
+                    auto artifacts = experiment_helpers::computeMatches(
+                        query_features->descriptors,
+                        candidate_features.descriptors,
+                        *matcher,
+                        evaluate_correctness,
+                        query_features->keypoints,
+                        candidate_features.keypoints);
+
+                    if (artifacts.matches.empty()) {
+                        CandidateScore cs;
+                        cs.score = 0.0;
+                        cs.relevant = (candidate_scene == query.scene);
+                        cs.scene = candidate_scene;
+                        cs.image = candidate_image;
+                        candidates.push_back(std::move(cs));
+                        continue;
+                    }
+
+                    CandidateScore cs;
+                    cs.score = computeScore(artifacts, scorer);
+                    cs.relevant = (candidate_scene == query.scene);
+                    cs.scene = candidate_scene;
+                    cs.image = candidate_image;
+                    candidates.push_back(std::move(cs));
+                }
+            }
+
+            std::sort(candidates.begin(), candidates.end(), [](const CandidateScore& a, const CandidateScore& b) {
+                if (a.score == b.score) {
+                    if (a.scene == b.scene) {
+                        return a.image < b.image;
+                    }
+                    return a.scene < b.scene;
+                }
+                return a.score > b.score;
+            });
+
+            std::vector<bool> relevance;
+            relevance.reserve(candidates.size());
+            for (const auto& entry : candidates) {
+                relevance.push_back(entry.relevant);
+            }
+
+            const double ap = computeAveragePrecision(relevance);
+            scene_per_query[idx] = query.scene;
+            ap_per_query[idx] = ap;
+        }
+
+        for (std::size_t idx = 0; idx < query_count; ++idx) {
+            metrics.addImageRetrievalAP(scene_per_query[idx], ap_per_query[idx]);
+        }
+    }
+
+private:
+    const ImageFeatures* findFeatures(const std::string& scene, const std::string& image) const {
+        auto scene_it = feature_store_.find(scene);
+        if (scene_it == feature_store_.end()) {
+            return nullptr;
+        }
+        auto& image_map = scene_it->second;
+        auto image_it = image_map.find(image);
+        if (image_it == image_map.end()) {
+            return nullptr;
+        }
+        return &image_it->second;
+    }
+
+    std::size_t totalCandidateCount() const {
+        std::size_t count = 0;
+        for (const auto& [scene, images] : feature_store_) {
+            count += images.size();
+        }
+        return count;
+    }
+
+    static double computeScore(const experiment_helpers::MatchArtifacts& artifacts,
+                               const std::string& scorer) {
+        if (scorer == "total_matches") {
+            return static_cast<double>(artifacts.matches.size());
+        }
+
+        if (scorer == "ratio_sum") {
+            double sum = 0.0;
+            for (const auto& match : artifacts.matches) {
+                sum += 1.0 / (1.0 + match.distance);
+            }
+            return sum;
+        }
+
+        if (scorer == "correct_matches") {
+            return static_cast<double>(artifacts.correctMatches);
+        }
+
+        // Fallback: total matches when scorer is unrecognized
+        return static_cast<double>(artifacts.matches.size());
+    }
+
+    static double computeAveragePrecision(const std::vector<bool>& relevance) {
+        int relevant_count = 0;
+        double accumulated_precision = 0.0;
+
+        for (size_t i = 0; i < relevance.size(); ++i) {
+            if (!relevance[i]) {
+                continue;
+            }
+            relevant_count++;
+            accumulated_precision += static_cast<double>(relevant_count) / static_cast<double>(i + 1);
+        }
+
+        if (relevant_count == 0) {
+            return 0.0;
+        }
+
+        return accumulated_precision / static_cast<double>(relevant_count);
+    }
+
+    std::map<std::string, std::map<std::string, ImageFeatures>> feature_store_;
+    std::vector<QueryKey> queries_;
+    bool computed_ = false;
 };
 
 // Create a simple SIFT detector for independent detection
@@ -194,7 +415,7 @@ static std::pair<::ExperimentMetrics, ThreadLocalProfiling> processSingleScene(
                               const std::string& scene_name,
                               const std::string& image_name,
                               std::vector<cv::KeyPoint>& keypoints) {
-        auto det = ensureDetector();
+        const auto det = ensureDetector();
         auto t0 = std::chrono::high_resolution_clock::now();
         det->detect(image, keypoints);
         auto t1 = std::chrono::high_resolution_clock::now();
@@ -313,6 +534,14 @@ static std::pair<::ExperimentMetrics, ThreadLocalProfiling> processSingleScene(
     }
 
     maybeStoreDescriptors(scene_name, base_image_name, keypoints1, descriptors1);
+    if (ctx.retrieval_accumulator) {
+        ctx.retrieval_accumulator->registerImage(
+            scene_name,
+            base_image_name,
+            keypoints1,
+            descriptors1,
+            true);
+    }
     prof.total_images += 1;
     prof.total_kps += static_cast<long>(keypoints1.size());
 
@@ -341,6 +570,14 @@ static std::pair<::ExperimentMetrics, ThreadLocalProfiling> processSingleScene(
         }
 
         maybeStoreDescriptors(scene_name, image_name, keypoints2, descriptors2);
+        if (ctx.retrieval_accumulator) {
+            ctx.retrieval_accumulator->registerImage(
+                scene_name,
+                image_name,
+                keypoints2,
+                descriptors2,
+                false);
+        }
         prof.total_images += 1;
         prof.total_kps += static_cast<long>(keypoints2.size());
 
@@ -433,6 +670,12 @@ static ::ExperimentMetrics processDirectoryNew(
         auto matcher = thesis_project::matching::MatchingFactory::createStrategy(
             yaml_config.evaluation.params.matching_method);
 
+        ImageRetrievalAccumulator retrieval_accumulator;
+        ImageRetrievalAccumulator* retrieval_ptr = nullptr;
+        if (yaml_config.evaluation.params.image_retrieval.enabled) {
+            retrieval_ptr = &retrieval_accumulator;
+        }
+
         const bool store_descriptors = db_ptr && db_ptr->isEnabled() && experiment_id != -1 &&
             yaml_config.database.save_descriptors;
         const bool store_matches = db_ptr && db_ptr->isEnabled() && experiment_id != -1 &&
@@ -456,6 +699,7 @@ static ::ExperimentMetrics processDirectoryNew(
             *extractor,
             *pooling,
             *matcher,
+            retrieval_ptr,
             use_db_keypoints,
             keypoint_set_id,
             store_descriptors,
@@ -482,10 +726,14 @@ static ::ExperimentMetrics processDirectoryNew(
         }
 
         // Determine thread count for OpenMP
-        const bool use_parallel = yaml_config.performance.parallel_scenes;
+        const bool retrieval_enabled = yaml_config.evaluation.params.image_retrieval.enabled;
+        const bool use_parallel = yaml_config.performance.parallel_scenes && !retrieval_enabled;
         int num_threads = yaml_config.performance.num_threads;
 
 #ifdef _OPENMP
+        if (retrieval_enabled && yaml_config.performance.parallel_scenes) {
+            LOG_INFO("Image retrieval evaluation enabled: processing scenes sequentially for consistency");
+        }
         if (use_parallel) {
             if (num_threads <= 0) {
                 num_threads = std::thread::hardware_concurrency();
@@ -533,8 +781,19 @@ static ::ExperimentMetrics processDirectoryNew(
             total_kps += scene_profiling[i].total_kps;
         }
 
+        if (retrieval_ptr) {
+            retrieval_ptr->compute(
+                yaml_config,
+                yaml_config.evaluation.params.image_retrieval.scorer,
+                overall);
+        }
+
         overall.calculateMeanPrecision();
         overall.success = true;
+
+        if (yaml_config.evaluation.params.image_retrieval.enabled) {
+            LOG_INFO("Image retrieval MAP: " + std::to_string(overall.image_retrieval_map));
+        }
 
         profile.detect_ms = detect_ms;
         profile.compute_ms = compute_ms;
@@ -671,6 +930,7 @@ int main(int argc, char** argv) {
                 results.true_map_micro = experiment_metrics.true_map_micro;
                 results.true_map_macro_with_zeros = experiment_metrics.true_map_macro_by_scene_including_zeros;
                 results.true_map_micro_with_zeros = experiment_metrics.true_map_micro_including_zeros;
+                results.image_retrieval_map = experiment_metrics.image_retrieval_map;
                 
                 // Primary MAP metric: prefer macro (scene-balanced) when available, fallback to micro
                 results.mean_average_precision = experiment_metrics.true_map_macro_by_scene > 0.0 ? 
