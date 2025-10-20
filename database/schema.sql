@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS experiments (
     parameters TEXT,
     keypoint_set_id INTEGER DEFAULT NULL,
     keypoint_source TEXT DEFAULT NULL,
+    descriptor_dimension INTEGER DEFAULT 0,
+    execution_device TEXT DEFAULT 'cpu',
     FOREIGN KEY(keypoint_set_id) REFERENCES keypoint_sets(id)
 );
 
@@ -51,6 +53,12 @@ CREATE TABLE IF NOT EXISTS results (
     total_keypoints INTEGER,
     processing_time_ms REAL,
     timestamp TEXT NOT NULL,
+    descriptor_time_cpu_ms REAL,
+    descriptor_time_gpu_ms REAL,
+    match_time_cpu_ms REAL,
+    match_time_gpu_ms REAL,
+    total_pipeline_cpu_ms REAL,
+    total_pipeline_gpu_ms REAL,
     metadata TEXT,                          -- Additional metrics and profiling data
     FOREIGN KEY(experiment_id) REFERENCES experiments(id)
 );
@@ -73,6 +81,16 @@ CREATE TABLE IF NOT EXISTS keypoint_sets (
     source_set_b_id INTEGER DEFAULT NULL,   -- Reference to second source set for intersection
     tolerance_px REAL DEFAULT NULL,         -- Spatial tolerance in pixels for intersection matching
     intersection_method TEXT DEFAULT NULL,  -- Method used for intersection (e.g., "spatial_nearest")
+    detection_time_cpu_ms REAL,
+    detection_time_gpu_ms REAL,
+    total_generation_cpu_ms REAL,
+    total_generation_gpu_ms REAL,
+    intersection_time_ms REAL,
+    avg_keypoints_per_image REAL,
+    total_keypoints INTEGER,
+    source_a_keypoints INTEGER,
+    source_b_keypoints INTEGER,
+    keypoint_reduction_pct REAL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(source_set_a_id) REFERENCES keypoint_sets(id),
     FOREIGN KEY(source_set_b_id) REFERENCES keypoint_sets(id)

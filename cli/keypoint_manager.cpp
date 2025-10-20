@@ -11,6 +11,8 @@
 #include <ctime>
 #include <cstdlib>
 #include <sstream>
+#include <iomanip>
+#include <chrono>
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
@@ -226,6 +228,9 @@ int main(int argc, char** argv) {
             cv::Ptr<cv::SIFT> detector = cv::SIFT::create();
             const int BORDER = 40;
             int total_keypoints = 0;
+            int images_processed = 0;
+            double detection_time_ms = 0.0;
+            const auto generation_start = std::chrono::steady_clock::now();
 
             for (const auto& scene_entry : fs::directory_iterator(data_folder)) {
                 if (!fs::is_directory(scene_entry)) continue;
@@ -249,7 +254,10 @@ int main(int argc, char** argv) {
                     
                     // Detect keypoints independently on this image
                     std::vector<cv::KeyPoint> keypoints;
+                    const auto detect_start = std::chrono::steady_clock::now();
                     detector->detect(image, keypoints);
+                    const auto detect_end = std::chrono::steady_clock::now();
+                    detection_time_ms += std::chrono::duration<double, std::milli>(detect_end - detect_start).count();
                     
                     // Apply boundary filtering
                     keypoints.erase(std::remove_if(keypoints.begin(), keypoints.end(), [image, BORDER](const cv::KeyPoint& keypoint) {
@@ -269,6 +277,7 @@ int main(int argc, char** argv) {
                     std::string image_name = std::to_string(i) + ".ppm";
                     if (db.storeLockedKeypointsForSet(set_id, scene_name, image_name, keypoints)) {
                         total_keypoints += keypoints.size();
+                        ++images_processed;
                         LOG_INFO("  ✅ " + scene_name + "/" + image_name + ": " + std::to_string(keypoints.size()) + " keypoints");
                     } else {
                         LOG_ERROR("  ❌ Failed to store keypoints for " + scene_name + "/" + image_name);
@@ -278,7 +287,27 @@ int main(int argc, char** argv) {
             
             LOG_INFO("Generation complete! Independent detection keypoints stored in set: " + set_name);
             LOG_INFO("Total keypoints generated: " + std::to_string(total_keypoints));
-            
+
+            const auto generation_end = std::chrono::steady_clock::now();
+            const double generation_time_ms = std::chrono::duration<double, std::milli>(generation_end - generation_start).count();
+            thesis_project::database::KeypointSetStats stats;
+            stats.keypoint_set_id = set_id;
+            stats.detection_time_cpu_ms = detection_time_ms;
+            stats.total_generation_cpu_ms = generation_time_ms;
+            stats.total_keypoints = total_keypoints;
+            stats.avg_keypoints_per_image = images_processed > 0
+                ? static_cast<double>(total_keypoints) / static_cast<double>(images_processed)
+                : 0.0;
+            if (!db.updateKeypointSetStats(stats)) {
+                LOG_WARNING("⚠️  Failed to persist keypoint generation stats for set " + set_name);
+            } else {
+                std::ostringstream stats_stream;
+                stats_stream << std::fixed << std::setprecision(2)
+                             << "📈 Generation stats → detection_cpu_ms=" << detection_time_ms
+                             << ", avg_kp_per_image=" << stats.avg_keypoints_per_image;
+                LOG_INFO(stats_stream.str());
+            }
+
         } catch (const std::exception& e) {
             LOG_ERROR("❌ Error generating keypoints: " + std::string(e.what()));
             return 1;
@@ -483,6 +512,7 @@ int main(int argc, char** argv) {
         LOG_INFO(std::string("  Mode: ") + mode_arg);
         LOG_INFO(std::string("  Overwrite: ") + (overwrite ? "true" : "false"));
 
+        // TODO: This needs to be fixed only works on my machine
         std::ostringstream cmd;
         cmd << "/bin/bash -c \"source /home/frank/miniforge3/etc/profile.d/conda.sh && conda activate descriptor-compare && "
             << "python3 ../scripts/generate_keynet_keypoints.py"
@@ -612,6 +642,9 @@ int main(int argc, char** argv) {
             };
 
             int total_keypoints = 0;
+            int images_processed = 0;
+            double detection_time_ms = 0.0;
+            const auto generation_start = std::chrono::steady_clock::now();
 
             for (const auto& scene_entry : fs::directory_iterator(data_folder)) {
                 if (!fs::is_directory(scene_entry)) continue;
@@ -631,8 +664,12 @@ int main(int argc, char** argv) {
                         continue;
                     }
 
+                    const auto detect_start = std::chrono::steady_clock::now();
                     std::vector<cv::KeyPoint> keypoints = detector->detect(image, params);
+                    const auto detect_end = std::chrono::steady_clock::now();
+                    detection_time_ms += std::chrono::duration<double, std::milli>(detect_end - detect_start).count();
                     trimByResponse(keypoints, max_features);
+                    ++images_processed;
 
                     std::string image_name = std::to_string(i) + ".ppm";
                     if (db.storeLockedKeypointsForSet(set_id, scene_name, image_name, keypoints)) {
@@ -646,6 +683,26 @@ int main(int argc, char** argv) {
 
             LOG_INFO("Generation complete! " + detector_str + " keypoints stored in set: " + set_name);
             LOG_INFO("Total keypoints generated: " + std::to_string(total_keypoints));
+
+            const auto generation_end = std::chrono::steady_clock::now();
+            const double generation_time_ms = std::chrono::duration<double, std::milli>(generation_end - generation_start).count();
+            thesis_project::database::KeypointSetStats stats;
+            stats.keypoint_set_id = set_id;
+            stats.detection_time_cpu_ms = detection_time_ms;
+            stats.total_generation_cpu_ms = generation_time_ms;
+            stats.total_keypoints = total_keypoints;
+            stats.avg_keypoints_per_image = images_processed > 0
+                ? static_cast<double>(total_keypoints) / static_cast<double>(images_processed)
+                : 0.0;
+            if (!db.updateKeypointSetStats(stats)) {
+                LOG_WARNING("Failed to persist keypoint generation stats for set " + set_name);
+            } else {
+                std::ostringstream stats_stream;
+                stats_stream << std::fixed << std::setprecision(2)
+                             << "📈 Generation stats → detection_cpu_ms=" << detection_time_ms
+                             << ", avg_kp_per_image=" << stats.avg_keypoints_per_image;
+                LOG_INFO(stats_stream.str());
+            }
 
         } catch (const std::exception& e) {
             LOG_ERROR("❌ Error: " + std::string(e.what()));
@@ -753,7 +810,7 @@ int main(int argc, char** argv) {
                     return std::nullopt;
                 }
                 if (!db.clearAllDetectorAttributesForSet(existing_id)) {
-                    LOG_WARNING("⚠️  Failed to clear detector attributes for " + output_name + ", proceeding with keypoint overwrite");
+                    LOG_WARNING("Failed to clear detector attributes for " + output_name + ", proceeding with keypoint overwrite");
                 }
                 if (!db.clearKeypointsForSet(existing_id)) {
                     std::cerr << "❌ Failed to clear existing keypoints for set: " << output_name << std::endl;
@@ -841,6 +898,7 @@ int main(int argc, char** argv) {
         size_t total_candidates_b = 0;
         size_t processed_images = 0;
         size_t skipped_images = 0;
+        const auto intersection_start = std::chrono::steady_clock::now();
 
         for (const auto& scene : scenes_to_process) {
             auto images_a = db.getImagesForSet(source_a_info->id, scene);
@@ -860,7 +918,7 @@ int main(int argc, char** argv) {
 
                 if (records_a.empty() || records_b.empty()) {
                     ++skipped_images;
-                    LOG_WARNING("⚠️  " + scene + "/" + image + ": no keypoints to match (" +
+                    LOG_WARNING(scene + "/" + image + ": no keypoints to match (" +
                              std::to_string(records_a.size()) + " from A, " + std::to_string(records_b.size()) + " from B)");
                     continue;
                 }
@@ -923,7 +981,7 @@ int main(int argc, char** argv) {
                 }
 
                 if (matches.empty()) {
-                    LOG_WARNING("⚠️  " + scene + "/" + image + ": no mutually close keypoints within " + std::to_string(tolerance_px) + "px");
+                    LOG_WARNING(scene + "/" + image + ": no mutually close keypoints within " + std::to_string(tolerance_px) + "px");
                     continue;
                 }
 
@@ -957,18 +1015,69 @@ int main(int argc, char** argv) {
             }
         }
 
-        LOG_INFO("🎯 Intersection complete within " + std::to_string(tolerance_px) + "px");
-        LOG_INFO("📊 Matched " + std::to_string(total_pairs) + " keypoint pairs across " + std::to_string(processed_images) + " images");
-        LOG_INFO("🅰️  " + output_a_name + ": " + std::to_string(total_inserted_a) + " keypoints inserted from " + source_a_name +
+        const auto intersection_end = std::chrono::steady_clock::now();
+        const double intersection_time_ms = std::chrono::duration<double, std::milli>(intersection_end - intersection_start).count();
+        const double reduction_a = total_candidates_a > 0
+            ? (1.0 - static_cast<double>(total_inserted_a) / static_cast<double>(total_candidates_a)) * 100.0
+            : 0.0;
+        const double reduction_b = total_candidates_b > 0
+            ? (1.0 - static_cast<double>(total_inserted_b) / static_cast<double>(total_candidates_b)) * 100.0
+            : 0.0;
+
+        thesis_project::database::KeypointSetStats stats_a;
+        stats_a.keypoint_set_id = output_a_id;
+        stats_a.intersection_time_ms = intersection_time_ms;
+        stats_a.total_generation_cpu_ms = intersection_time_ms;
+        stats_a.total_keypoints = static_cast<int>(total_inserted_a);
+        stats_a.avg_keypoints_per_image = processed_images > 0
+            ? static_cast<double>(total_inserted_a) / static_cast<double>(processed_images)
+            : 0.0;
+        stats_a.source_a_keypoints = static_cast<int>(total_candidates_a);
+        stats_a.source_b_keypoints = static_cast<int>(total_candidates_b);
+        stats_a.keypoint_reduction_pct = reduction_a;
+
+        thesis_project::database::KeypointSetStats stats_b = stats_a;
+        stats_b.keypoint_set_id = output_b_id;
+        stats_b.total_keypoints = static_cast<int>(total_inserted_b);
+        stats_b.avg_keypoints_per_image = processed_images > 0
+            ? static_cast<double>(total_inserted_b) / static_cast<double>(processed_images)
+            : 0.0;
+        stats_b.keypoint_reduction_pct = reduction_b;
+
+        if (!db.updateKeypointSetStats(stats_a)) {
+            LOG_WARNING("⚠️  Failed to persist stats for set " + output_a_name);
+        }
+        if (!db.updateKeypointSetStats(stats_b)) {
+            LOG_WARNING("⚠️  Failed to persist stats for set " + output_b_name);
+        }
+
+        LOG_INFO("Intersection complete within " + std::to_string(tolerance_px) + "px");
+        LOG_INFO("Matched " + std::to_string(total_pairs) + " keypoint pairs across " + std::to_string(processed_images) + " images");
+        LOG_INFO(output_a_name + ": " + std::to_string(total_inserted_a) + " keypoints inserted from " + source_a_name +
                  " (candidates: " + std::to_string(total_candidates_a) + ")");
-        LOG_INFO("🅱️  " + output_b_name + ": " + std::to_string(total_inserted_b) + " keypoints inserted from " + source_b_name +
+        LOG_INFO(output_b_name + ": " + std::to_string(total_inserted_b) + " keypoints inserted from " + source_b_name +
                  " (candidates: " + std::to_string(total_candidates_b) + ")");
 
         if (skipped_images > 0) {
-            LOG_WARNING("⚠️  Skipped " + std::to_string(skipped_images) + " images due to missing data or zero matches");
+            LOG_WARNING("Skipped " + std::to_string(skipped_images) + " images due to missing data or zero matches");
         }
 
-        LOG_INFO("✅ Pure intersection sets created - keypoints retain native detector parameters");
+        LOG_INFO("Pure intersection sets created - keypoints retain native detector parameters");
+
+        {
+            std::ostringstream timing_stream;
+            timing_stream << std::fixed << std::setprecision(2)
+                          << "⏱ Intersection time (cpu): " << intersection_time_ms << " ms";
+            LOG_INFO(timing_stream.str());
+        }
+
+        {
+            std::ostringstream reduction_stream;
+            reduction_stream << std::fixed << std::setprecision(2)
+                             << "📉 Reduction → " << output_a_name << ": " << reduction_a << "%"
+                             << ", " << output_b_name << ": " << reduction_b << "%";
+            LOG_INFO(reduction_stream.str());
+        }
 
     } else if (command == "generate-non-overlapping") {
         if (argc < 5 || argc > 6) {
@@ -987,10 +1096,10 @@ int main(int argc, char** argv) {
             // Parse detector type
             KeypointGenerator detector_type = KeypointGeneratorFactory::parseDetectorType(detector_str);
             
-            LOG_INFO("🔍 Generating non-overlapping keypoints using " + detector_str + " detector");
-            LOG_INFO("📁 Data folder: " + data_folder);
-            LOG_INFO("📏 Minimum distance: " + std::to_string(min_distance) + "px");
-            LOG_INFO("📝 Keypoint set name: " + set_name);
+            LOG_INFO("Generating non-overlapping keypoints using " + detector_str + " detector");
+            LOG_INFO("Data folder: " + data_folder);
+            LOG_INFO("Minimum distance: " + std::to_string(min_distance) + "px");
+            LOG_INFO("Keypoint set name: " + set_name);
             
             namespace fs = boost::filesystem;
             if (!fs::exists(data_folder) || !fs::is_directory(data_folder)) {
@@ -1016,7 +1125,7 @@ int main(int argc, char** argv) {
                 return 1;
             }
             
-            LOG_INFO("✅ Created keypoint set with ID: " + std::to_string(set_id));
+            LOG_INFO("Created keypoint set with ID: " + std::to_string(set_id));
             
             // Create detector with non-overlapping constraint
             auto detector = KeypointGeneratorFactory::create(detector_type, true, min_distance);
@@ -1024,6 +1133,9 @@ int main(int argc, char** argv) {
             params.max_features = 2000;
             
             int total_keypoints = 0;
+            int images_processed = 0;
+            double detection_time_ms = 0.0;
+            const auto generation_start = std::chrono::steady_clock::now();
 
             // Process each scene
             for (const auto& scene_entry : fs::directory_iterator(data_folder)) {
@@ -1047,22 +1159,46 @@ int main(int argc, char** argv) {
                     }
                     
                     // Detect non-overlapping keypoints
+                    const auto detect_start = std::chrono::steady_clock::now();
                     std::vector<cv::KeyPoint> keypoints = detector->detectNonOverlapping(image, min_distance, params);
+                    const auto detect_end = std::chrono::steady_clock::now();
+                    detection_time_ms += std::chrono::duration<double, std::milli>(detect_end - detect_start).count();
+                    ++images_processed;
                     
                     // Store keypoints for this image
                     std::string image_name = std::to_string(i) + ".ppm";
                     if (db.storeLockedKeypointsForSet(set_id, scene_name, image_name, keypoints)) {
                         total_keypoints += keypoints.size();
-                        LOG_INFO("  ✅ " + scene_name + "/" + image_name + ": " + std::to_string(keypoints.size()) + " keypoints");
+                        LOG_INFO(scene_name + "/" + image_name + ": " + std::to_string(keypoints.size()) + " keypoints");
                     } else {
                         LOG_ERROR("  ❌ Failed to store keypoints for " + scene_name + "/" + image_name);
                     }
                 }
             }
             
-            LOG_INFO("🎉 Generation complete! Non-overlapping " + detector_str + " keypoints stored in set: " + set_name);
-            LOG_INFO("📊 Total keypoints generated: " + std::to_string(total_keypoints));
-            
+            LOG_INFO("Generation complete! Non-overlapping " + detector_str + " keypoints stored in set: " + set_name);
+            LOG_INFO("Total keypoints generated: " + std::to_string(total_keypoints));
+
+            const auto generation_end = std::chrono::steady_clock::now();
+            const double generation_time_ms = std::chrono::duration<double, std::milli>(generation_end - generation_start).count();
+            thesis_project::database::KeypointSetStats stats;
+            stats.keypoint_set_id = set_id;
+            stats.detection_time_cpu_ms = detection_time_ms;
+            stats.total_generation_cpu_ms = generation_time_ms;
+            stats.total_keypoints = total_keypoints;
+            stats.avg_keypoints_per_image = images_processed > 0
+                ? static_cast<double>(total_keypoints) / static_cast<double>(images_processed)
+                : 0.0;
+            if (!db.updateKeypointSetStats(stats)) {
+                LOG_WARNING("Failed to persist keypoint generation stats for set " + set_name);
+            } else {
+                std::ostringstream stats_stream;
+                stats_stream << std::fixed << std::setprecision(2)
+                             << "📈 Generation stats → detection_cpu_ms=" << detection_time_ms
+                             << ", avg_kp_per_image=" << stats.avg_keypoints_per_image;
+                LOG_INFO(stats_stream.str());
+            }
+
         } catch (const std::exception& e) {
             LOG_ERROR("❌ Error: " + std::string(e.what()));
             return 1;
@@ -1070,11 +1206,11 @@ int main(int argc, char** argv) {
 
     } else if (command == "list-detectors") {
         auto detectors = KeypointGeneratorFactory::getSupportedDetectors();
-        std::cout << "🔧 Supported detectors (" << detectors.size() << "):" << std::endl;
+        std::cout << "Supported detectors (" << detectors.size() << "):" << std::endl;
         for (const auto& detector : detectors) {
             float recommended_distance = KeypointGeneratorFactory::getRecommendedMinDistance(
                 KeypointGeneratorFactory::parseDetectorType(detector), 32);
-            std::cout << "  📍 " << detector << " (recommended min_distance for 32px patches: " 
+            std::cout << detector << " (recommended min_distance for 32px patches: "
                       << recommended_distance << "px)" << std::endl;
         }
 

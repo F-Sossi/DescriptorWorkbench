@@ -60,6 +60,8 @@ public:
                 parameters TEXT,
                 keypoint_set_id INTEGER DEFAULT NULL,
                 keypoint_source TEXT DEFAULT NULL,
+                descriptor_dimension INTEGER DEFAULT 0,
+                execution_device TEXT DEFAULT 'cpu',
                 FOREIGN KEY(keypoint_set_id) REFERENCES keypoint_sets(id)
             );
         )";
@@ -87,6 +89,12 @@ public:
                 total_keypoints INTEGER,
                 processing_time_ms REAL,
                 timestamp TEXT NOT NULL,
+                descriptor_time_cpu_ms REAL,
+                descriptor_time_gpu_ms REAL,
+                match_time_cpu_ms REAL,
+                match_time_gpu_ms REAL,
+                total_pipeline_cpu_ms REAL,
+                total_pipeline_gpu_ms REAL,
                 metadata TEXT,                          -- Additional metrics and profiling data
                 FOREIGN KEY(experiment_id) REFERENCES experiments(id)
             );
@@ -108,6 +116,16 @@ public:
                 source_set_b_id INTEGER DEFAULT NULL,
                 tolerance_px REAL DEFAULT NULL,
                 intersection_method TEXT DEFAULT NULL,
+                detection_time_cpu_ms REAL,
+                detection_time_gpu_ms REAL,
+                total_generation_cpu_ms REAL,
+                total_generation_gpu_ms REAL,
+                intersection_time_ms REAL,
+                avg_keypoints_per_image REAL,
+                total_keypoints INTEGER,
+                source_a_keypoints INTEGER,
+                source_b_keypoints INTEGER,
+                keypoint_reduction_pct REAL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(source_set_a_id) REFERENCES keypoint_sets(id),
                 FOREIGN KEY(source_set_b_id) REFERENCES keypoint_sets(id)
@@ -386,8 +404,8 @@ int DatabaseManager::recordConfiguration(const ExperimentConfig& config) const {
     const char* sql = R"(
         INSERT INTO experiments (descriptor_type, dataset_name, pooling_strategy,
                                similarity_threshold, max_features, timestamp, parameters,
-                               keypoint_set_id, keypoint_source)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+                               keypoint_set_id, keypoint_source, descriptor_dimension, execution_device)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
     )";
 
     sqlite3_stmt* stmt;
@@ -404,7 +422,7 @@ int DatabaseManager::recordConfiguration(const ExperimentConfig& config) const {
     }
     std::string params_str = params_ss.str();
 
-    // Bind parameters (9 total now)
+    // Bind parameters (11 total now)
     sqlite3_bind_text(stmt, 1, config.descriptor_type.c_str(), -1, SQLITE_STATIC);
     sqlite3_bind_text(stmt, 2, config.dataset_path.c_str(), -1, SQLITE_STATIC);
     sqlite3_bind_text(stmt, 3, config.pooling_strategy.c_str(), -1, SQLITE_STATIC);
@@ -425,6 +443,12 @@ int DatabaseManager::recordConfiguration(const ExperimentConfig& config) const {
     } else {
         sqlite3_bind_null(stmt, 9);
     }
+    sqlite3_bind_int(stmt, 10, config.descriptor_dimension);
+    if (!config.execution_device.empty()) {
+        sqlite3_bind_text(stmt, 11, config.execution_device.c_str(), -1, SQLITE_STATIC);
+    } else {
+        sqlite3_bind_text(stmt, 11, "cpu", -1, SQLITE_STATIC);
+    }
 
     rc = sqlite3_step(stmt);
     int experiment_id = -1;
@@ -440,6 +464,48 @@ int DatabaseManager::recordConfiguration(const ExperimentConfig& config) const {
     return experiment_id;
 }
 
+bool DatabaseManager::updateExperimentDescriptorMetadata(int experiment_id,
+                                                         int descriptor_dimension,
+                                                         const std::string& execution_device) const {
+    if (!isEnabled()) return true;
+    if (experiment_id < 0) {
+        std::cerr << "Invalid experiment id for descriptor metadata update" << std::endl;
+        return false;
+    }
+
+    const char* sql = R"(
+        UPDATE experiments
+        SET descriptor_dimension = ?, execution_device = ?
+        WHERE id = ?
+    )";
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare experiment metadata update: "
+                  << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    sqlite3_bind_int(stmt, 1, descriptor_dimension);
+    if (!execution_device.empty()) {
+        sqlite3_bind_text(stmt, 2, execution_device.c_str(), -1, SQLITE_STATIC);
+    } else {
+        sqlite3_bind_text(stmt, 2, "cpu", -1, SQLITE_STATIC);
+    }
+    sqlite3_bind_int(stmt, 3, experiment_id);
+
+    rc = sqlite3_step(stmt);
+    bool success = (rc == SQLITE_DONE);
+    if (!success) {
+        std::cerr << "Failed to update experiment metadata: "
+                  << sqlite3_errmsg(impl_->db) << std::endl;
+    }
+
+    sqlite3_finalize(stmt);
+    return success;
+}
+
 bool DatabaseManager::recordExperiment(const ExperimentResults& results) const {
     if (!isEnabled()) return true; // Success if disabled
 
@@ -450,8 +516,11 @@ bool DatabaseManager::recordExperiment(const ExperimentResults& results) const {
                            precision_at_1, precision_at_5, recall_at_1, recall_at_5, 
                            mean_average_precision, legacy_mean_precision,
                            total_matches, total_keypoints, processing_time_ms, 
-                           timestamp, metadata)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                           timestamp, descriptor_time_cpu_ms, descriptor_time_gpu_ms,
+                           match_time_cpu_ms, match_time_gpu_ms,
+                           total_pipeline_cpu_ms, total_pipeline_gpu_ms,
+                           metadata)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
     )";
 
     sqlite3_stmt* stmt;
@@ -468,7 +537,7 @@ bool DatabaseManager::recordExperiment(const ExperimentResults& results) const {
     }
     std::string metadata_str = metadata_ss.str();
 
-    // Bind parameters (17 total now)
+    // Bind parameters (23 total now)
     sqlite3_bind_int(stmt, 1, results.experiment_id);
     sqlite3_bind_double(stmt, 2, results.true_map_macro);
     sqlite3_bind_double(stmt, 3, results.true_map_micro);
@@ -485,7 +554,13 @@ bool DatabaseManager::recordExperiment(const ExperimentResults& results) const {
     sqlite3_bind_int(stmt, 14, results.total_keypoints);
     sqlite3_bind_double(stmt, 15, results.processing_time_ms);
     sqlite3_bind_text(stmt, 16, impl_->getCurrentTimestamp().c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_text(stmt, 17, metadata_str.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_double(stmt, 17, results.descriptor_time_cpu_ms);
+    sqlite3_bind_double(stmt, 18, results.descriptor_time_gpu_ms);
+    sqlite3_bind_double(stmt, 19, results.match_time_cpu_ms);
+    sqlite3_bind_double(stmt, 20, results.match_time_gpu_ms);
+    sqlite3_bind_double(stmt, 21, results.total_pipeline_cpu_ms);
+    sqlite3_bind_double(stmt, 22, results.total_pipeline_gpu_ms);
+    sqlite3_bind_text(stmt, 23, metadata_str.c_str(), -1, SQLITE_STATIC);
 
     rc = sqlite3_step(stmt);
     const bool success = (rc == SQLITE_DONE);
@@ -1660,6 +1735,59 @@ bool DatabaseManager::clearKeypointsForSet(int keypoint_set_id) const {
     bool success = (rc == SQLITE_DONE);
     if (!success) {
         std::cerr << "Failed to clear keypoints for set: " << sqlite3_errmsg(impl_->db) << std::endl;
+    }
+
+    sqlite3_finalize(stmt);
+    return success;
+}
+
+bool DatabaseManager::updateKeypointSetStats(const KeypointSetStats& stats) const {
+    if (!impl_->enabled || !impl_->db) return true;
+    if (stats.keypoint_set_id < 0) {
+        std::cerr << "Invalid keypoint_set_id provided for stats update" << std::endl;
+        return false;
+    }
+
+    const char* sql = R"(
+        UPDATE keypoint_sets
+        SET detection_time_cpu_ms = ?,
+            detection_time_gpu_ms = ?,
+            total_generation_cpu_ms = ?,
+            total_generation_gpu_ms = ?,
+            intersection_time_ms = ?,
+            avg_keypoints_per_image = ?,
+            total_keypoints = ?,
+            source_a_keypoints = ?,
+            source_b_keypoints = ?,
+            keypoint_reduction_pct = ?
+        WHERE id = ?
+    )";
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare keypoint set stats update: "
+                  << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    sqlite3_bind_double(stmt, 1, stats.detection_time_cpu_ms);
+    sqlite3_bind_double(stmt, 2, stats.detection_time_gpu_ms);
+    sqlite3_bind_double(stmt, 3, stats.total_generation_cpu_ms);
+    sqlite3_bind_double(stmt, 4, stats.total_generation_gpu_ms);
+    sqlite3_bind_double(stmt, 5, stats.intersection_time_ms);
+    sqlite3_bind_double(stmt, 6, stats.avg_keypoints_per_image);
+    sqlite3_bind_int(stmt, 7, stats.total_keypoints);
+    sqlite3_bind_int(stmt, 8, stats.source_a_keypoints);
+    sqlite3_bind_int(stmt, 9, stats.source_b_keypoints);
+    sqlite3_bind_double(stmt, 10, stats.keypoint_reduction_pct);
+    sqlite3_bind_int(stmt, 11, stats.keypoint_set_id);
+
+    rc = sqlite3_step(stmt);
+    bool success = (rc == SQLITE_DONE);
+    if (!success) {
+        std::cerr << "Failed to update keypoint set stats: "
+                  << sqlite3_errmsg(impl_->db) << std::endl;
     }
 
     sqlite3_finalize(stmt);

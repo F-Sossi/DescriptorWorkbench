@@ -9,6 +9,7 @@
 #include <sstream>
 #include <opencv2/highgui.hpp>
 #include <iostream>
+#include <chrono>
 
 namespace fs = boost::filesystem;
 
@@ -206,6 +207,10 @@ void LockedInKeypoints::generateLockedInKeypointsToDatabase(const std::string& d
     int sift_features = max_keypoints > 0 ? max_keypoints : 0;
     cv::Ptr<cv::SIFT> detector = cv::SIFT::create(sift_features);
     const int BORDER = 40;
+    const auto generation_start = std::chrono::steady_clock::now();
+    double detection_time_ms = 0.0;
+    int total_keypoints = 0;
+    int images_processed = 0;
 
     for (const auto& entry : fs::directory_iterator(dataFolderPath)) {
         const fs::path subfolderPath = entry.path();
@@ -227,7 +232,10 @@ void LockedInKeypoints::generateLockedInKeypointsToDatabase(const std::string& d
             }
 
             std::vector<cv::KeyPoint> keypoints;
+            const auto detect_start = std::chrono::steady_clock::now();
             detector->detect(image1, keypoints);
+            const auto detect_end = std::chrono::steady_clock::now();
+            detection_time_ms += std::chrono::duration<double, std::milli>(detect_end - detect_start).count();
 
             // Apply boundary filtering to original keypoints
             keypoints.erase(std::remove_if(keypoints.begin(), keypoints.end(), [image1](const cv::KeyPoint& keypoint) {
@@ -246,6 +254,8 @@ void LockedInKeypoints::generateLockedInKeypointsToDatabase(const std::string& d
 
             // Store reference image keypoints
             if (db.storeLockedKeypointsForSet(keypoint_set_id, subfolderName, "1.ppm", keypoints)) {
+                total_keypoints += static_cast<int>(keypoints.size());
+                ++images_processed;
                 std::cout << "Stored " << keypoints.size() << " keypoints for " << subfolderName << "/1.ppm" << std::endl;
             } else {
                 std::cerr << "Failed to store keypoints for " << subfolderName << "/1.ppm" << std::endl;
@@ -283,11 +293,33 @@ void LockedInKeypoints::generateLockedInKeypointsToDatabase(const std::string& d
                 // Store transformed keypoints using keypoint set
                 std::string imageName = std::to_string(i) + ".ppm";
                 if (db.storeLockedKeypointsForSet(keypoint_set_id, subfolderName, imageName, transformedKeypoints)) {
+                    total_keypoints += static_cast<int>(transformedKeypoints.size());
+                    ++images_processed;
                     std::cout << "Stored " << transformedKeypoints.size() << " keypoints for " << subfolderName << "/" << imageName << std::endl;
                 } else {
                     std::cerr << "Failed to store keypoints for " << subfolderName << "/" << imageName << std::endl;
                 }
             }
+        }
+    }
+
+    const auto generation_end = std::chrono::steady_clock::now();
+    const double generation_time_ms = std::chrono::duration<double, std::milli>(generation_end - generation_start).count();
+    thesis_project::database::KeypointSetStats stats;
+    stats.keypoint_set_id = keypoint_set_id;
+    stats.detection_time_cpu_ms = detection_time_ms;
+    stats.total_generation_cpu_ms = generation_time_ms;
+    stats.total_keypoints = total_keypoints;
+    stats.avg_keypoints_per_image = images_processed > 0
+        ? static_cast<double>(total_keypoints) / static_cast<double>(images_processed)
+        : 0.0;
+
+    if (keypoint_set_id > 0) {
+        if (!db.updateKeypointSetStats(stats)) {
+            std::cerr << "⚠️  Failed to persist keypoint set stats for set id " << keypoint_set_id << std::endl;
+        } else {
+            std::cout << "📈 Generation stats → detection_cpu_ms=" << detection_time_ms
+                      << ", avg_kp_per_image=" << stats.avg_keypoints_per_image << std::endl;
         }
     }
 }

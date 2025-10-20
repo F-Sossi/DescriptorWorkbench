@@ -20,6 +20,9 @@
 #include <limits>
 #include <chrono>
 #include <fstream>
+#include <sstream>
+#include <iomanip>
+#include <cctype>
 #include <unordered_map>
 #include <map>
 #ifdef _OPENMP
@@ -37,6 +40,25 @@ static void printUsage(const std::string& binaryName) {
 
 using namespace thesis_project;
 namespace experiment_helpers = thesis_project::experiment;
+
+static std::string normalizeDeviceString(const std::string& raw_device) {
+    if (raw_device.empty()) {
+        return "auto";
+    }
+    std::string normalized = raw_device;
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (normalized == "gpu" || normalized == "nvidia") {
+        return "cuda";
+    }
+    if (normalized == "gpu+cpu" || normalized == "cpu+gpu" || normalized == "mixed") {
+        return "mixed";
+    }
+    if (normalized == "cuda" || normalized == "cpu" || normalized == "auto") {
+        return normalized;
+    }
+    return normalized;
+}
 
 // Generate match visualization with correctness color coding
 static cv::Mat generateMatchVisualization(const cv::Mat& img1, const cv::Mat& img2,
@@ -132,6 +154,7 @@ struct ProfilingSummary {
     double match_ms = 0.0;
     long total_images = 0;
     long total_kps = 0;
+    int descriptor_dimension = 0;
 };
 
 struct ImageRetrievalAccumulator;
@@ -666,6 +689,7 @@ static ::ExperimentMetrics processDirectoryNew(
         } else {
             extractor = thesis_project::factories::DescriptorFactory::create(desc_config.type);
         }
+        const int descriptor_dim = extractor ? extractor->descriptorSize() : 0;
         auto pooling = thesis_project::pooling::PoolingFactory::createFromConfig(desc_config);
         auto matcher = thesis_project::matching::MatchingFactory::createStrategy(
             yaml_config.evaluation.params.matching_method);
@@ -800,6 +824,7 @@ static ::ExperimentMetrics processDirectoryNew(
         profile.match_ms = match_ms;
         profile.total_images = total_images;
         profile.total_kps = total_kps;
+        profile.descriptor_dimension = descriptor_dim;
         return overall;
     } catch (const std::exception& e) {
         return ::ExperimentMetrics::createError(e.what());
@@ -882,6 +907,7 @@ int main(int argc, char** argv) {
             const auto& desc_config = yaml_config.descriptors[i];
 
             LOG_INFO("Running experiment with descriptor: " + desc_config.name);
+            const std::string execution_device = normalizeDeviceString(desc_config.params.device);
 
             auto start_time = std::chrono::high_resolution_clock::now();
             int experiment_id = -1;
@@ -896,6 +922,9 @@ int main(int argc, char** argv) {
                 dbConfig.parameters["descriptor_type"] = toString(desc_config.type);
                 dbConfig.parameters["pooling_strategy"] = toString(desc_config.params.pooling);
                 dbConfig.parameters["norm_type"] = std::to_string(desc_config.params.norm_type);
+                dbConfig.execution_device = execution_device;
+                dbConfig.descriptor_dimension = 0; // Updated post-run after extractor initialization
+                dbConfig.parameters["execution_device"] = execution_device;
 
                 // Record keypoint tracking information
                 dbConfig.keypoint_set_id = yaml_config.keypoints.params.keypoint_set_id;
@@ -915,6 +944,11 @@ int main(int argc, char** argv) {
                 profile);
             
             if (experiment_id != -1) {
+                db.updateExperimentDescriptorMetadata(
+                    experiment_id,
+                    profile.descriptor_dimension,
+                    execution_device);
+
                 auto end_time = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
                 
@@ -947,8 +981,16 @@ int main(int argc, char** argv) {
                 results.recall_at_5 = experiment_metrics.recall_at_5;
                 results.total_matches = experiment_metrics.total_matches;
                 results.total_keypoints = experiment_metrics.total_keypoints;
+                results.descriptor_time_cpu_ms = profile.compute_ms;
+                results.descriptor_time_gpu_ms = 0.0;
+                results.match_time_cpu_ms = profile.match_ms;
+                results.match_time_gpu_ms = 0.0;
+                results.total_pipeline_cpu_ms = profile.detect_ms + profile.compute_ms + profile.match_ms;
+                results.total_pipeline_gpu_ms = 0.0;
                 results.metadata["success"] = experiment_metrics.success ? "true" : "false";
                 results.metadata["experiment_name"] = yaml_config.experiment.name;
+                results.metadata["execution_device"] = execution_device;
+                results.metadata["descriptor_dimension"] = std::to_string(profile.descriptor_dimension);
                 // Profiling metadata
                 results.metadata["detect_time_ms"] = std::to_string(profile.detect_ms);
                 results.metadata["compute_time_ms"] = std::to_string(profile.compute_ms);
@@ -1001,6 +1043,26 @@ int main(int argc, char** argv) {
                 }else {
                     LOG_ERROR("Failed to record results");
                 }
+
+                auto format_ms = [](double value) {
+                    std::ostringstream oss;
+                    oss << std::fixed << std::setprecision(2) << value;
+                    return oss.str();
+                };
+                auto format_score = [](double value) {
+                    std::ostringstream oss;
+                    oss << std::fixed << std::setprecision(4) << value;
+                    return oss.str();
+                };
+                const double map_per_ms = profile.compute_ms > 0.0
+                    ? results.mean_average_precision / profile.compute_ms
+                    : 0.0;
+                LOG_INFO("Efficiency summary → dim=" + std::to_string(profile.descriptor_dimension) +
+                         ", compute_ms=" + format_ms(profile.compute_ms) +
+                         ", match_ms=" + format_ms(profile.match_ms) +
+                         ", total_cpu_ms=" + format_ms(results.total_pipeline_cpu_ms) +
+                         ", MAP=" + format_score(results.mean_average_precision) +
+                         ", MAP/ms=" + format_score(map_per_ms));
             }
 
             if (experiment_metrics.success) {

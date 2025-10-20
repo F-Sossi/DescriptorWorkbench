@@ -17,6 +17,7 @@ namespace database {
 struct ExperimentResults;
 struct ExperimentConfig;
 struct DatabaseConfig;
+struct KeypointSetStats;
 
 /**
  * @brief Optional database manager for experiment tracking
@@ -115,6 +116,13 @@ public:
      * @return experiment_id for linking results, or -1 if disabled/error
      */
     int recordConfiguration(const ExperimentConfig& config) const;
+
+    /**
+     * @brief Update descriptor metadata for an existing experiment row.
+     */
+    bool updateExperimentDescriptorMetadata(int experiment_id,
+                                            int descriptor_dimension,
+                                            const std::string& execution_device) const;
 
     /**
      * @brief Get recent experiment results
@@ -359,6 +367,11 @@ public:
     bool clearKeypointsForSet(int keypoint_set_id) const;
 
     /**
+     * @brief Update aggregated statistics for a keypoint set generation.
+     */
+    bool updateKeypointSetStats(const KeypointSetStats& stats) const;
+
+    /**
      * @brief Remove all detector attributes associated with a keypoint set
      */
     bool clearAllDetectorAttributesForSet(int keypoint_set_id) const;
@@ -537,6 +550,12 @@ struct ExperimentResults {
     int total_matches = 0;
     int total_keypoints = 0;
     double processing_time_ms = 0.0;
+    double descriptor_time_cpu_ms = 0.0;
+    double descriptor_time_gpu_ms = 0.0;
+    double match_time_cpu_ms = 0.0;
+    double match_time_gpu_ms = 0.0;
+    double total_pipeline_cpu_ms = 0.0;
+    double total_pipeline_gpu_ms = 0.0;
     std::string timestamp;
     std::map<std::string, std::string> metadata;
 };
@@ -550,10 +569,29 @@ struct ExperimentConfig {
     std::string pooling_strategy;
     double similarity_threshold = 0.7;
     int max_features = 1000;
+    int descriptor_dimension = 0;
+    std::string execution_device = "cpu";
     std::map<std::string, std::string> parameters;
     std::string timestamp;
     int keypoint_set_id = -1;           // ID of keypoint set used (or -1 if none)
     std::string keypoint_source;        // Source of keypoints (e.g., "homography_projection", "independent_detection")
+};
+
+/**
+ * @brief Aggregated timing/statistics for a keypoint set generation.
+ */
+struct KeypointSetStats {
+    int keypoint_set_id = -1;
+    double detection_time_cpu_ms = 0.0;
+    double detection_time_gpu_ms = 0.0;
+    double total_generation_cpu_ms = 0.0;
+    double total_generation_gpu_ms = 0.0;
+    double intersection_time_ms = 0.0;
+    double avg_keypoints_per_image = 0.0;
+    int total_keypoints = 0;
+    int source_a_keypoints = 0;
+    int source_b_keypoints = 0;
+    double keypoint_reduction_pct = 0.0;
 };
 
 } // namespace database
