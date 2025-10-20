@@ -64,6 +64,8 @@ RUN pip3 install \
     pybind11 \
     torch \
     torchvision \
+    kornia \
+    opencv-python \
     conan \
     --no-cache-dir
 

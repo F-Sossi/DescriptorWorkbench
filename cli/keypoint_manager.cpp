@@ -2,6 +2,7 @@
 #include "src/core/keypoints/locked_in_keypoints.hpp"
 #include "src/core/keypoints/KeypointGeneratorFactory.hpp"
 #include "src/core/processing/processor_utils.hpp"
+#include "src/core/utils/PythonEnvironment.hpp"
 #include "thesis_project/logging.hpp"
 #include "thesis_project/types.hpp"
 #include <iostream>
@@ -512,22 +513,62 @@ int main(int argc, char** argv) {
         LOG_INFO(std::string("  Mode: ") + mode_arg);
         LOG_INFO(std::string("  Overwrite: ") + (overwrite ? "true" : "false"));
 
-        // TODO: This needs to be fixed only works on my machine
-        std::ostringstream cmd;
-        cmd << "/bin/bash -c \"source /home/frank/miniforge3/etc/profile.d/conda.sh && conda activate descriptor-compare && "
-            << "python3 ../scripts/generate_keynet_keypoints.py"
-            << " --data_dir \"" << data_folder << "\""
-            << " --db_path experiments.db"
-            << " --max_keypoints " << max_kp
-            << " --device " << device_arg
-            << " --mode " << mode_arg
-            << " --set-name \"" << set_name << "\"";
-        if (overwrite) {
-            cmd << " --overwrite";
-        }
-        cmd << "\"";
+        // Use portable Python environment detection (works with conda, venv, system Python, Docker)
+        using namespace thesis_project::utils;
+        PythonEnvironment::Requirements reqs;
+        reqs.packages = {"kornia", "torch", "cv2", "sqlite3"};
 
-        int result = std::system(cmd.str().c_str());
+        auto env_info = PythonEnvironment::detect(reqs);
+        if (!env_info.is_valid()) {
+            LOG_ERROR("No valid Python environment with required packages (kornia, torch, cv2, sqlite3)");
+            if (!env_info.missing_packages.empty()) {
+                std::ostringstream msg;
+                msg << "Missing packages: ";
+                for (size_t i = 0; i < env_info.missing_packages.size(); ++i) {
+                    if (i > 0) msg << ", ";
+                    msg << env_info.missing_packages[i];
+                }
+                LOG_ERROR(msg.str());
+            }
+            return 1;
+        }
+
+        // Find the Python script path
+        std::filesystem::path script_path = std::filesystem::current_path().parent_path() / "scripts" / "generate_keynet_keypoints.py";
+        if (!std::filesystem::exists(script_path)) {
+            // Try without parent_path (might already be in build dir)
+            script_path = std::filesystem::path("../scripts/generate_keynet_keypoints.py");
+            if (!std::filesystem::exists(script_path)) {
+                LOG_ERROR("Could not find generate_keynet_keypoints.py script");
+                return 1;
+            }
+        }
+
+        // Build script arguments
+        std::vector<std::string> args;
+        args.push_back("--data_dir \"" + data_folder + "\"");
+        args.push_back("--db_path experiments.db");
+        args.push_back("--max_keypoints " + std::to_string(max_kp));
+        args.push_back("--device " + device_arg);
+        args.push_back("--mode " + mode_arg);
+        args.push_back("--set-name \"" + set_name + "\"");
+        if (overwrite) {
+            args.push_back("--overwrite");
+        }
+
+        // Generate portable command using detected environment
+        std::string cmd = PythonEnvironment::generateCommand(script_path.string(), args, env_info);
+
+        if (cmd.empty()) {
+            LOG_ERROR("Failed to generate Python command");
+            return 1;
+        }
+
+        LOG_INFO("Using Python environment: " + PythonEnvironment::typeToString(env_info.type) +
+                 " (" + env_info.environment_name + ")");
+        LOG_INFO("Executing: " + cmd);
+
+        int result = std::system(cmd.c_str());
         if (result != 0) {
             LOG_ERROR("Kornia KeyNet generation failed. Exit code: " + std::to_string(result));
             return 1;

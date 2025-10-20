@@ -1,5 +1,6 @@
 #include "KeynetDetector.hpp"
 #include "thesis_project/logging.hpp"
+#include "src/core/utils/PythonEnvironment.hpp"
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -113,10 +114,13 @@ std::vector<cv::KeyPoint> KeynetDetector::detectNonOverlapping(
 }
 
 bool KeynetDetector::isAvailable() {
-    // Check if Python and Kornia are available by running a simple test
-    std::string test_command = "python3 -c \"import kornia.feature as KF; print('OK')\" 2>/dev/null";
-    int result = std::system(test_command.c_str());
-    return (result == 0);
+    // Use portable environment detection to check for Kornia
+    using namespace utils;
+    PythonEnvironment::Requirements reqs;
+    reqs.packages = {"kornia", "torch", "cv2"};
+
+    auto env_info = PythonEnvironment::detect(reqs);
+    return env_info.is_valid();
 }
 
 void KeynetDetector::saveImageToTemp(const cv::Mat& image, const std::string& temp_path) const {
@@ -175,21 +179,46 @@ std::vector<cv::KeyPoint> KeynetDetector::loadKeypointsFromTemp(const std::strin
 
 bool KeynetDetector::executePythonKeyNet(const std::string& image_path,
                                        const std::string& output_csv_path) const {
-    // Build Python command with conda environment activation
-    // TODO: MAJOR - Make this portable for other systems! Currently hardcoded to Frank's environment
-    // Need to detect conda path and environment name automatically or via config
-    std::ostringstream cmd;
-    cmd << "/bin/bash -c \"source /home/frank/miniforge3/etc/profile.d/conda.sh && conda activate descriptor-compare && "
-        << "python3 \"" << python_script_path_ << "\""
-        << " --input \"" << image_path << "\""
-        << " --output \"" << output_csv_path << "\""
-        << " --max_keypoints " << max_keypoints_
-        << " --device " << device_ << "\"";
-        // << " 2>/dev/null"; // Temporarily enable stderr for debugging
+    // Use portable Python environment detection (works with conda, venv, system Python, Docker)
+    using namespace utils;
+    PythonEnvironment::Requirements reqs;
+    reqs.packages = {"kornia", "torch", "cv2"};
 
-    LOG_INFO("Executing KeyNet command: " + cmd.str());
+    auto env_info = PythonEnvironment::detect(reqs);
+    if (!env_info.is_valid()) {
+        LOG_ERROR("No valid Python environment with required packages (kornia, torch, cv2)");
+        if (!env_info.missing_packages.empty()) {
+            std::ostringstream msg;
+            msg << "Missing packages: ";
+            for (size_t i = 0; i < env_info.missing_packages.size(); ++i) {
+                if (i > 0) msg << ", ";
+                msg << env_info.missing_packages[i];
+            }
+            LOG_ERROR(msg.str());
+        }
+        return false;
+    }
 
-    int result = std::system(cmd.str().c_str());
+    // Build script arguments
+    std::vector<std::string> args;
+    args.push_back("--input \"" + image_path + "\"");
+    args.push_back("--output \"" + output_csv_path + "\"");
+    args.push_back("--max_keypoints " + std::to_string(max_keypoints_));
+    args.push_back("--device " + device_);
+
+    // Generate portable command using detected environment
+    std::string cmd = PythonEnvironment::generateCommand(python_script_path_, args, env_info);
+
+    if (cmd.empty()) {
+        LOG_ERROR("Failed to generate Python command");
+        return false;
+    }
+
+    LOG_INFO("Executing KeyNet command: " + cmd);
+    LOG_INFO("Using Python environment: " + PythonEnvironment::typeToString(env_info.type) +
+             " (" + env_info.environment_name + ")");
+
+    int result = std::system(cmd.c_str());
     LOG_INFO("KeyNet command result: " + std::to_string(result));
 
     // Check if output file was created

@@ -553,6 +553,15 @@ create_gtest_if_exists("tests/unit/database/test_database_gtest.cpp" "test_datab
 create_gtest_if_exists("tests/unit/database/test_database_integration_simple_gtest.cpp" "test_database_integration_simple_gtest")
 create_gtest_if_exists("tests/unit/database/test_database_standalone_gtest.cpp" "test_database_standalone_gtest")
 
+# Google Test utility tests
+create_gtest_if_exists("tests/unit/utils/test_python_environment_gtest.cpp" "test_python_environment_gtest")
+if(TARGET test_python_environment_gtest)
+    target_sources(test_python_environment_gtest PRIVATE
+        src/core/utils/PythonEnvironment.cpp
+    )
+    target_include_directories(test_python_environment_gtest PRIVATE src include ${CMAKE_SOURCE_DIR})
+endif()
+
 # Custom targets for running test groups
 add_custom_target(run_all_tests
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure --verbose
@@ -688,7 +697,8 @@ if(BUILD_EXPERIMENT_CLI)
                        src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
                        src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
                        src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
-                       src/core/keypoints/KeypointAttributeAdapter.cpp)
+                       src/core/keypoints/KeypointAttributeAdapter.cpp
+                       src/core/utils/PythonEnvironment.cpp)
         # DNN wrapper
         target_sources(experiment_runner PRIVATE src/core/descriptor/extractors/wrappers/DNNPatchWrapper.cpp)
         target_sources(experiment_runner PRIVATE src/core/descriptor/extractors/wrappers/PseudoDNNWrapper.cpp)
@@ -817,7 +827,8 @@ if(BUILD_KEYPOINT_MANAGER)
                        src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
                        src/core/descriptor/extractors/wrappers/DSPRGBSIFTWrapperV2.cpp
                        src/core/descriptor/extractors/wrappers/DSPHoWHWrapperV2.cpp
-                       src/core/descriptor/extractors/wrappers/DSPHoNCWrapperV2.cpp)
+                       src/core/descriptor/extractors/wrappers/DSPHoNCWrapperV2.cpp
+                       src/core/utils/PythonEnvironment.cpp)
 
         # VGG wrapper (requires OpenCV contrib xfeatures2d)
         target_sources(keypoint_manager PRIVATE src/core/descriptor/extractors/wrappers/VGGWrapper.cpp)
