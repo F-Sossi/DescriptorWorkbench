@@ -2,15 +2,19 @@
 
 This guide provides comprehensive documentation for configuring experiments in the DescriptorWorkbench project using YAML files.
 
+**🎉 Updated October 2025**: Complete documentation for Bojanic et al. (2020) evaluation metrics (keypoint verification + retrieval) and performance tuning options.
+
 ## Table of Contents
 
 1. [Quick Start](#quick-start)
 2. [Schema Overview](#schema-overview)
 3. [Configuration Sections](#configuration-sections)
-4. [Advanced Usage Patterns](#advanced-usage-patterns)
-5. [Validation and Error Handling](#validation-and-error-handling)
-6. [Best Practices](#best-practices)
-7. [Troubleshooting](#troubleshooting)
+4. [Evaluation Metrics (Bojanic et al. 2020)](#evaluation-metrics-bojanic-et-al-2020)
+5. [Performance Tuning](#performance-tuning)
+6. [Advanced Usage Patterns](#advanced-usage-patterns)
+7. [Validation and Error Handling](#validation-and-error-handling)
+8. [Best Practices](#best-practices)
+9. [Troubleshooting](#troubleshooting)
 
 ## Quick Start
 
@@ -40,9 +44,9 @@ The DescriptorWorkbench uses **Schema v1** with these main sections:
 | `dataset` | Dataset configuration | ✅ |
 | `keypoints` | Keypoint detection setup | ✅ |
 | `descriptors` | Descriptor algorithms (array) | ✅ |
-| `evaluation` | Matching and validation | ✅ |
-| `output` | File output settings | ❌ |
+| `evaluation` | Matching, validation, and metrics | ✅ |
 | `database` | Database storage settings | ❌ |
+| `performance` | Parallelization and optimization | ❌ |
 
 ## Configuration Sections
 
@@ -253,18 +257,288 @@ evaluation:
 
 ### 6. Database Section
 
-**Purpose**: Configure persistent experiment tracking.
+**Purpose**: Configure persistent experiment tracking and storage optimization.
 
 ```yaml
 database:
-  connection: "sqlite:///experiments.db"  # Connection string
-  save_keypoints: true               # Store keypoints in DB
-  save_descriptors: false            # Store descriptors in DB
-  save_matches: false                # Store matches in DB
-  save_visualizations: true          # Store visualizations in DB
+  connection: "sqlite:///experiments.db"  # Connection string (default)
+  save_descriptors: false            # Store raw descriptors (large, usually disabled)
+  save_matches: false                # Store match data (large, usually disabled)
+  save_visualizations: true          # Store match visualization images
 ```
 
-Database storage is always enabled; toggle individual tables with the `save_*` flags above.
+**Storage Options**:
+
+| Option | Size Impact | Use Case | Default |
+|--------|-------------|----------|---------|
+| `save_descriptors` | ⚠️ Very Large | Descriptor analysis/export | `false` |
+| `save_matches` | ⚠️ Very Large | Match debugging | `false` |
+| `save_visualizations` | 🟡 Moderate | Visual inspection | `true` |
+
+**Best Practices**:
+- **Development**: Set all to `false` for faster iteration
+- **Production**: Enable `save_visualizations` only
+- **Publication**: Enable all for full reproducibility (requires significant storage)
+
+**Note**: Experiment metadata and results are **always stored** regardless of these flags.
+
+## Evaluation Metrics (Bojanic et al. 2020)
+
+DescriptorWorkbench implements the complete evaluation pipeline from **Bojanic et al. (2020): "On the Comparison of Classic and Deep Keypoint Detector and Descriptor Methods"** with three complementary evaluation tasks.
+
+### Image Matching (Default Task)
+
+**Always Enabled**: Standard keypoint matching within image sequences.
+
+**Automatic Metrics**:
+- `true_map_micro` / `true_map_macro` - Overall mAP
+- `viewpoint_map` / `illumination_map` - HP-V vs HP-I breakdown
+- `precision_at_k` / `recall_at_k` - P@K and R@K metrics
+
+**No Configuration Required**: This task runs automatically for all experiments.
+
+### Image Retrieval (Optional)
+
+**Purpose**: Scene-level image retrieval evaluation.
+
+```yaml
+evaluation:
+  image_retrieval:
+    enabled: true                    # Enable image retrieval task
+    scorer: "total_matches"          # Scoring method: "total_matches", "map", "precision"
+```
+
+**Use Case**: Evaluate descriptor performance for image retrieval applications.
+
+**Metrics Stored**: `image_retrieval_map`, `image_retrieval_queries`
+
+### Keypoint Verification (Bojanic Task 1)
+
+**Purpose**: Test descriptor discriminative power using out-of-sequence distractors.
+
+**Reference**: Bojanic et al. (2020), Section III-B, Equations 1-2
+**Baseline**: SIFT+SIFT = 25% AP
+
+```yaml
+evaluation:
+  keypoint_verification:
+    enabled: true                    # Enable verification task (expensive!)
+    num_distractor_scenes: 10        # Number of random distractor scenes
+    num_distractors_per_scene: 20    # Keypoints sampled per distractor
+    seed: 42                         # Random seed for reproducibility
+```
+
+**How It Works**:
+1. For each keypoint in reference image:
+   - Match to **same-sequence images** (positive + hard negatives)
+   - Match to **random other-sequence images** (guaranteed negatives/distractors)
+2. Rank all candidates by descriptor distance
+3. Label using homography ground truth: `y = +1` (correct), `y = -1` (incorrect)
+4. Compute Average Precision (AP) over all queries
+
+**Metrics Stored**:
+- `keypoint_verification_ap` - Overall verification AP
+- `verification_viewpoint_ap` - HP-V (viewpoint changes)
+- `verification_illumination_ap` - HP-I (illumination changes)
+
+**Performance Impact**:
+- **Computational Cost**: ~5-10x slower than matching
+- **Memory**: ~2-5 GB for full HPatches (116 scenes)
+- **Typical Runtime**: 15-30 minutes with OpenMP on full dataset
+
+**Parameter Tuning**:
+```yaml
+# Conservative (faster, for testing)
+num_distractor_scenes: 1
+num_distractors_per_scene: 10
+
+# Standard (matches verification_test configs)
+num_distractor_scenes: 10
+num_distractors_per_scene: 20
+
+# Comprehensive (more challenging evaluation)
+num_distractor_scenes: 20
+num_distractors_per_scene: 50
+```
+
+### Keypoint Retrieval (Bojanic Task 3)
+
+**Purpose**: Evaluate ranking quality with three-tier labeling system.
+
+**Reference**: Bojanic et al. (2020), Section III-B, Equations 5-6
+**Baseline**: SIFT+SIFT = 26% AP
+
+```yaml
+evaluation:
+  keypoint_retrieval:
+    enabled: true                    # Enable retrieval task (expensive!)
+    num_distractor_scenes: 1         # Number of random distractor scenes
+    num_distractors_per_scene: 10    # Keypoints sampled per distractor
+    seed: 42                         # Random seed for reproducibility
+```
+
+**How It Works**:
+1. For each keypoint in reference image:
+   - Build candidate set from same-sequence + out-of-sequence images
+2. Assign three-tier labels:
+   - `y = +1`: In-sequence AND closest to homography projection (TRUE_POSITIVE)
+   - `y = 0`: In-sequence but NOT closest (HARD_NEGATIVE)
+   - `y = -1`: Out-of-sequence (DISTRACTOR)
+3. Rank candidates by descriptor distance
+4. Compute AP treating **only y=+1 as relevant** (standard IR practice)
+
+**Metrics Stored**:
+- `keypoint_retrieval_ap` - Overall retrieval AP
+- `retrieval_viewpoint_ap` - HP-V (viewpoint changes)
+- `retrieval_illumination_ap` - HP-I (illumination changes)
+- `retrieval_num_true_positives` - Count of y=+1 labels
+- `retrieval_num_hard_negatives` - Count of y=0 labels (typically very large)
+- `retrieval_num_distractors` - Count of y=-1 labels
+
+**Performance Impact**:
+- **Computational Cost**: Similar to verification (~5-10x slower than matching)
+- **Memory**: ~2-5 GB for full HPatches
+- **Typical Runtime**: 20-30 minutes with OpenMP on full dataset
+
+**Expected Label Distribution** (116-scene full run):
+- True Positives (y=+1): ~200k (0.03% of candidates)
+- Hard Negatives (y=0): ~650M (99.85% of candidates - expected!)
+- Distractors (y=-1): ~930k (0.12% of candidates)
+
+**Key Insight**: The massive hard negative count is **correct and expected** - every in-sequence incorrect match counts as a hard negative.
+
+### Running Multiple Metrics
+
+```yaml
+evaluation:
+  # Standard matching (always enabled)
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+
+  # Optional: Image retrieval
+  image_retrieval:
+    enabled: false
+
+  # Bojanic Task 1: Verification
+  keypoint_verification:
+    enabled: true
+    num_distractor_scenes: 10
+    num_distractors_per_scene: 20
+    seed: 42
+
+  # Bojanic Task 3: Retrieval
+  keypoint_retrieval:
+    enabled: true
+    num_distractor_scenes: 1
+    num_distractors_per_scene: 10
+    seed: 42
+```
+
+**Total Runtime**: Enabling all three Bojanic metrics (matching + verification + retrieval) takes ~30-40 minutes for full 116-scene evaluation with OpenMP.
+
+### Literature Baselines (Bojanic et al. 2020)
+
+**SIFT+SIFT Baselines**:
+- Image Matching: ~59% AP
+- Keypoint Verification: ~25% AP (**harder**)
+- Keypoint Retrieval: ~26% AP (**harder**)
+
+**Expected Performance Ranking**:
+```
+Image Matching AP > Keypoint Retrieval AP ≈ Keypoint Verification AP
+```
+
+**Our Validation Results**:
+- Keypoint Verification: 21.62% AP (vs Bojanic 25% - within acceptable range)
+- Keypoint Retrieval: 27.40% AP (vs Bojanic 26% - excellent match! ✅)
+
+## Performance Tuning
+
+**Purpose**: Control parallelization and computational performance.
+
+```yaml
+performance:
+  parallel_scenes: true              # Enable OpenMP scene-level parallelism
+  num_threads: 0                     # Thread count (0 = auto-detect)
+  parallel_images: false             # Image-level parallelism (usually false)
+  batch_size: 512                    # Batch size for descriptor extraction
+  enable_profiling: false            # Enable detailed timing profiling
+```
+
+### Performance Options
+
+| Option | Description | Recommended Value | Impact |
+|--------|-------------|-------------------|--------|
+| `parallel_scenes` | Process scenes in parallel | `true` | 10-16x speedup |
+| `num_threads` | OpenMP thread count | `0` (auto) | Auto-detect cores |
+| `parallel_images` | Image-level parallelism | `false` | Minimal benefit |
+| `batch_size` | Descriptor batch size | `512` | Memory vs speed tradeoff |
+| `enable_profiling` | Detailed timing | `false` | Development only |
+
+### Scene-Level Parallelism (Recommended)
+
+**Best for**: Full dataset evaluation with verification/retrieval enabled
+
+```yaml
+performance:
+  parallel_scenes: true              # Excellent speedup for multi-scene runs
+  num_threads: 0                     # Auto-detect (uses all cores)
+```
+
+**Speedup Examples**:
+- 4 cores: ~3.5x faster
+- 8 cores: ~6.5x faster
+- 16 cores: ~13x faster
+
+**When to Disable**:
+- Single scene evaluation
+- Debugging race conditions
+- Deterministic profiling
+
+### Thread Count Control
+
+```yaml
+# Auto-detect (recommended)
+num_threads: 0                       # Uses all available cores
+
+# Manual override (for fair comparisons)
+num_threads: 4                       # Force 4 threads
+num_threads: 1                       # Disable parallelism
+```
+
+### Memory Optimization
+
+**For Large Datasets** (memory-constrained systems):
+```yaml
+performance:
+  parallel_scenes: false             # Sequential processing
+  batch_size: 256                    # Smaller batches
+database:
+  save_descriptors: false            # Disable large storage
+  save_matches: false
+```
+
+**For Speed** (high-memory systems):
+```yaml
+performance:
+  parallel_scenes: true              # Full parallelism
+  batch_size: 1024                   # Larger batches
+  num_threads: 0                     # All cores
+```
+
+### Profiling Mode
+
+**Development/Debugging Only**:
+```yaml
+performance:
+  enable_profiling: true             # Detailed timing output
+  parallel_scenes: false             # Deterministic timing
+```
+
+**Output**: Per-scene timing breakdown, descriptor extraction time, matching time, etc.
 
 ## Advanced Usage Patterns
 
@@ -533,11 +807,41 @@ The database stores all experiment data:
 ## Examples Repository
 
 See `config/experiments/` for working examples:
+
+**Basic Examples**:
 - `sift_baseline.yaml` - Simple SIFT evaluation
 - `cnn_comparison.yaml` - CNN descriptor comparison
 - `pooling_comparison.yaml` - Pooling strategy evaluation
-- `reference_comprehensive.yaml` - All options demonstrated
+
+**Bojanic Metrics Examples** (NEW):
+- `verification_test.yaml` - Quick 4-scene verification test
+- `verification_sift_full.yaml` - Full 116-scene SIFT verification baseline
+- `retrieval_test.yaml` - Quick 4-scene retrieval test
+- `retrieval_sift_full.yaml` - Full 116-scene SIFT retrieval baseline (all metrics enabled)
+
+**Complete Reference**:
+- `reference_comprehensive.yaml` - All options demonstrated (if available)
 
 ---
 
-This guide covers the complete YAML configuration system. For additional questions, refer to the source code in `src/core/config/` or the validation tests in `tests/unit/config/`.
+## Version History
+
+**v1.1 (October 2025)**:
+- ✅ Added `keypoint_verification` evaluation section
+- ✅ Added `keypoint_retrieval` evaluation section
+- ✅ Added `performance` section for parallelization control
+- ✅ Enhanced `database` section with storage optimization flags
+- ✅ Automatic HP-V vs HP-I metric split for all evaluation tasks
+
+**v1.0 (Initial Release)**:
+- Core experiment configuration
+- Dataset and keypoint setup
+- Descriptor configuration with pooling
+- Basic evaluation and matching
+
+---
+
+This guide covers the complete YAML configuration system. For additional questions, refer to:
+- Source code: `src/core/config/YAMLConfigLoader.cpp`
+- Validation tests: `tests/unit/config/`
+- Implementation docs: `docs/StatusDocs/METRICS_ENHANCEMENT_PLAN.md`

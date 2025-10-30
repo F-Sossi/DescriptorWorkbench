@@ -5,8 +5,8 @@
 #include <chrono>
 #include <iomanip>
 
-namespace thesis_project {
-    namespace logging {
+
+    namespace thesis_project::logging {
         
         enum class LogLevel {
             DEBUG,
@@ -76,5 +76,4 @@ namespace thesis_project {
         #define LOG_WARNING(msg) thesis_project::logging::Logger::warning(msg)
         #define LOG_ERROR(msg) thesis_project::logging::Logger::error(msg)
         
-    } // namespace logging
-} // namespace thesis_project
+    } // namespace thesis_project::logging

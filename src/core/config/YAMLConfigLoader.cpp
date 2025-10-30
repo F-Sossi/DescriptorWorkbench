@@ -378,7 +378,52 @@ namespace thesis_project::config {
                 evaluation.params.image_retrieval.scorer = retrieval["scorer"].as<std::string>();
             }
         }
-        
+
+        // Parse keypoint verification evaluation parameters (Bojanic et al. 2020)
+        if (node["keypoint_verification"]) {
+            const auto& verification = node["keypoint_verification"];
+
+            if (verification["enabled"]) {
+                evaluation.params.keypoint_verification.enabled = verification["enabled"].as<bool>();
+            }
+
+            if (verification["num_distractor_scenes"]) {
+                evaluation.params.keypoint_verification.num_distractor_scenes =
+                    verification["num_distractor_scenes"].as<int>();
+            }
+
+            if (verification["num_distractors_per_scene"]) {
+                evaluation.params.keypoint_verification.num_distractors_per_scene =
+                    verification["num_distractors_per_scene"].as<int>();
+            }
+
+            if (verification["seed"]) {
+                evaluation.params.keypoint_verification.seed = verification["seed"].as<int>();
+            }
+        }
+
+        if (node["keypoint_retrieval"]) {
+            const auto& retrieval = node["keypoint_retrieval"];
+
+            if (retrieval["enabled"]) {
+                evaluation.params.keypoint_retrieval.enabled = retrieval["enabled"].as<bool>();
+            }
+
+            if (retrieval["num_distractor_scenes"]) {
+                evaluation.params.keypoint_retrieval.num_distractor_scenes =
+                    retrieval["num_distractor_scenes"].as<int>();
+            }
+
+            if (retrieval["num_distractors_per_scene"]) {
+                evaluation.params.keypoint_retrieval.num_distractors_per_scene =
+                    retrieval["num_distractors_per_scene"].as<int>();
+            }
+
+            if (retrieval["seed"]) {
+                evaluation.params.keypoint_retrieval.seed = retrieval["seed"].as<int>();
+            }
+        }
+
         // Legacy keys removed in Schema v1 (no parsing of matching_threshold / validation_method)
     }
     

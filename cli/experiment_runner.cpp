@@ -11,6 +11,7 @@
 #include "src/core/matching/MatchingStrategy.hpp"
 #include "src/core/metrics/ExperimentMetrics.hpp"
 #include "src/core/metrics/TrueAveragePrecision.hpp"
+#include "src/core/metrics/KeypointVerification.hpp"
 #include "thesis_project/types.hpp"
 #include "thesis_project/database/DatabaseManager.hpp"
 #include <iostream>
@@ -25,6 +26,7 @@
 #include <cctype>
 #include <unordered_map>
 #include <map>
+#include <utility>
 #ifdef _OPENMP
 #include <omp.h>
 #include <thread>
@@ -158,6 +160,8 @@ struct ProfilingSummary {
 };
 
 struct ImageRetrievalAccumulator;
+struct VerificationAccumulator;
+struct RetrievalAccumulator;
 
 // Context for scene processing (all dependencies needed for parallel execution)
 struct SceneProcessingContext {
@@ -332,6 +336,12 @@ struct ImageRetrievalAccumulator {
         for (std::size_t idx = 0; idx < query_count; ++idx) {
             metrics.addImageRetrievalAP(scene_per_query[idx], ap_per_query[idx]);
         }
+
+        // Calculate final image retrieval MAP
+        if (!ap_per_query.empty()) {
+            double retrieval_sum = std::accumulate(ap_per_query.begin(), ap_per_query.end(), 0.0);
+            metrics.image_retrieval_map = retrieval_sum / static_cast<double>(ap_per_query.size());
+        }
     }
 
 private:
@@ -402,6 +412,236 @@ private:
     bool computed_ = false;
 };
 
+/**
+ * @brief Accumulator for keypoint verification task with distractors
+ *
+ * Collects descriptors and keypoints from all scenes during processing,
+ * then computes verification AP with out-of-sequence distractors.
+ *
+ * Based on Bojanic et al. (2020) Section III-B, Equation 1-2.
+ */
+struct VerificationAccumulator {
+    struct SceneData {
+        std::string scene_name;
+        std::map<std::string, std::vector<cv::KeyPoint>> keypoints_per_image;
+        std::map<std::string, cv::Mat> descriptors_per_image;
+        std::map<std::string, cv::Mat> homographies;  // H_1_2, H_1_3, etc.
+    };
+
+    void registerImage(const std::string& scene_name,
+                       const std::string& image_name,
+                       const std::vector<cv::KeyPoint>& keypoints,
+                       const cv::Mat& descriptors) {
+        if (descriptors.empty() || keypoints.empty()) {
+            return;
+        }
+
+        auto& scene = scene_data_[scene_name];
+        scene.scene_name = scene_name;
+        scene.keypoints_per_image[image_name] = keypoints;
+        scene.descriptors_per_image[image_name] = descriptors;
+    }
+
+    void registerHomography(const std::string& scene_name,
+                           const std::string& from_image,
+                           const std::string& to_image,
+                           const cv::Mat& homography) {
+        if (homography.empty()) {
+            return;
+        }
+
+        auto& scene = scene_data_[scene_name];
+        std::string key = from_image + "_" + to_image;
+        scene.homographies[key] = homography;
+    }
+
+    void ingestSceneData(SceneData&& scene) {
+        if (scene.scene_name.empty()) {
+            return;
+        }
+        scene_data_[scene.scene_name] = std::move(scene);
+    }
+
+    void compute(const thesis_project::config::ExperimentConfig& config,
+                 const thesis_project::KeypointVerificationParams& params,
+                 ::ExperimentMetrics& metrics) {
+        if (computed_) {
+            return;
+        }
+        computed_ = true;
+
+        if (scene_data_.empty()) {
+            LOG_WARNING("No scene data collected for verification");
+            return;
+        }
+
+        LOG_INFO("Computing keypoint verification with " +
+                 std::to_string(scene_data_.size()) + " scenes");
+
+        // Convert scene_data_ to the format expected by computeDatasetVerification
+        // Format: map<scene_name, map<image_name, pair<keypoints, descriptors>>>
+        std::map<std::string, std::map<std::string, std::pair<std::vector<cv::KeyPoint>, cv::Mat>>> verification_keypoints;
+        std::map<std::string, std::map<std::string, cv::Mat>> verification_homographies;
+
+        for (const auto& [scene_name, scene] : scene_data_) {
+            for (const auto& [image_name, keypoints] : scene.keypoints_per_image) {
+                auto desc_it = scene.descriptors_per_image.find(image_name);
+                if (desc_it != scene.descriptors_per_image.end()) {
+                    verification_keypoints[scene_name][image_name] =
+                        std::make_pair(keypoints, desc_it->second);
+                }
+            }
+
+            // Convert homography keys from "1.ppm_2.ppm" format to just "2.ppm"
+            for (const auto& [hom_key, hom_mat] : scene.homographies) {
+                // Extract target image name (everything after first underscore)
+                auto underscore_pos = hom_key.find('_');
+                if (underscore_pos != std::string::npos) {
+                    std::string target_image = hom_key.substr(underscore_pos + 1);
+                    verification_homographies[scene_name][target_image] = hom_mat;
+                }
+            }
+        }
+
+        // Compute verification metrics
+        auto result = thesis_project::metrics::computeDatasetVerification(
+            verification_keypoints,
+            verification_homographies,
+            params.num_distractor_scenes,
+            params.num_distractors_per_scene,
+            params.seed);
+
+        // Update metrics
+        metrics.keypoint_verification_ap = result.average_precision;
+        metrics.verification_viewpoint_ap = result.viewpoint_ap;
+        metrics.verification_illumination_ap = result.illumination_ap;
+
+        LOG_INFO("Verification AP: " + std::to_string(result.average_precision));
+        LOG_INFO("  HP-V verification AP: " + std::to_string(result.viewpoint_ap));
+        LOG_INFO("  HP-I verification AP: " + std::to_string(result.illumination_ap));
+        LOG_INFO("  Total queries: " + std::to_string(result.total_queries));
+        LOG_INFO("  Total distractors: " + std::to_string(result.total_distractors));
+
+        scene_data_.clear();
+    }
+
+private:
+    std::map<std::string, SceneData> scene_data_;
+    bool computed_ = false;
+};
+
+struct RetrievalAccumulator {
+    struct SceneData {
+        std::string scene_name;
+        std::map<std::string, std::vector<cv::KeyPoint>> keypoints_per_image;
+        std::map<std::string, cv::Mat> descriptors_per_image;
+        std::map<std::string, cv::Mat> homographies;  // H_1_2, H_1_3, etc.
+    };
+
+    void registerImage(const std::string& scene_name,
+                       const std::string& image_name,
+                       const std::vector<cv::KeyPoint>& keypoints,
+                       const cv::Mat& descriptors) {
+        if (descriptors.empty() || keypoints.empty()) {
+            return;
+        }
+
+        auto& scene = scene_data_[scene_name];
+        scene.scene_name = scene_name;
+        scene.keypoints_per_image[image_name] = keypoints;
+        scene.descriptors_per_image[image_name] = descriptors;
+    }
+
+    void registerHomography(const std::string& scene_name,
+                           const std::string& from_image,
+                           const std::string& to_image,
+                           const cv::Mat& homography) {
+        if (homography.empty()) {
+            return;
+        }
+
+        auto& scene = scene_data_[scene_name];
+        std::string key = from_image + "_" + to_image;
+        scene.homographies[key] = homography;
+    }
+
+    void ingestSceneData(SceneData&& scene) {
+        if (scene.scene_name.empty()) {
+            return;
+        }
+        scene_data_[scene.scene_name] = std::move(scene);
+    }
+
+    void compute(const thesis_project::config::ExperimentConfig& config,
+                 const thesis_project::KeypointRetrievalParams& params,
+                 ::ExperimentMetrics& metrics) {
+        if (computed_) {
+            return;
+        }
+        computed_ = true;
+
+        if (scene_data_.empty()) {
+            LOG_WARNING("No scene data collected for retrieval");
+            return;
+        }
+
+        LOG_INFO("Computing keypoint retrieval with " +
+                 std::to_string(scene_data_.size()) + " scenes");
+
+        // Convert scene_data_ to the format expected by computeDatasetRetrieval
+        std::map<std::string, std::map<std::string, std::pair<std::vector<cv::KeyPoint>, cv::Mat>>> retrieval_keypoints;
+        std::map<std::string, std::map<std::string, cv::Mat>> retrieval_homographies;
+
+        for (const auto& [scene_name, scene] : scene_data_) {
+            for (const auto& [image_name, keypoints] : scene.keypoints_per_image) {
+                auto desc_it = scene.descriptors_per_image.find(image_name);
+                if (desc_it != scene.descriptors_per_image.end()) {
+                    retrieval_keypoints[scene_name][image_name] =
+                        std::make_pair(keypoints, desc_it->second);
+                }
+            }
+
+            // Convert homography keys from "1.ppm_2.ppm" format to just "2.ppm"
+            for (const auto& [hom_key, hom_mat] : scene.homographies) {
+                auto underscore_pos = hom_key.find('_');
+                if (underscore_pos != std::string::npos) {
+                    std::string target_image = hom_key.substr(underscore_pos + 1);
+                    retrieval_homographies[scene_name][target_image] = hom_mat;
+                }
+            }
+        }
+
+        // Compute retrieval metrics
+        auto result = thesis_project::metrics::computeDatasetRetrieval(
+            retrieval_keypoints,
+            retrieval_homographies,
+            params.num_distractor_scenes,
+            params.num_distractors_per_scene,
+            params.seed);
+
+        // Update metrics
+        metrics.keypoint_retrieval_ap = result.average_precision;
+        metrics.retrieval_viewpoint_ap = result.viewpoint_ap;
+        metrics.retrieval_illumination_ap = result.illumination_ap;
+        metrics.retrieval_num_true_positives = result.num_true_positives;
+        metrics.retrieval_num_hard_negatives = result.num_hard_negatives;
+        metrics.retrieval_num_distractors = result.num_distractors;
+
+        LOG_INFO("Retrieval AP: " + std::to_string(result.average_precision));
+        LOG_INFO("  HP-V retrieval AP: " + std::to_string(result.viewpoint_ap));
+        LOG_INFO("  HP-I retrieval AP: " + std::to_string(result.illumination_ap));
+        LOG_INFO("  Label distribution: TP=" + std::to_string(result.num_true_positives) +
+                 " HN=" + std::to_string(result.num_hard_negatives) +
+                 " D=" + std::to_string(result.num_distractors));
+
+        scene_data_.clear();
+    }
+
+private:
+    std::map<std::string, SceneData> scene_data_;
+    bool computed_ = false;
+};
+
 // Create a simple SIFT detector for independent detection
 static cv::Ptr<cv::Feature2D> makeDetector(const thesis_project::config::ExperimentConfig& cfg) {
     // Only SIFT supported here for simplicity; extend as needed
@@ -419,7 +659,9 @@ static cv::Ptr<cv::Feature2D> makeDetector(const thesis_project::config::Experim
 static std::pair<::ExperimentMetrics, ThreadLocalProfiling> processSingleScene(
     const std::string& scene_folder,
     const std::string& scene_name,
-    const SceneProcessingContext& ctx
+    const SceneProcessingContext& ctx,
+    VerificationAccumulator::SceneData* verification_buffer,
+    RetrievalAccumulator::SceneData* keypoint_retrieval_buffer
 ) {
     namespace fs = std::filesystem;
     ::ExperimentMetrics metrics;
@@ -533,6 +775,26 @@ static std::pair<::ExperimentMetrics, ThreadLocalProfiling> processSingleScene(
         }
     };
 
+    auto registerSceneImage = [&](auto* buffer,
+                                  const std::string& image_name,
+                                  const std::vector<cv::KeyPoint>& keypoints,
+                                  const cv::Mat& descriptors) {
+        if (!buffer || descriptors.empty()) return;
+        buffer->scene_name = scene_name;
+        buffer->keypoints_per_image[image_name] = keypoints;
+        buffer->descriptors_per_image[image_name] = descriptors;
+    };
+
+    auto registerSceneHomography = [&](auto* buffer,
+                                       const std::string& from_image,
+                                       const std::string& to_image,
+                                       const cv::Mat& homography) {
+        if (!buffer || homography.empty()) return;
+        buffer->scene_name = scene_name;
+        std::string key = from_image + "_" + to_image;
+        buffer->homographies[key] = homography;
+    };
+
     // Process reference image (1.ppm)
     const std::string base_image_name = "1.ppm";
     const std::string base_image_path = scene_folder + "/" + base_image_name;
@@ -565,6 +827,9 @@ static std::pair<::ExperimentMetrics, ThreadLocalProfiling> processSingleScene(
             descriptors1,
             true);
     }
+    registerSceneImage(verification_buffer, base_image_name, keypoints1, descriptors1);
+    registerSceneImage(keypoint_retrieval_buffer, base_image_name, keypoints1, descriptors1);
+
     prof.total_images += 1;
     prof.total_kps += static_cast<long>(keypoints1.size());
 
@@ -601,6 +866,9 @@ static std::pair<::ExperimentMetrics, ThreadLocalProfiling> processSingleScene(
                 descriptors2,
                 false);
         }
+        registerSceneImage(verification_buffer, image_name, keypoints2, descriptors2);
+        registerSceneImage(keypoint_retrieval_buffer, image_name, keypoints2, descriptors2);
+
         prof.total_images += 1;
         prof.total_kps += static_cast<long>(keypoints2.size());
 
@@ -631,6 +899,20 @@ static std::pair<::ExperimentMetrics, ThreadLocalProfiling> processSingleScene(
             descriptors2,
             scene_name,
             metrics);
+
+        if (verification_buffer || keypoint_retrieval_buffer) {
+            std::ifstream hfile(homography_path);
+            if (hfile.good()) {
+                cv::Mat H = cv::Mat::zeros(3, 3, CV_64F);
+                for (int r = 0; r < 3; ++r) {
+                    for (int c = 0; c < 3; ++c) {
+                        hfile >> H.at<double>(r, c);
+                    }
+                }
+                registerSceneHomography(verification_buffer, base_image_name, image_name, H);
+                registerSceneHomography(keypoint_retrieval_buffer, base_image_name, image_name, H);
+            }
+        }
     }
 
     metrics.calculateMeanPrecision();
@@ -694,10 +976,31 @@ static ::ExperimentMetrics processDirectoryNew(
         auto matcher = thesis_project::matching::MatchingFactory::createStrategy(
             yaml_config.evaluation.params.matching_method);
 
+        // Debug: Print evaluation flags
+        LOG_INFO("Evaluation flags:");
+        LOG_INFO("  image_retrieval.enabled = " + std::string(yaml_config.evaluation.params.image_retrieval.enabled ? "true" : "false"));
+        LOG_INFO("  keypoint_verification.enabled = " + std::string(yaml_config.evaluation.params.keypoint_verification.enabled ? "true" : "false"));
+        LOG_INFO("  keypoint_retrieval.enabled = " + std::string(yaml_config.evaluation.params.keypoint_retrieval.enabled ? "true" : "false"));
+
         ImageRetrievalAccumulator retrieval_accumulator;
         ImageRetrievalAccumulator* retrieval_ptr = nullptr;
         if (yaml_config.evaluation.params.image_retrieval.enabled) {
             retrieval_ptr = &retrieval_accumulator;
+            LOG_INFO("  -> Image retrieval accumulator created");
+        }
+
+        VerificationAccumulator verification_accumulator;
+        VerificationAccumulator* verification_ptr = nullptr;
+        if (yaml_config.evaluation.params.keypoint_verification.enabled) {
+            verification_ptr = &verification_accumulator;
+            LOG_INFO("  -> Verification accumulator created");
+        }
+
+        RetrievalAccumulator keypoint_retrieval_accumulator;
+        RetrievalAccumulator* keypoint_retrieval_ptr = nullptr;
+        if (yaml_config.evaluation.params.keypoint_retrieval.enabled) {
+            keypoint_retrieval_ptr = &keypoint_retrieval_accumulator;
+            LOG_INFO("  -> Keypoint retrieval accumulator created");
         }
 
         const bool store_descriptors = db_ptr && db_ptr->isEnabled() && experiment_id != -1 &&
@@ -751,7 +1054,8 @@ static ::ExperimentMetrics processDirectoryNew(
 
         // Determine thread count for OpenMP
         const bool retrieval_enabled = yaml_config.evaluation.params.image_retrieval.enabled;
-        const bool use_parallel = yaml_config.performance.parallel_scenes && !retrieval_enabled;
+        const bool use_parallel = yaml_config.performance.parallel_scenes &&
+                                  !retrieval_enabled;
         int num_threads = yaml_config.performance.num_threads;
 
 #ifdef _OPENMP
@@ -779,14 +1083,41 @@ static ::ExperimentMetrics processDirectoryNew(
         std::vector<::ExperimentMetrics> scene_metrics(scenes_to_process.size());
         std::vector<ThreadLocalProfiling> scene_profiling(scenes_to_process.size());
 
+        std::vector<VerificationAccumulator::SceneData> verification_buffers;
+        if (verification_ptr) {
+            verification_buffers.resize(scenes_to_process.size());
+        }
+
+        std::vector<RetrievalAccumulator::SceneData> keypoint_retrieval_buffers;
+        if (keypoint_retrieval_ptr) {
+            keypoint_retrieval_buffers.resize(scenes_to_process.size());
+        }
+
 #ifdef _OPENMP
         #pragma omp parallel for schedule(dynamic) if(use_parallel)
 #endif
         for (size_t i = 0; i < scenes_to_process.size(); ++i) {
             const auto& [scene_folder, scene_name] = scenes_to_process[i];
-            auto result = processSingleScene(scene_folder, scene_name, ctx);
+            auto result = processSingleScene(
+                scene_folder,
+                scene_name,
+                ctx,
+                verification_ptr ? &verification_buffers[i] : nullptr,
+                keypoint_retrieval_ptr ? &keypoint_retrieval_buffers[i] : nullptr);
             scene_metrics[i] = result.first;
             scene_profiling[i] = result.second;
+        }
+
+        if (verification_ptr) {
+            for (auto& buffer : verification_buffers) {
+                verification_ptr->ingestSceneData(std::move(buffer));
+            }
+        }
+
+        if (keypoint_retrieval_ptr) {
+            for (auto& buffer : keypoint_retrieval_buffers) {
+                keypoint_retrieval_ptr->ingestSceneData(std::move(buffer));
+            }
         }
 
         // Merge all scene results
@@ -805,6 +1136,10 @@ static ::ExperimentMetrics processDirectoryNew(
             total_kps += scene_profiling[i].total_kps;
         }
 
+        // Calculate mean precision BEFORE expensive optional metrics
+        // (retrieval and verification compute() methods will set their own fields)
+        overall.calculateMeanPrecision();
+
         if (retrieval_ptr) {
             retrieval_ptr->compute(
                 yaml_config,
@@ -812,11 +1147,38 @@ static ::ExperimentMetrics processDirectoryNew(
                 overall);
         }
 
-        overall.calculateMeanPrecision();
+        // Compute keypoint verification metrics if enabled (expensive operation)
+        if (verification_ptr) {
+            verification_ptr->compute(
+                yaml_config,
+                yaml_config.evaluation.params.keypoint_verification,
+                overall);
+        }
+
+        // Compute keypoint retrieval metrics if enabled (expensive operation)
+        if (keypoint_retrieval_ptr) {
+            keypoint_retrieval_ptr->compute(
+                yaml_config,
+                yaml_config.evaluation.params.keypoint_retrieval,
+                overall);
+        }
+
         overall.success = true;
 
         if (yaml_config.evaluation.params.image_retrieval.enabled) {
             LOG_INFO("Image retrieval MAP: " + std::to_string(overall.image_retrieval_map));
+        }
+
+        if (yaml_config.evaluation.params.keypoint_verification.enabled) {
+            LOG_INFO("Keypoint verification AP: " + std::to_string(overall.keypoint_verification_ap));
+            LOG_INFO("  HP-V verification AP: " + std::to_string(overall.verification_viewpoint_ap));
+            LOG_INFO("  HP-I verification AP: " + std::to_string(overall.verification_illumination_ap));
+        }
+
+        if (yaml_config.evaluation.params.keypoint_retrieval.enabled) {
+            LOG_INFO("Keypoint retrieval AP: " + std::to_string(overall.keypoint_retrieval_ap));
+            LOG_INFO("  HP-V retrieval AP: " + std::to_string(overall.retrieval_viewpoint_ap));
+            LOG_INFO("  HP-I retrieval AP: " + std::to_string(overall.retrieval_illumination_ap));
         }
 
         profile.detect_ms = detect_ms;
@@ -965,7 +1327,26 @@ int main(int argc, char** argv) {
                 results.true_map_macro_with_zeros = experiment_metrics.true_map_macro_by_scene_including_zeros;
                 results.true_map_micro_with_zeros = experiment_metrics.true_map_micro_including_zeros;
                 results.image_retrieval_map = experiment_metrics.image_retrieval_map;
-                
+
+                // Category-specific metrics (v3.1): HP-V vs HP-I
+                results.viewpoint_map = experiment_metrics.viewpoint_map;
+                results.illumination_map = experiment_metrics.illumination_map;
+                results.viewpoint_map_with_zeros = experiment_metrics.viewpoint_map_including_zeros;
+                results.illumination_map_with_zeros = experiment_metrics.illumination_map_including_zeros;
+
+                // Keypoint verification metrics (v3.2): Bojanic et al. (2020) verification task
+                results.keypoint_verification_ap = experiment_metrics.keypoint_verification_ap;
+                results.verification_viewpoint_ap = experiment_metrics.verification_viewpoint_ap;
+                results.verification_illumination_ap = experiment_metrics.verification_illumination_ap;
+
+                // Keypoint retrieval metrics (v3.3)
+                results.keypoint_retrieval_ap = experiment_metrics.keypoint_retrieval_ap;
+                results.retrieval_viewpoint_ap = experiment_metrics.retrieval_viewpoint_ap;
+                results.retrieval_illumination_ap = experiment_metrics.retrieval_illumination_ap;
+                results.retrieval_num_true_positives = experiment_metrics.retrieval_num_true_positives;
+                results.retrieval_num_hard_negatives = experiment_metrics.retrieval_num_hard_negatives;
+                results.retrieval_num_distractors = experiment_metrics.retrieval_num_distractors;
+
                 // Primary MAP metric: prefer macro (scene-balanced) when available, fallback to micro
                 results.mean_average_precision = experiment_metrics.true_map_macro_by_scene > 0.0 ? 
                                                 experiment_metrics.true_map_macro_by_scene :
@@ -1015,7 +1396,7 @@ int main(int argc, char** argv) {
                 results.metadata["recall_at_10"] = std::to_string(experiment_metrics.recall_at_10);
                 // R=0 rate for transparency
                 int total_all = experiment_metrics.total_queries_processed + experiment_metrics.total_queries_excluded;
-                double r0_rate = total_all > 0 ? (double)experiment_metrics.total_queries_excluded / total_all : 0.0;
+                double r0_rate = total_all > 0 ? static_cast<double>(experiment_metrics.total_queries_excluded) / total_all : 0.0;
                 results.metadata["r0_rate"] = std::to_string(r0_rate);
                 
                 // Per-scene True mAP breakdown
@@ -1063,6 +1444,13 @@ int main(int argc, char** argv) {
                          ", total_cpu_ms=" + format_ms(results.total_pipeline_cpu_ms) +
                          ", MAP=" + format_score(results.mean_average_precision) +
                          ", MAP/ms=" + format_score(map_per_ms));
+
+                // Category-specific results (HP-V vs HP-I)
+                const double hp_delta = results.viewpoint_map - results.illumination_map;
+                LOG_INFO("Category breakdown → HP-V=" + format_score(results.viewpoint_map) +
+                         ", HP-I=" + format_score(results.illumination_map) +
+                         ", Delta=" + format_score(hp_delta) +
+                         " (viewpoint advantage)");
             }
 
             if (experiment_metrics.success) {

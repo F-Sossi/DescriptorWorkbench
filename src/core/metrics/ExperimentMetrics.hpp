@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <set>
 #include <numeric>
 #include "TrueAveragePrecision.hpp"
 
@@ -24,7 +25,13 @@ struct ExperimentMetrics {
     double true_map_macro_by_scene = 0.0;               // TRUE IR-style mAP: macro average across scenes (conditional)
     double true_map_micro_including_zeros = 0.0;        // TRUE IR-style mAP: includes R=0 queries as AP=0 (punitive)
     double true_map_macro_by_scene_including_zeros = 0.0; // TRUE IR-style mAP: macro including R=0 (punitive)
-    
+
+    // Category-specific metrics (Viewpoint vs Illumination)
+    double viewpoint_map = 0.0;                         // mAP for v_* sequences only
+    double illumination_map = 0.0;                      // mAP for i_* sequences only
+    double viewpoint_map_including_zeros = 0.0;         // Punitive viewpoint mAP
+    double illumination_map_including_zeros = 0.0;      // Punitive illumination mAP
+
     // Precision@K and Recall@K metrics  
     double precision_at_1 = 0.0;                        // Precision@1: % of queries where top result is correct
     double precision_at_5 = 0.0;                        // Precision@5: % of correct results in top-5  
@@ -51,12 +58,31 @@ struct ExperimentMetrics {
     int total_queries_processed = 0;                               // Total queries with potential matches
     int total_queries_excluded = 0;                                // Queries excluded (R=0)
 
+    // Category-specific AP storage (Viewpoint vs Illumination)
+    std::map<std::string, std::vector<double>> viewpoint_scene_ap;     // Only v_* scenes
+    std::map<std::string, std::vector<double>> illumination_scene_ap;  // Only i_* scenes
+    std::map<std::string, int> viewpoint_scene_excluded;               // R=0 queries in v_* scenes
+    std::map<std::string, int> illumination_scene_excluded;            // R=0 queries in i_* scenes
+
     // Image-retrieval MAP storage
     std::vector<double> image_retrieval_ap_per_query;
     std::map<std::string, std::vector<double>> image_retrieval_ap_per_scene;
     double image_retrieval_map = -1.0;
     int image_retrieval_queries = 0;
-    
+
+    // Keypoint verification metrics (Bojanic et al. 2020, Section III-B, Eq. 1-2)
+    double keypoint_verification_ap = -1.0;           // Overall verification AP with distractors
+    double verification_viewpoint_ap = -1.0;          // Verification AP for v_* scenes only
+    double verification_illumination_ap = -1.0;       // Verification AP for i_* scenes only
+
+    // Keypoint retrieval metrics (Bojanic et al. 2020, Section III-B, Eq. 5-6)
+    double keypoint_retrieval_ap = -1.0;              // Overall retrieval AP with three-tier labels
+    double retrieval_viewpoint_ap = -1.0;             // Retrieval AP for v_* scenes only
+    double retrieval_illumination_ap = -1.0;          // Retrieval AP for i_* scenes only
+    int retrieval_num_true_positives = 0;             // Count of y=+1 labels
+    int retrieval_num_hard_negatives = 0;             // Count of y=0 labels
+    int retrieval_num_distractors = 0;                // Count of y=-1 labels
+
     // Rank data for Precision@K/Recall@K calculation
     std::vector<int> ranks_per_query;                              // Rank of true match for each query (1-based, -1 if R=0)
     
@@ -84,6 +110,17 @@ struct ExperimentMetrics {
         true_map_macro_by_scene_including_zeros = 0.0;
         image_retrieval_map = -1.0;
         image_retrieval_queries = static_cast<int>(image_retrieval_ap_per_query.size());
+
+        // Reset category-specific metrics
+        viewpoint_map = 0.0;
+        illumination_map = 0.0;
+        viewpoint_map_including_zeros = 0.0;
+        illumination_map_including_zeros = 0.0;
+
+        // Reset verification metrics (default -1.0 indicates not computed)
+        keypoint_verification_ap = -1.0;
+        verification_viewpoint_ap = -1.0;
+        verification_illumination_ap = -1.0;
         
         // Reset Precision@K and Recall@K metrics
         precision_at_1 = 0.0;
@@ -176,13 +213,13 @@ struct ExperimentMetrics {
             int scene_cnt_all = 0;
             
             for (const auto& [scene, aps] : per_scene_ap) {
-                int excluded_count = per_scene_excluded.count(scene) ? per_scene_excluded.at(scene) : 0;
-                int total_scene_queries = static_cast<int>(aps.size()) + excluded_count;
+                const int excluded_count = per_scene_excluded.count(scene) ? per_scene_excluded.at(scene) : 0;
+                const int total_scene_queries = static_cast<int>(aps.size()) + excluded_count;
                 
                 if (total_scene_queries == 0) continue; // Empty scene
-                
-                double scene_ap_sum = std::accumulate(aps.begin(), aps.end(), 0.0);
-                double scene_map = scene_ap_sum / static_cast<double>(total_scene_queries);
+
+                const double scene_ap_sum = std::accumulate(aps.begin(), aps.end(), 0.0);
+                const double scene_map = scene_ap_sum / static_cast<double>(total_scene_queries);
                 sum_scene_all += scene_map;
                 scene_cnt_all++;
             }
@@ -193,36 +230,108 @@ struct ExperimentMetrics {
         } else {
             true_map_macro_by_scene_including_zeros = true_map_micro_including_zeros; // fallback
         }
-        
+
+        // Calculate viewpoint-specific mAP (HP-V)
+        if (!viewpoint_scene_ap.empty()) {
+            double vp_sum = 0.0;
+            int vp_count = 0;
+
+            for (const auto& [scene, aps] : viewpoint_scene_ap) {
+                if (aps.empty()) continue;
+                double scene_ap_sum = std::accumulate(aps.begin(), aps.end(), 0.0);
+                vp_sum += scene_ap_sum / static_cast<double>(aps.size());
+                vp_count++;
+            }
+
+            viewpoint_map = (vp_count > 0) ? vp_sum / static_cast<double>(vp_count) : 0.0;
+        } else {
+            viewpoint_map = 0.0;
+        }
+
+        // Calculate illumination-specific mAP (HP-I)
+        if (!illumination_scene_ap.empty()) {
+            double il_sum = 0.0;
+            int il_count = 0;
+
+            for (const auto& [scene, aps] : illumination_scene_ap) {
+                if (aps.empty()) continue;
+                double scene_ap_sum = std::accumulate(aps.begin(), aps.end(), 0.0);
+                il_sum += scene_ap_sum / static_cast<double>(aps.size());
+                il_count++;
+            }
+
+            illumination_map = (il_count > 0) ? il_sum / static_cast<double>(il_count) : 0.0;
+        } else {
+            illumination_map = 0.0;
+        }
+
+        // Calculate punitive versions (including R=0 queries)
+        auto computeCategoryIncludingZeros = [](const auto& ap_map,
+                                                const auto& excluded_map) -> double {
+            std::set<std::string> scene_names;
+            for (const auto& kv : ap_map) scene_names.insert(kv.first);
+            for (const auto& kv : excluded_map) scene_names.insert(kv.first);
+
+            double sum = 0.0;
+            int count = 0;
+
+            for (const auto& scene : scene_names) {
+                double scene_ap_sum = 0.0;
+                int processed_queries = 0;
+
+                if (const auto ap_it = ap_map.find(scene); ap_it != ap_map.end()) {
+                    scene_ap_sum = std::accumulate(ap_it->second.begin(), ap_it->second.end(), 0.0);
+                    processed_queries = static_cast<int>(ap_it->second.size());
+                }
+
+                int excluded_queries = 0;
+                if (const auto ex_it = excluded_map.find(scene); ex_it != excluded_map.end()) {
+                    excluded_queries = ex_it->second;
+                }
+
+                const int total_scene_queries = processed_queries + excluded_queries;
+                if (total_scene_queries == 0) continue;
+
+                sum += scene_ap_sum / static_cast<double>(total_scene_queries);
+                count++;
+            }
+
+            return (count > 0) ? sum / static_cast<double>(count) : 0.0;
+        };
+
+        viewpoint_map_including_zeros = computeCategoryIncludingZeros(viewpoint_scene_ap, viewpoint_scene_excluded);
+        illumination_map_including_zeros = computeCategoryIncludingZeros(illumination_scene_ap, illumination_scene_excluded);
+
         // Calculate Precision@K and Recall@K from rank data
         if (!ranks_per_query.empty()) {
             int queries_with_ranks = 0;
             int hits_at_1 = 0, hits_at_5 = 0, hits_at_10 = 0;
             
-            // DEBUG: Count rank distribution
-            std::map<int, int> rank_histogram;
-            
-            for (int rank : ranks_per_query) {
-                if (rank > 0) { // Valid rank (not R=0)
+            // DEBUG: Count rank distribution (0 => R=0, 1..10 => ranks)
+            int rank_histogram[11] = {0};  // zero-initialized; index 0 = R=0
+
+            for (const int rank : ranks_per_query) {
+                if (rank > 0) {
                     queries_with_ranks++;
-                    rank_histogram[rank]++;
+                    if (rank <= 10) {
+                        rank_histogram[rank]++;
+                    } else {
+                        // Optional: bucket ranks >10 into 10, or track a separate overflow counter
+                        // rank_histogram[10]++; // uncomment to clamp
+                    }
                     if (rank <= 1) hits_at_1++;
                     if (rank <= 5) hits_at_5++;
                     if (rank <= 10) hits_at_10++;
                 } else {
-                    rank_histogram[-1]++; // R=0 queries
+                    rank_histogram[0]++; // R=0 queries
                 }
             }
-            
-            // DEBUG: Print rank distribution for first few ranks
-            /*std::cout << "[DEBUG] Rank distribution - Total queries: " << ranks_per_query.size()
-                      << ", Valid ranks: " << queries_with_ranks << std::endl;
-            std::cout << "[DEBUG] Ranks 1-10: ";*/
-            for (int r = 1; r <= 10; r++) {
+
+            for (int r = 1; r <= 10; ++r) {
                 std::cout << "R" << r << ":" << rank_histogram[r] << " ";
             }
-            std::cout << " R=0:" << rank_histogram[-1] << std::endl;
-            
+            std::cout << " R=0:" << rank_histogram[0] << std::endl;
+
             if (queries_with_ranks > 0) {
                 precision_at_1 = static_cast<double>(hits_at_1) / static_cast<double>(queries_with_ranks);
                 precision_at_5 = static_cast<double>(hits_at_5) / static_cast<double>(queries_with_ranks);
@@ -232,9 +341,10 @@ struct ExperimentMetrics {
                 recall_at_1 = precision_at_1;
                 recall_at_5 = precision_at_5;
                 recall_at_10 = precision_at_10;
-                
-                std::cout << "[DEBUG] P@K: P@1=" << precision_at_1 << " P@5=" << precision_at_5 
-                          << " P@10=" << precision_at_10 << std::endl;
+
+                LOG_DEBUG((std::ostringstream{} << "P@K: P@1=" << precision_at_1
+                                  << " P@5=" << precision_at_5
+                                  << " P@10=" << precision_at_10).str());
             }
         }
 
@@ -285,10 +395,28 @@ struct ExperimentMetrics {
             per_scene_ap[scene_name].push_back(ap_result.ap);
             ranks_per_query.push_back(ap_result.rank_of_true_match);  // Store rank for P@K/R@K
             total_queries_processed++;
+
+            // Categorize by scene type (viewpoint vs illumination)
+            if (!scene_name.empty()) {
+                if (scene_name[0] == 'v') {
+                    viewpoint_scene_ap[scene_name].push_back(ap_result.ap);
+                } else if (scene_name[0] == 'i') {
+                    illumination_scene_ap[scene_name].push_back(ap_result.ap);
+                }
+            }
         } else {
             total_queries_excluded++;
             per_scene_excluded[scene_name]++; // Track R=0 queries per scene
             ranks_per_query.push_back(-1);    // R=0 query (no rank)
+
+            // Categorize excluded queries by scene type
+            if (!scene_name.empty()) {
+                if (scene_name[0] == 'v') {
+                    viewpoint_scene_excluded[scene_name]++;
+                } else if (scene_name[0] == 'i') {
+                    illumination_scene_excluded[scene_name]++;
+                }
+            }
         }
     }
 
@@ -377,6 +505,34 @@ struct ExperimentMetrics {
             other.ranks_per_query.end()
         );
 
+        // Merge viewpoint scene AP values
+        for (const auto& kv : other.viewpoint_scene_ap) {
+            const auto& scene = kv.first;
+            const auto& aps = kv.second;
+
+            auto& dst_aps = viewpoint_scene_ap[scene];
+            dst_aps.insert(dst_aps.end(), aps.begin(), aps.end());
+        }
+
+        // Merge illumination scene AP values
+        for (const auto& kv : other.illumination_scene_ap) {
+            const auto& scene = kv.first;
+            const auto& aps = kv.second;
+
+            auto& dst_aps = illumination_scene_ap[scene];
+            dst_aps.insert(dst_aps.end(), aps.begin(), aps.end());
+        }
+
+        // Merge viewpoint excluded counts
+        for (const auto& kv : other.viewpoint_scene_excluded) {
+            viewpoint_scene_excluded[kv.first] += kv.second;
+        }
+
+        // Merge illumination excluded counts
+        for (const auto& kv : other.illumination_scene_excluded) {
+            illumination_scene_excluded[kv.first] += kv.second;
+        }
+
         image_retrieval_ap_per_query.insert(
             image_retrieval_ap_per_query.end(),
             other.image_retrieval_ap_per_query.begin(),
@@ -396,7 +552,7 @@ struct ExperimentMetrics {
      * @param scene_name The scene to get average precision for
      * @return Average precision for the scene, or 0.0 if scene not found
      */
-    double getSceneAveragePrecision(const std::string& scene_name) const {
+    [[nodiscard]] double getSceneAveragePrecision(const std::string& scene_name) const {
         auto it = per_scene_precisions.find(scene_name);
         if (it != per_scene_precisions.end() && !it->second.empty()) {
             double sum = 0.0;
@@ -411,7 +567,7 @@ struct ExperimentMetrics {
     /**
      * @brief Get all scene names with results
      */
-    std::vector<std::string> getSceneNames() const {
+    [[nodiscard]] std::vector<std::string> getSceneNames() const {
         std::vector<std::string> names;
         for (const auto& [scene_name, precisions] : per_scene_precisions) {
             if (!precisions.empty()) {

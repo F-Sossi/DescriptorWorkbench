@@ -534,7 +534,8 @@ if(TARGET test_keypoint_generators_gtest)
         src/core/keypoints/detectors/SURFKeypointGenerator.cpp
         src/core/keypoints/detectors/NonOverlappingKeypointGenerator.cpp
         src/core/keypoints/KeypointGeneratorFactory.cpp
-        src/core/keypoints/generators/KeynetDetector.cpp)
+        src/core/keypoints/generators/KeynetDetector.cpp
+        src/core/utils/PythonEnvironment.cpp)
     target_link_libraries(test_keypoint_generators_gtest ${OpenCV_LIBRARIES})
     target_include_directories(test_keypoint_generators_gtest PRIVATE src include ${OpenCV_INCLUDE_DIRS})
 endif()
@@ -690,6 +691,7 @@ if(BUILD_EXPERIMENT_CLI)
                        src/core/matching/RatioTestMatching.cpp
                        src/core/matching/MatchingFactory.cpp
                        src/core/metrics/TrueAveragePrecision.cpp
+                       src/core/metrics/KeypointVerification.cpp
                        src/core/experiment/ExperimentHelpers.cpp
                        src/core/descriptor/factories/DescriptorFactory.cpp
                        src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp

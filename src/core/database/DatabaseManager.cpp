@@ -76,6 +76,22 @@ public:
                 true_map_macro_with_zeros REAL,         -- Conservative: includes R=0 queries as AP=0
                 true_map_micro_with_zeros REAL,         -- Conservative: includes R=0 queries as AP=0
                 image_retrieval_map REAL DEFAULT -1,    -- Image-level retrieval MAP (optional)
+                -- Category-specific metrics (v3.1): Viewpoint vs Illumination
+                viewpoint_map REAL DEFAULT 0.0,         -- mAP for v_* sequences only (geometric changes)
+                illumination_map REAL DEFAULT 0.0,      -- mAP for i_* sequences only (photometric changes)
+                viewpoint_map_with_zeros REAL DEFAULT 0.0,     -- Conservative: includes R=0 queries
+                illumination_map_with_zeros REAL DEFAULT 0.0,  -- Conservative: includes R=0 queries
+                -- Keypoint verification metrics (v3.2): Bojanic et al. (2020) verification task
+                keypoint_verification_ap REAL DEFAULT -1.0,    -- Verification AP with distractors (-1 when disabled)
+                verification_viewpoint_ap REAL DEFAULT -1.0,   -- Verification AP for viewpoint scenes only
+                verification_illumination_ap REAL DEFAULT -1.0, -- Verification AP for illumination scenes only
+                -- Keypoint retrieval metrics (v3.3): Bojanic et al. (2020) retrieval task
+                keypoint_retrieval_ap REAL DEFAULT -1.0,       -- Retrieval AP with three-tier labels (-1 when disabled)
+                retrieval_viewpoint_ap REAL DEFAULT -1.0,      -- Retrieval AP for viewpoint scenes only
+                retrieval_illumination_ap REAL DEFAULT -1.0,   -- Retrieval AP for illumination scenes only
+                retrieval_num_true_positives INTEGER DEFAULT 0, -- Count of y=+1 labels
+                retrieval_num_hard_negatives INTEGER DEFAULT 0, -- Count of y=0 labels
+                retrieval_num_distractors INTEGER DEFAULT 0,   -- Count of y=-1 labels
                 -- Legacy/compatibility metrics
                 mean_average_precision REAL,            -- Primary display metric (uses true_map_macro when available)
                 legacy_mean_precision REAL,             -- Original arithmetic mean for backward compatibility
@@ -265,6 +281,62 @@ public:
             return false;
         }
 
+        auto ensure_results_column = [&](const std::string& column_name,
+                                         const std::string& alter_statement) -> bool {
+            sqlite3_stmt* stmt = nullptr;
+            const std::string pragma = "PRAGMA table_info(results);";
+            bool found = false;
+
+            if (sqlite3_prepare_v2(db, pragma.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+                std::cerr << "Failed to inspect results table schema: "
+                          << sqlite3_errmsg(db) << std::endl;
+                return false;
+            }
+
+            while (sqlite3_step(stmt) == SQLITE_ROW) {
+                const unsigned char* text = sqlite3_column_text(stmt, 1);
+                if (text && column_name == reinterpret_cast<const char*>(text)) {
+                    found = true;
+                    break;
+                }
+            }
+            sqlite3_finalize(stmt);
+
+            if (found) {
+                return true;
+            }
+
+            char* alter_err = nullptr;
+            if (sqlite3_exec(db, alter_statement.c_str(), nullptr, nullptr, &alter_err) != SQLITE_OK) {
+                std::cerr << "Failed to add column '" << column_name
+                          << "' to results table: " << alter_err << std::endl;
+                sqlite3_free(alter_err);
+                return false;
+            }
+
+            std::cout << "Database upgrade: added results." << column_name << std::endl;
+            return true;
+        };
+
+        // Ensure category split columns exist (v3.1)
+        if (!ensure_results_column("viewpoint_map", "ALTER TABLE results ADD COLUMN viewpoint_map REAL DEFAULT 0.0;")) return false;
+        if (!ensure_results_column("illumination_map", "ALTER TABLE results ADD COLUMN illumination_map REAL DEFAULT 0.0;")) return false;
+        if (!ensure_results_column("viewpoint_map_with_zeros", "ALTER TABLE results ADD COLUMN viewpoint_map_with_zeros REAL DEFAULT 0.0;")) return false;
+        if (!ensure_results_column("illumination_map_with_zeros", "ALTER TABLE results ADD COLUMN illumination_map_with_zeros REAL DEFAULT 0.0;")) return false;
+
+        // Ensure verification columns exist (v3.2)
+        if (!ensure_results_column("keypoint_verification_ap", "ALTER TABLE results ADD COLUMN keypoint_verification_ap REAL DEFAULT -1.0;")) return false;
+        if (!ensure_results_column("verification_viewpoint_ap", "ALTER TABLE results ADD COLUMN verification_viewpoint_ap REAL DEFAULT -1.0;")) return false;
+        if (!ensure_results_column("verification_illumination_ap", "ALTER TABLE results ADD COLUMN verification_illumination_ap REAL DEFAULT -1.0;")) return false;
+
+        // Ensure retrieval columns exist (v3.3)
+        if (!ensure_results_column("keypoint_retrieval_ap", "ALTER TABLE results ADD COLUMN keypoint_retrieval_ap REAL DEFAULT -1.0;")) return false;
+        if (!ensure_results_column("retrieval_viewpoint_ap", "ALTER TABLE results ADD COLUMN retrieval_viewpoint_ap REAL DEFAULT -1.0;")) return false;
+        if (!ensure_results_column("retrieval_illumination_ap", "ALTER TABLE results ADD COLUMN retrieval_illumination_ap REAL DEFAULT -1.0;")) return false;
+        if (!ensure_results_column("retrieval_num_true_positives", "ALTER TABLE results ADD COLUMN retrieval_num_true_positives INTEGER DEFAULT 0;")) return false;
+        if (!ensure_results_column("retrieval_num_hard_negatives", "ALTER TABLE results ADD COLUMN retrieval_num_hard_negatives INTEGER DEFAULT 0;")) return false;
+        if (!ensure_results_column("retrieval_num_distractors", "ALTER TABLE results ADD COLUMN retrieval_num_distractors INTEGER DEFAULT 0;")) return false;
+
         int rc3 = sqlite3_exec(db, create_keypoint_sets_table, nullptr, nullptr, &error_msg);
         if (rc3 != SQLITE_OK) {
             std::cerr << "Failed to create keypoint_sets table: " << error_msg << std::endl;
@@ -401,7 +473,7 @@ bool DatabaseManager::initializeTables() const {
 int DatabaseManager::recordConfiguration(const ExperimentConfig& config) const {
     if (!isEnabled()) return -1;
 
-    const char* sql = R"(
+    const auto sql = R"(
         INSERT INTO experiments (descriptor_type, dataset_name, pooling_strategy,
                                similarity_threshold, max_features, timestamp, parameters,
                                keypoint_set_id, keypoint_source, descriptor_dimension, execution_device)
@@ -496,7 +568,7 @@ bool DatabaseManager::updateExperimentDescriptorMetadata(int experiment_id,
     sqlite3_bind_int(stmt, 3, experiment_id);
 
     rc = sqlite3_step(stmt);
-    bool success = (rc == SQLITE_DONE);
+    const bool success = (rc == SQLITE_DONE);
     if (!success) {
         std::cerr << "Failed to update experiment metadata: "
                   << sqlite3_errmsg(impl_->db) << std::endl;
@@ -510,17 +582,22 @@ bool DatabaseManager::recordExperiment(const ExperimentResults& results) const {
     if (!isEnabled()) return true; // Success if disabled
 
     const auto sql = R"(
-        INSERT INTO results (experiment_id, true_map_macro, true_map_micro, 
+        INSERT INTO results (experiment_id, true_map_macro, true_map_micro,
                            true_map_macro_with_zeros, true_map_micro_with_zeros,
                            image_retrieval_map,
-                           precision_at_1, precision_at_5, recall_at_1, recall_at_5, 
+                           viewpoint_map, illumination_map,
+                           viewpoint_map_with_zeros, illumination_map_with_zeros,
+                           keypoint_verification_ap, verification_viewpoint_ap, verification_illumination_ap,
+                           keypoint_retrieval_ap, retrieval_viewpoint_ap, retrieval_illumination_ap,
+                           retrieval_num_true_positives, retrieval_num_hard_negatives, retrieval_num_distractors,
+                           precision_at_1, precision_at_5, recall_at_1, recall_at_5,
                            mean_average_precision, legacy_mean_precision,
-                           total_matches, total_keypoints, processing_time_ms, 
+                           total_matches, total_keypoints, processing_time_ms,
                            timestamp, descriptor_time_cpu_ms, descriptor_time_gpu_ms,
                            match_time_cpu_ms, match_time_gpu_ms,
                            total_pipeline_cpu_ms, total_pipeline_gpu_ms,
                            metadata)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
     )";
 
     sqlite3_stmt* stmt;
@@ -535,32 +612,45 @@ bool DatabaseManager::recordExperiment(const ExperimentResults& results) const {
     for (const auto& [key, value] : results.metadata) {
         metadata_ss << key << "=" << value << ";";
     }
-    std::string metadata_str = metadata_ss.str();
+    const std::string metadata_str = metadata_ss.str();
 
-    // Bind parameters (23 total now)
+    // Bind parameters (36 total now - added 6 for retrieval metrics)
     sqlite3_bind_int(stmt, 1, results.experiment_id);
     sqlite3_bind_double(stmt, 2, results.true_map_macro);
     sqlite3_bind_double(stmt, 3, results.true_map_micro);
     sqlite3_bind_double(stmt, 4, results.true_map_macro_with_zeros);
     sqlite3_bind_double(stmt, 5, results.true_map_micro_with_zeros);
     sqlite3_bind_double(stmt, 6, results.image_retrieval_map);
-    sqlite3_bind_double(stmt, 7, results.precision_at_1);
-    sqlite3_bind_double(stmt, 8, results.precision_at_5);
-    sqlite3_bind_double(stmt, 9, results.recall_at_1);
-    sqlite3_bind_double(stmt, 10, results.recall_at_5);
-    sqlite3_bind_double(stmt, 11, results.mean_average_precision);
-    sqlite3_bind_double(stmt, 12, results.legacy_mean_precision);
-    sqlite3_bind_int(stmt, 13, results.total_matches);
-    sqlite3_bind_int(stmt, 14, results.total_keypoints);
-    sqlite3_bind_double(stmt, 15, results.processing_time_ms);
-    sqlite3_bind_text(stmt, 16, impl_->getCurrentTimestamp().c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_double(stmt, 17, results.descriptor_time_cpu_ms);
-    sqlite3_bind_double(stmt, 18, results.descriptor_time_gpu_ms);
-    sqlite3_bind_double(stmt, 19, results.match_time_cpu_ms);
-    sqlite3_bind_double(stmt, 20, results.match_time_gpu_ms);
-    sqlite3_bind_double(stmt, 21, results.total_pipeline_cpu_ms);
-    sqlite3_bind_double(stmt, 22, results.total_pipeline_gpu_ms);
-    sqlite3_bind_text(stmt, 23, metadata_str.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_double(stmt, 7, results.viewpoint_map);
+    sqlite3_bind_double(stmt, 8, results.illumination_map);
+    sqlite3_bind_double(stmt, 9, results.viewpoint_map_with_zeros);
+    sqlite3_bind_double(stmt, 10, results.illumination_map_with_zeros);
+    sqlite3_bind_double(stmt, 11, results.keypoint_verification_ap);
+    sqlite3_bind_double(stmt, 12, results.verification_viewpoint_ap);
+    sqlite3_bind_double(stmt, 13, results.verification_illumination_ap);
+    sqlite3_bind_double(stmt, 14, results.keypoint_retrieval_ap);
+    sqlite3_bind_double(stmt, 15, results.retrieval_viewpoint_ap);
+    sqlite3_bind_double(stmt, 16, results.retrieval_illumination_ap);
+    sqlite3_bind_int(stmt, 17, results.retrieval_num_true_positives);
+    sqlite3_bind_int(stmt, 18, results.retrieval_num_hard_negatives);
+    sqlite3_bind_int(stmt, 19, results.retrieval_num_distractors);
+    sqlite3_bind_double(stmt, 20, results.precision_at_1);
+    sqlite3_bind_double(stmt, 21, results.precision_at_5);
+    sqlite3_bind_double(stmt, 22, results.recall_at_1);
+    sqlite3_bind_double(stmt, 23, results.recall_at_5);
+    sqlite3_bind_double(stmt, 24, results.mean_average_precision);
+    sqlite3_bind_double(stmt, 25, results.legacy_mean_precision);
+    sqlite3_bind_int(stmt, 26, results.total_matches);
+    sqlite3_bind_int(stmt, 27, results.total_keypoints);
+    sqlite3_bind_double(stmt, 28, results.processing_time_ms);
+    sqlite3_bind_text(stmt, 29, impl_->getCurrentTimestamp().c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_double(stmt, 30, results.descriptor_time_cpu_ms);
+    sqlite3_bind_double(stmt, 31, results.descriptor_time_gpu_ms);
+    sqlite3_bind_double(stmt, 32, results.match_time_cpu_ms);
+    sqlite3_bind_double(stmt, 33, results.match_time_gpu_ms);
+    sqlite3_bind_double(stmt, 34, results.total_pipeline_cpu_ms);
+    sqlite3_bind_double(stmt, 35, results.total_pipeline_gpu_ms);
+    sqlite3_bind_text(stmt, 36, metadata_str.c_str(), -1, SQLITE_STATIC);
 
     rc = sqlite3_step(stmt);
     const bool success = (rc == SQLITE_DONE);
@@ -582,9 +672,19 @@ std::vector<ExperimentResults> DatabaseManager::getRecentResults(int limit) cons
 
     const auto sql = R"(
         SELECT r.experiment_id, e.descriptor_type, e.dataset_name,
-               r.mean_average_precision, r.precision_at_1, r.precision_at_5,
-               r.recall_at_1, r.recall_at_5, r.total_matches,
-               r.total_keypoints, r.processing_time_ms, r.timestamp
+               r.true_map_macro, r.true_map_micro,
+               r.true_map_macro_with_zeros, r.true_map_micro_with_zeros,
+               r.image_retrieval_map,
+               r.viewpoint_map, r.illumination_map,
+               r.viewpoint_map_with_zeros, r.illumination_map_with_zeros,
+               r.keypoint_verification_ap, r.verification_viewpoint_ap, r.verification_illumination_ap,
+               r.keypoint_retrieval_ap, r.retrieval_viewpoint_ap, r.retrieval_illumination_ap,
+               r.retrieval_num_true_positives, r.retrieval_num_hard_negatives, r.retrieval_num_distractors,
+               r.mean_average_precision, r.legacy_mean_precision,
+               r.precision_at_1, r.precision_at_5,
+               r.recall_at_1, r.recall_at_5,
+               r.total_matches, r.total_keypoints,
+               r.processing_time_ms, r.timestamp
         FROM results r
         JOIN experiments e ON r.experiment_id = e.id
         ORDER BY r.timestamp DESC
@@ -604,15 +704,34 @@ std::vector<ExperimentResults> DatabaseManager::getRecentResults(int limit) cons
         result.experiment_id = sqlite3_column_int(stmt, 0);
         result.descriptor_type = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
         result.dataset_name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-        result.mean_average_precision = sqlite3_column_double(stmt, 3);
-        result.precision_at_1 = sqlite3_column_double(stmt, 4);
-        result.precision_at_5 = sqlite3_column_double(stmt, 5);
-        result.recall_at_1 = sqlite3_column_double(stmt, 6);
-        result.recall_at_5 = sqlite3_column_double(stmt, 7);
-        result.total_matches = sqlite3_column_int(stmt, 8);
-        result.total_keypoints = sqlite3_column_int(stmt, 9);
-        result.processing_time_ms = sqlite3_column_double(stmt, 10);
-        result.timestamp = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 11));
+        result.true_map_macro = sqlite3_column_double(stmt, 3);
+        result.true_map_micro = sqlite3_column_double(stmt, 4);
+        result.true_map_macro_with_zeros = sqlite3_column_double(stmt, 5);
+        result.true_map_micro_with_zeros = sqlite3_column_double(stmt, 6);
+        result.image_retrieval_map = sqlite3_column_double(stmt, 7);
+        result.viewpoint_map = sqlite3_column_double(stmt, 8);
+        result.illumination_map = sqlite3_column_double(stmt, 9);
+        result.viewpoint_map_with_zeros = sqlite3_column_double(stmt, 10);
+        result.illumination_map_with_zeros = sqlite3_column_double(stmt, 11);
+        result.keypoint_verification_ap = sqlite3_column_double(stmt, 12);
+        result.verification_viewpoint_ap = sqlite3_column_double(stmt, 13);
+        result.verification_illumination_ap = sqlite3_column_double(stmt, 14);
+        result.keypoint_retrieval_ap = sqlite3_column_double(stmt, 15);
+        result.retrieval_viewpoint_ap = sqlite3_column_double(stmt, 16);
+        result.retrieval_illumination_ap = sqlite3_column_double(stmt, 17);
+        result.retrieval_num_true_positives = sqlite3_column_int(stmt, 18);
+        result.retrieval_num_hard_negatives = sqlite3_column_int(stmt, 19);
+        result.retrieval_num_distractors = sqlite3_column_int(stmt, 20);
+        result.mean_average_precision = sqlite3_column_double(stmt, 21);
+        result.legacy_mean_precision = sqlite3_column_double(stmt, 22);
+        result.precision_at_1 = sqlite3_column_double(stmt, 23);
+        result.precision_at_5 = sqlite3_column_double(stmt, 24);
+        result.recall_at_1 = sqlite3_column_double(stmt, 25);
+        result.recall_at_5 = sqlite3_column_double(stmt, 26);
+        result.total_matches = sqlite3_column_int(stmt, 27);
+        result.total_keypoints = sqlite3_column_int(stmt, 28);
+        result.processing_time_ms = sqlite3_column_double(stmt, 29);
+        result.timestamp = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 30));
 
         results.push_back(result);
     }

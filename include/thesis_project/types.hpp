@@ -371,6 +371,20 @@ namespace thesis_project {
         std::string scorer = "total_matches";
     };
 
+    struct KeypointVerificationParams {
+        bool enabled = false;                // Enable keypoint verification task (expensive!)
+        int num_distractor_scenes = 10;     // Number of distractor scenes to sample per query scene
+        int num_distractors_per_scene = 20; // Number of distractor keypoints per scene
+        int seed = 42;                       // Random seed for reproducibility
+    };
+
+    struct KeypointRetrievalParams {
+        bool enabled = false;                // Enable keypoint retrieval task (expensive!)
+        int num_distractor_scenes = 10;     // Number of distractor scenes to sample per query scene
+        int num_distractors_per_scene = 20; // Number of distractor keypoints per scene
+        int seed = 42;                       // Random seed for reproducibility
+    };
+
     struct EvaluationParams {
         MatchingMethod matching_method = MatchingMethod::BRUTE_FORCE;
         int norm_type = cv::NORM_L2;
@@ -381,6 +395,8 @@ namespace thesis_project {
         float validation_threshold = 0.05f; // pixels
         int min_matches_for_homography = 10;
         ImageRetrievalParams image_retrieval;
+        KeypointVerificationParams keypoint_verification;  // Bojanic et al. (2020) verification task
+        KeypointRetrievalParams keypoint_retrieval;        // Bojanic et al. (2020) retrieval task
     };
 
     struct DatabaseParams {

@@ -538,6 +538,22 @@ struct ExperimentResults {
     double true_map_macro_with_zeros = 0.0; // Conservative: includes R=0 queries
     double true_map_micro_with_zeros = 0.0; // Conservative: includes R=0 queries
     double image_retrieval_map = -1.0;     // Optional image-level retrieval MAP
+    // Category-specific metrics (v3.1): HP-V vs HP-I
+    double viewpoint_map = 0.0;            // mAP for v_* sequences only (geometric changes)
+    double illumination_map = 0.0;         // mAP for i_* sequences only (photometric changes)
+    double viewpoint_map_with_zeros = 0.0; // Conservative: includes R=0 queries
+    double illumination_map_with_zeros = 0.0; // Conservative: includes R=0 queries
+    // Keypoint verification metrics (v3.2): Bojanic et al. (2020) verification task
+    double keypoint_verification_ap = -1.0;    // Verification AP with distractors (-1 when disabled)
+    double verification_viewpoint_ap = -1.0;   // Verification AP for viewpoint scenes only
+    double verification_illumination_ap = -1.0; // Verification AP for illumination scenes only
+    // Keypoint retrieval metrics (v3.3): Bojanic et al. (2020) retrieval task (Eq. 5-6)
+    double keypoint_retrieval_ap = -1.0;       // Retrieval AP with three-tier labels (-1 when disabled)
+    double retrieval_viewpoint_ap = -1.0;      // Retrieval AP for viewpoint scenes only
+    double retrieval_illumination_ap = -1.0;   // Retrieval AP for illumination scenes only
+    int retrieval_num_true_positives = 0;      // Count of y=+1 labels (in-sequence AND closest)
+    int retrieval_num_hard_negatives = 0;      // Count of y=0 labels (in-sequence but NOT closest)
+    int retrieval_num_distractors = 0;         // Count of y=-1 labels (out-of-sequence)
     // Precision@K metrics
     double precision_at_1 = 0.0;
     double precision_at_5 = 0.0;

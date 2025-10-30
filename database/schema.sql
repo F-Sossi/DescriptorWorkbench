@@ -1,10 +1,28 @@
 -- Database schema for descriptor research experiments
 -- This matches the schema defined in DatabaseManager.cpp
 --
--- SCHEMA VERSION: v3.0 (October 2025)
--- MAJOR UPGRADE: Keypoint tracking integration for experiments
+-- SCHEMA VERSION: v3.3 (October 2025)
+-- MAJOR UPGRADE: Keypoint retrieval metrics (Bojanic et al. 2020, Eq. 5-6)
 --
--- Migration notes (v3.0):
+-- Migration notes (v3.3):
+-- - Added keypoint_retrieval_ap and category variants to results table
+-- - Added three-tier label counts (true_positives, hard_negatives, distractors)
+-- - Adds retrieval with three-tier labeling evaluation (optional expensive metric)
+-- - Based on Bojanic et al. (2020) retrieval task methodology
+--
+-- Previous migration notes (v3.2):
+-- - Added keypoint_verification_ap and category variants to results table
+-- - Adds verification with distractors evaluation (optional expensive metric)
+-- - Based on Bojanic et al. (2020) verification task methodology
+--
+-- Previous migration notes (v3.1):
+-- - Added viewpoint_map, illumination_map columns to results table
+-- - Added _with_zeros variants for conservative evaluation
+-- - Enables separate analysis of viewpoint (v_*) vs illumination (i_*) sequences
+-- - Based on Bojanic et al. (2020) evaluation methodology
+-- - Use database/migrate_to_v3_1_hp_split.sql to upgrade existing databases
+--
+-- Previous migration notes (v3.0):
 -- - Added keypoint_set_id and keypoint_source columns to experiments table
 -- - Foreign key relationship: experiments.keypoint_set_id → keypoint_sets.id
 -- - Enables tracking which keypoint set was used for each experiment
@@ -40,6 +58,22 @@ CREATE TABLE IF NOT EXISTS results (
     true_map_macro_with_zeros REAL,         -- Conservative: includes R=0 queries as AP=0
     true_map_micro_with_zeros REAL,         -- Conservative: includes R=0 queries as AP=0
     image_retrieval_map REAL DEFAULT -1,    -- Image-level retrieval MAP (optional; -1 when disabled)
+    -- Category-specific metrics (v3.1): Viewpoint vs Illumination
+    viewpoint_map REAL DEFAULT 0.0,         -- mAP for v_* sequences only (geometric changes)
+    illumination_map REAL DEFAULT 0.0,      -- mAP for i_* sequences only (photometric changes)
+    viewpoint_map_with_zeros REAL DEFAULT 0.0,     -- Conservative: includes R=0 queries
+    illumination_map_with_zeros REAL DEFAULT 0.0,  -- Conservative: includes R=0 queries
+    -- Keypoint verification metrics (v3.2): Bojanic et al. (2020) verification task
+    keypoint_verification_ap REAL DEFAULT -1.0,    -- Verification AP with distractors (-1 when disabled)
+    verification_viewpoint_ap REAL DEFAULT -1.0,   -- Verification AP for viewpoint scenes only
+    verification_illumination_ap REAL DEFAULT -1.0, -- Verification AP for illumination scenes only
+    -- Keypoint retrieval metrics (v3.3): Bojanic et al. (2020) retrieval task (Eq. 5-6)
+    keypoint_retrieval_ap REAL DEFAULT -1.0,       -- Retrieval AP with three-tier labels (-1 when disabled)
+    retrieval_viewpoint_ap REAL DEFAULT -1.0,      -- Retrieval AP for viewpoint scenes only
+    retrieval_illumination_ap REAL DEFAULT -1.0,   -- Retrieval AP for illumination scenes only
+    retrieval_num_true_positives INTEGER DEFAULT 0, -- Count of y=+1 labels (in-sequence AND closest)
+    retrieval_num_hard_negatives INTEGER DEFAULT 0, -- Count of y=0 labels (in-sequence but NOT closest)
+    retrieval_num_distractors INTEGER DEFAULT 0,   -- Count of y=-1 labels (out-of-sequence)
     -- Legacy/compatibility metrics
     mean_average_precision REAL,            -- Primary display metric (uses true_map_macro when available)
     legacy_mean_precision REAL,             -- Original arithmetic mean for backward compatibility
