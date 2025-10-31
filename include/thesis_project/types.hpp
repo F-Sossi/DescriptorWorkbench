@@ -61,7 +61,8 @@ namespace thesis_project {
     enum class DescriptorType {
         SIFT,                  ///< Standard SIFT descriptor
         HoNC,                  ///< Histogram of Normalized Colors
-        RGBSIFT,               ///< RGB color SIFT
+        RGBSIFT,               ///< RGB color SIFT (384D = 3×128D)
+        RGBSIFT_CHANNEL_AVG,   ///< RGBSIFT with RGB channels averaged to 128D
         vSIFT,                 ///< Vanilla SIFT implementation
         DSPSIFT,               ///< Domain-Size Pooled SIFT (professor's implementation)
         DSPSIFT_V2,            ///< Pyramid-aware DSP wrapper with configurable aggregation (VanillaSIFT only)
@@ -75,6 +76,7 @@ namespace thesis_project {
         LIBTORCH_L2NET,        ///< LibTorch L2-Net CNN descriptor
         ORB,                   ///< OpenCV ORB binary descriptor
         SURF,                  ///< OpenCV SURF descriptor (requires opencv_contrib)
+        COMPOSITE,             ///< Composite descriptor combining multiple descriptors
         NONE                   ///< No descriptor
     };
 

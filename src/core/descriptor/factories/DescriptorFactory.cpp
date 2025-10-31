@@ -1,6 +1,7 @@
 #include "DescriptorFactory.hpp"
 #include "src/core/descriptor/extractors/wrappers/SIFTWrapper.hpp"
 #include "src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.hpp"
+#include "src/core/descriptor/extractors/wrappers/RGBSIFTChannelAverageWrapper.hpp"
 #include "src/core/descriptor/extractors/wrappers/HoNCWrapper.hpp"
 #include "src/core/descriptor/extractors/wrappers/VSIFTWrapper.hpp"
 #include "src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.hpp"
@@ -35,6 +36,8 @@ std::unique_ptr<IDescriptorExtractor> DescriptorFactory::create(thesis_project::
             return createSIFT();
         case thesis_project::DescriptorType::RGBSIFT:
             return createRGBSIFT();
+        case thesis_project::DescriptorType::RGBSIFT_CHANNEL_AVG:
+            return std::make_unique<wrappers::RGBSIFTChannelAverageWrapper>();
         case thesis_project::DescriptorType::HoNC:
             return std::make_unique<wrappers::HoNCWrapper>();
         case thesis_project::DescriptorType::vSIFT:
@@ -63,6 +66,14 @@ std::unique_ptr<IDescriptorExtractor> DescriptorFactory::create(thesis_project::
         case thesis_project::DescriptorType::LIBTORCH_L2NET:
             return wrappers::createLibTorchL2Net();
 #endif
+        case thesis_project::DescriptorType::COMPOSITE:
+            // COMPOSITE descriptors require component configuration and cannot be created
+            // through the simple create() method. They are created during YAML parsing
+            // with full component specifications.
+            throw std::runtime_error(
+                "COMPOSITE descriptors must be created with component configuration. "
+                "Use createComposite() or parse from YAML configuration."
+            );
         // DNNPatch created via DescriptorConfig params (model path required) elsewhere
         default:
             throw std::runtime_error("Unsupported descriptor type in factory (new-config)");
@@ -73,6 +84,7 @@ bool DescriptorFactory::isSupported(thesis_project::DescriptorType type) {
     switch (type) {
         case thesis_project::DescriptorType::SIFT:
         case thesis_project::DescriptorType::RGBSIFT:
+        case thesis_project::DescriptorType::RGBSIFT_CHANNEL_AVG:
         case thesis_project::DescriptorType::HoNC:
         case thesis_project::DescriptorType::vSIFT:
         case thesis_project::DescriptorType::DSPSIFT:
@@ -88,6 +100,7 @@ bool DescriptorFactory::isSupported(thesis_project::DescriptorType type) {
         case thesis_project::DescriptorType::LIBTORCH_SOSNET:
         case thesis_project::DescriptorType::LIBTORCH_L2NET:
 #endif
+        case thesis_project::DescriptorType::COMPOSITE:
             return true;
         default:
             return false;

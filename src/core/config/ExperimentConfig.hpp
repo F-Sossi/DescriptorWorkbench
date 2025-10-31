@@ -40,6 +40,11 @@ namespace thesis_project::config {
             std::string name;
             DescriptorType type;
             DescriptorParams params;
+
+            // Composite descriptor support
+            std::vector<DescriptorConfig> components;  // Component descriptors for COMPOSITE type
+            std::string aggregation_method;            // "average", "weighted_avg", "max", "min", "concatenate"
+            double weight = 1.0;                       // Weight for this component in weighted averaging
         };
         std::vector<DescriptorConfig> descriptors;
 

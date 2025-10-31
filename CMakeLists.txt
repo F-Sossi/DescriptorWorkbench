@@ -388,8 +388,10 @@ function(create_gtest_if_exists test_source test_name)
                 src/core/pooling/DomainSizePooling.cpp
                 src/core/pooling/StackingPooling.cpp
                        src/core/descriptor/factories/DescriptorFactory.cpp
+                       src/core/descriptor/extractors/CompositeDescriptorExtractor.cpp
                        src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
                        src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
+                       src/core/descriptor/extractors/wrappers/RGBSIFTChannelAverageWrapper.cpp
                        src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
                        src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
                        src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
@@ -694,8 +696,10 @@ if(BUILD_EXPERIMENT_CLI)
                        src/core/metrics/KeypointVerification.cpp
                        src/core/experiment/ExperimentHelpers.cpp
                        src/core/descriptor/factories/DescriptorFactory.cpp
+                       src/core/descriptor/extractors/CompositeDescriptorExtractor.cpp
                        src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
                        src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
+                       src/core/descriptor/extractors/wrappers/RGBSIFTChannelAverageWrapper.cpp
                        src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
                        src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
                        src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
@@ -822,8 +826,10 @@ if(BUILD_KEYPOINT_MANAGER)
                        src/core/matching/RatioTestMatching.cpp
                        src/core/matching/MatchingFactory.cpp
                        src/core/descriptor/factories/DescriptorFactory.cpp
+                       src/core/descriptor/extractors/CompositeDescriptorExtractor.cpp
                        src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
                        src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
+                       src/core/descriptor/extractors/wrappers/RGBSIFTChannelAverageWrapper.cpp
                        src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
                        src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
                        src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp

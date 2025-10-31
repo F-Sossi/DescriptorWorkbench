@@ -7,6 +7,7 @@
 #include <set>
 #include <numeric>
 #include "TrueAveragePrecision.hpp"
+#include "thesis_project/logging.hpp"
 
 /**
  * @brief Structure to hold comprehensive experiment results metrics
@@ -327,10 +328,10 @@ struct ExperimentMetrics {
                 }
             }
 
-            for (int r = 1; r <= 10; ++r) {
-                std::cout << "R" << r << ":" << rank_histogram[r] << " ";
-            }
-            std::cout << " R=0:" << rank_histogram[0] << std::endl;
+            // for (int r = 1; r <= 10; ++r) {
+            //     std::cout << "R" << r << ":" << rank_histogram[r] << " ";
+            // }
+            // std::cout << " R=0:" << rank_histogram[0] << std::endl;
 
             if (queries_with_ranks > 0) {
                 precision_at_1 = static_cast<double>(hits_at_1) / static_cast<double>(queries_with_ranks);

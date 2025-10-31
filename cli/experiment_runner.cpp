@@ -1,6 +1,7 @@
 #include "src/core/config/YAMLConfigLoader.hpp"
 #include "src/core/descriptor/extractors/wrappers/DNNPatchWrapper.hpp"
 #include "src/core/descriptor/extractors/wrappers/PseudoDNNWrapper.hpp"
+#include "src/core/descriptor/extractors/CompositeDescriptorExtractor.hpp"
 #include "thesis_project/logging.hpp"
 #include "src/core/descriptor/factories/DescriptorFactory.hpp"
 // #include "thesis_project/keypoints/KeypointAttributeAdapter.hpp" // No longer needed with pure intersection sets
@@ -968,6 +969,44 @@ static ::ExperimentMetrics processDirectoryNew(
                 );
                 LOG_INFO("Lightweight CNN baseline created successfully");
             }
+        } else if (desc_config.type == thesis_project::DescriptorType::COMPOSITE) {
+            // Composite descriptor requires components
+            if (desc_config.components.empty()) {
+                throw std::runtime_error("composite descriptor requires components in YAML configuration");
+            }
+            if (desc_config.aggregation_method.empty()) {
+                throw std::runtime_error("composite descriptor requires aggregation method in YAML configuration");
+            }
+
+            LOG_INFO("Creating CompositeDescriptorExtractor with " +
+                     std::to_string(desc_config.components.size()) + " components, aggregation: " +
+                     desc_config.aggregation_method);
+
+            // Build component configs
+            std::vector<thesis_project::CompositeDescriptorExtractor::ComponentConfig> component_configs;
+            component_configs.reserve(desc_config.components.size());
+
+            for (const auto& comp_desc : desc_config.components) {
+                thesis_project::CompositeDescriptorExtractor::ComponentConfig comp_config;
+                comp_config.type = comp_desc.type;
+                comp_config.weight = comp_desc.weight;
+                comp_config.params = comp_desc.params;
+                component_configs.push_back(comp_config);
+
+                LOG_INFO("  Component: " + toString(comp_desc.type) +
+                         ", weight: " + std::to_string(comp_desc.weight));
+            }
+
+            // Parse aggregation method
+            auto aggregation = thesis_project::CompositeDescriptorExtractor::stringToAggregationMethod(
+                desc_config.aggregation_method);
+
+            // Create composite extractor
+            extractor = std::make_unique<thesis_project::CompositeDescriptorExtractor>(
+                component_configs,
+                aggregation);
+
+            LOG_INFO("CompositeDescriptorExtractor created successfully: " + extractor->name());
         } else {
             extractor = thesis_project::factories::DescriptorFactory::create(desc_config.type);
         }

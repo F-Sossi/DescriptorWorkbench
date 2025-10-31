@@ -236,6 +236,56 @@ namespace thesis_project::config {
                 if (vgg["dsc_normalize"]) desc_config.params.vgg_dsc_normalize = vgg["dsc_normalize"].as<bool>();
             }
 
+            // Composite descriptor configuration (optional)
+            if (desc_node["aggregation"]) {
+                desc_config.aggregation_method = desc_node["aggregation"].as<std::string>();
+            }
+
+            if (desc_node["weight"]) {
+                desc_config.weight = desc_node["weight"].as<double>();
+            }
+
+            if (desc_node["components"] && desc_node["components"].IsSequence()) {
+                // Recursively parse component descriptors
+                desc_config.components.clear();
+                for (const auto& comp_node : desc_node["components"]) {
+                    ExperimentConfig::DescriptorConfig comp_config;
+                    comp_config.type = DescriptorType::NONE;
+
+                    // Parse component type (required)
+                    if (comp_node["descriptor"]) {
+                        comp_config.type = stringToDescriptorType(comp_node["descriptor"].as<std::string>());
+                    } else if (comp_node["type"]) {
+                        comp_config.type = stringToDescriptorType(comp_node["type"].as<std::string>());
+                    } else {
+                        throw std::runtime_error("Component descriptor must have 'descriptor' or 'type' field");
+                    }
+
+                    // Parse component weight (optional)
+                    if (comp_node["weight"]) {
+                        comp_config.weight = comp_node["weight"].as<double>();
+                    }
+
+                    // Parse component-specific params (optional)
+                    if (comp_node["device"]) {
+                        comp_config.params.device = comp_node["device"].as<std::string>();
+                    }
+                    if (comp_node["use_color"]) {
+                        comp_config.params.use_color = comp_node["use_color"].as<bool>();
+                    }
+                    // Add more param parsing here if needed
+
+                    desc_config.components.push_back(comp_config);
+                }
+
+                // Validate composite descriptor has components
+                if (desc_config.type == DescriptorType::COMPOSITE && desc_config.components.empty()) {
+                    throw std::runtime_error(
+                        "Composite descriptor '" + desc_config.name + "' must have at least 2 components"
+                    );
+                }
+            }
+
             descriptors.push_back(desc_config);
         }
     }
@@ -449,6 +499,7 @@ namespace thesis_project::config {
     DescriptorType YAMLConfigLoader::stringToDescriptorType(const std::string& str) {
         if (str == "sift") return DescriptorType::SIFT;
         if (str == "rgbsift") return DescriptorType::RGBSIFT;
+        if (str == "rgbsift_channel_avg") return DescriptorType::RGBSIFT_CHANNEL_AVG;
         if (str == "vsift" || str == "vanilla_sift") return DescriptorType::vSIFT;
         if (str == "honc") return DescriptorType::HoNC;
         if (str == "dnn_patch") return DescriptorType::DNN_PATCH;
@@ -463,6 +514,7 @@ namespace thesis_project::config {
         if (str == "libtorch_l2net") return DescriptorType::LIBTORCH_L2NET;
         if (str == "orb") return DescriptorType::ORB;
         if (str == "surf") return DescriptorType::SURF;
+        if (str == "composite") return DescriptorType::COMPOSITE;
         throw std::runtime_error("Unknown descriptor type: " + str);
     }
     
