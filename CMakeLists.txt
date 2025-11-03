@@ -501,6 +501,7 @@ if(TARGET test_descriptor_factory_gtest)
         src/core/descriptor/extractors/wrappers/DSPRGBSIFTWrapperV2.cpp
         src/core/descriptor/extractors/wrappers/DSPHoWHWrapperV2.cpp
         src/core/descriptor/extractors/wrappers/DSPHoNCWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/RGBSIFTChannelAverageWrapper.cpp
         src/core/descriptor/extractors/wrappers/VGGWrapper.cpp
         src/core/descriptor/extractors/wrappers/ORBWrapper.cpp
         src/core/descriptor/extractors/wrappers/SURFWrapper.cpp)
