@@ -1001,10 +1001,25 @@ static ::ExperimentMetrics processDirectoryNew(
             auto aggregation = thesis_project::CompositeDescriptorExtractor::stringToAggregationMethod(
                 desc_config.aggregation_method);
 
+            // Parse output dimension mode (for channel_wise fusion)
+            auto output_mode = thesis_project::CompositeDescriptorExtractor::OutputDimensionMode::COLLAPSE_GRAY;  // Default: 128D
+            if (!desc_config.output_dimension.empty()) {
+                if (desc_config.output_dimension == "384") {
+                    output_mode = thesis_project::CompositeDescriptorExtractor::OutputDimensionMode::PRESERVE_RGB;
+                    LOG_INFO("  Output dimension: 384D (PRESERVE_RGB)");
+                } else if (desc_config.output_dimension == "128") {
+                    output_mode = thesis_project::CompositeDescriptorExtractor::OutputDimensionMode::COLLAPSE_GRAY;
+                    LOG_INFO("  Output dimension: 128D (COLLAPSE_GRAY)");
+                } else {
+                    LOG_WARNING("  Unknown output_dimension '" + desc_config.output_dimension + "', defaulting to 128D");
+                }
+            }
+
             // Create composite extractor
             extractor = std::make_unique<thesis_project::CompositeDescriptorExtractor>(
                 component_configs,
-                aggregation);
+                aggregation,
+                output_mode);
 
             LOG_INFO("CompositeDescriptorExtractor created successfully: " + extractor->name());
         } else {

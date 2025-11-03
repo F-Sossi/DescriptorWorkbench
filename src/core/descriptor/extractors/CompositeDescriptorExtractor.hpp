@@ -65,17 +65,28 @@ namespace thesis_project {
             WEIGHTED_AVG,   ///< Weighted average: w1*d1 + w2*d2 + ... + wn*dn
             MAX,            ///< Element-wise maximum
             MIN,            ///< Element-wise minimum
-            CONCATENATE     ///< Horizontal concatenation (increases dimension)
+            CONCATENATE,    ///< Horizontal concatenation (increases dimension)
+            CHANNEL_WISE    ///< Channel-wise fusion for grayscale + RGB (configurable output: 128D or 384D)
+        };
+
+        /**
+         * @brief Output dimension mode for channel-wise fusion
+         */
+        enum class OutputDimensionMode {
+            PRESERVE_RGB,   ///< Output 384D (R128 + G128 + B128) - full color information
+            COLLAPSE_GRAY   ///< Output 128D (average RGB channels back to grayscale)
         };
 
         /**
          * @brief Construct composite descriptor extractor
          * @param components Vector of component descriptor configurations
          * @param aggregation Aggregation method to use
+         * @param output_mode Output dimension mode (only used for CHANNEL_WISE aggregation)
          */
         CompositeDescriptorExtractor(
             std::vector<ComponentConfig> components,
-            AggregationMethod aggregation
+            AggregationMethod aggregation,
+            OutputDimensionMode output_mode = OutputDimensionMode::COLLAPSE_GRAY
         );
 
         /**
@@ -134,7 +145,7 @@ namespace thesis_project {
         /**
          * @brief Perform simple average aggregation
          */
-        cv::Mat aggregateAverage(const std::vector<cv::Mat>& descriptors) const;
+        static cv::Mat aggregateAverage(const std::vector<cv::Mat>& descriptors);
 
         /**
          * @brief Perform weighted average aggregation
@@ -144,21 +155,35 @@ namespace thesis_project {
         /**
          * @brief Perform element-wise maximum aggregation
          */
-        cv::Mat aggregateMax(const std::vector<cv::Mat>& descriptors) const;
+        static cv::Mat aggregateMax(const std::vector<cv::Mat>& descriptors);
 
         /**
          * @brief Perform element-wise minimum aggregation
          */
-        cv::Mat aggregateMin(const std::vector<cv::Mat>& descriptors) const;
+        static cv::Mat aggregateMin(const std::vector<cv::Mat>& descriptors);
 
         /**
          * @brief Perform horizontal concatenation
          */
-        cv::Mat aggregateConcatenate(const std::vector<cv::Mat>& descriptors) const;
+        static cv::Mat aggregateConcatenate(const std::vector<cv::Mat>& descriptors);
+
+        /**
+         * @brief Perform channel-wise fusion for grayscale + RGB descriptors
+         *
+         * For SIFT (128D) + RGBSIFT (384D):
+         * 1. Broadcast SIFT to all 3 channels
+         * 2. Fuse with each RGBSIFT channel (R, G, B) separately
+         * 3. Output either 384D (PRESERVE_RGB) or 128D (COLLAPSE_GRAY)
+         *
+         * @param descriptors Vector containing [grayscale_desc, rgb_desc]
+         * @return Fused descriptor (128D or 384D based on output_mode_)
+         */
+        cv::Mat aggregateChannelWise(const std::vector<cv::Mat>& descriptors) const;
 
         std::vector<ComponentConfig> components_;                    ///< Component configurations
         std::vector<std::unique_ptr<IDescriptorExtractor>> extractors_; ///< Component extractors
         AggregationMethod aggregation_method_;                       ///< Aggregation method
+        OutputDimensionMode output_mode_;                            ///< Output dimension mode (for CHANNEL_WISE)
         mutable int cached_descriptor_size_ = -1;                    ///< Cached descriptor size
     };
 

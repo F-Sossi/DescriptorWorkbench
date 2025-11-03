@@ -1,0 +1,88 @@
+experiment:
+  name: "channel_wise_fusion_test"
+  description: "Test channel-wise fusion with SIFT + RGBSIFT (both 128D and 384D outputs)"
+  version: "1.0"
+  author: "researcher"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []
+
+keypoints:
+  generator: "sift"
+  max_features: 2000
+  contrast_threshold: 0.04
+  edge_threshold: 10.0
+  source: "independent_detection"
+  keypoint_set_name: "sift_verification_keypoints"
+  use_locked_keypoints: true
+
+descriptors:
+  # Baseline: SIFT (128D grayscale)
+  - name: "sift_baseline"
+    type: "sift"
+    pooling: "none"
+    normalize_after_pooling: true
+
+  # Baseline: RGBSIFT full (384D)
+  - name: "rgbsift_full_baseline"
+    type: "rgbsift"
+    pooling: "none"
+    normalize_after_pooling: true
+    use_color: true
+
+  # Baseline: RGBSIFT channel-averaged (128D)
+  - name: "rgbsift_channel_avg_baseline"
+    type: "rgbsift_channel_avg"
+    pooling: "none"
+    normalize_after_pooling: true
+    use_color: true
+
+  # NEW: Channel-wise fusion → 128D (collapsed to grayscale)
+  - name: "sift_rgbsift_channelwise_128d"
+    type: "composite"
+    components:
+      - descriptor: "sift"
+      - descriptor: "rgbsift"
+        use_color: true
+    aggregation: "channel_wise"
+    output_dimension: "128"
+
+  # NEW: Channel-wise fusion → 384D (preserve RGB)
+  - name: "sift_rgbsift_channelwise_384d"
+    type: "composite"
+    components:
+      - descriptor: "sift"
+      - descriptor: "rgbsift"
+        use_color: true
+    aggregation: "channel_wise"
+    output_dimension: "384"
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+    threshold: 0.8
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+  # Disable expensive metrics for quick testing
+  keypoint_verification:
+    enabled: false
+
+  keypoint_retrieval:
+    enabled: false
+
+performance:
+  parallel_scenes: false  # Small test, sequential is fine
+  num_threads: 0
+
+database:
+  connection: "sqlite:///experiments.db"
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false

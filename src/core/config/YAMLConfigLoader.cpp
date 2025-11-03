@@ -241,6 +241,13 @@ namespace thesis_project::config {
                 desc_config.aggregation_method = desc_node["aggregation"].as<std::string>();
             }
 
+            if (desc_node["output_dimension"]) {
+                desc_config.output_dimension = desc_node["output_dimension"].as<std::string>();
+            } else {
+                // Default to 128D for channel_wise fusion
+                desc_config.output_dimension = "128";
+            }
+
             if (desc_node["weight"]) {
                 desc_config.weight = desc_node["weight"].as<double>();
             }
@@ -283,6 +290,18 @@ namespace thesis_project::config {
                     throw std::runtime_error(
                         "Composite descriptor '" + desc_config.name + "' must have at least 2 components"
                     );
+                }
+
+                // IMPORTANT: Set use_color=true for composite if ANY component needs color
+                // This prevents grayscale conversion that would create fake color (R=G=B)
+                if (desc_config.type == DescriptorType::COMPOSITE) {
+                    for (const auto& comp : desc_config.components) {
+                        if (comp.params.use_color) {
+                            desc_config.params.use_color = true;
+                            LOG_INFO("Composite descriptor '" + desc_config.name + "' requires color image (component needs color)");
+                            break;
+                        }
+                    }
                 }
             }
 

@@ -43,7 +43,8 @@ namespace thesis_project::config {
 
             // Composite descriptor support
             std::vector<DescriptorConfig> components;  // Component descriptors for COMPOSITE type
-            std::string aggregation_method;            // "average", "weighted_avg", "max", "min", "concatenate"
+            std::string aggregation_method;            // "average", "weighted_avg", "max", "min", "concatenate", "channel_wise"
+            std::string output_dimension;              // "128" or "384" for channel_wise fusion (default: "128")
             double weight = 1.0;                       // Weight for this component in weighted averaging
         };
         std::vector<DescriptorConfig> descriptors;
