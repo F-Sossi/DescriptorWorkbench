@@ -1423,6 +1423,15 @@ int main(int argc, char** argv) {
                 results.total_pipeline_cpu_ms = profile.detect_ms + profile.compute_ms + profile.match_ms;
                 results.total_pipeline_gpu_ms = 0.0;
                 results.metadata["success"] = experiment_metrics.success ? "true" : "false";
+
+                // Log and store error message if experiment failed
+                if (!experiment_metrics.success && !experiment_metrics.error_message.empty()) {
+                    LOG_ERROR("Experiment failed for descriptor '" + desc_config.name + "': " + experiment_metrics.error_message);
+                    results.metadata["error_message"] = experiment_metrics.error_message;
+                    std::cerr << "\n[ERROR] Descriptor '" << desc_config.name << "' failed:\n"
+                              << experiment_metrics.error_message << "\n" << std::endl;
+                }
+
                 results.metadata["experiment_name"] = yaml_config.experiment.name;
                 results.metadata["execution_device"] = execution_device;
                 results.metadata["descriptor_dimension"] = std::to_string(profile.descriptor_dimension);

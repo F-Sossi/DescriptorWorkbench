@@ -152,13 +152,22 @@ namespace thesis_project {
             const int descriptor_dim = descriptors[0].cols;
             for (size_t i = 1; i < descriptors.size(); ++i) {
                 if (descriptors[i].cols != descriptor_dim) {
-                    throw std::runtime_error(
-                        std::string("CompositeDescriptorExtractor: Descriptor dimension mismatch for ") +
-                        aggregationMethodToString(aggregation_method_) + " aggregation. " +
-                        "Component 0: " + std::to_string(descriptors[0].cols) + "D, " +
-                        "Component " + std::to_string(i) + ": " + std::to_string(descriptors[i].cols) + "D. " +
-                        "Use 'concatenate' or 'channel_wise' aggregation for different dimensions or ensure all descriptors are same size."
-                    );
+                    // Build descriptive error with component names and dimensions
+                    std::ostringstream error_msg;
+                    error_msg << "CompositeDescriptorExtractor: Descriptor dimension mismatch for '"
+                              << aggregationMethodToString(aggregation_method_) << "' aggregation.\n";
+                    error_msg << "  Component 0 (" << extractors_[0]->name() << "): "
+                              << descriptors[0].cols << "D\n";
+                    error_msg << "  Component " << i << " (" << extractors_[i]->name() << "): "
+                              << descriptors[i].cols << "D\n";
+                    error_msg << "  All components:\n";
+                    for (size_t j = 0; j < extractors_.size(); ++j) {
+                        error_msg << "    [" << j << "] " << extractors_[j]->name()
+                                  << " (" << descriptors[j].cols << "D)\n";
+                    }
+                    error_msg << "  Solution: Use 'concatenate' aggregation for different dimensions, "
+                              << "or ensure all descriptors return the same dimension.";
+                    throw std::runtime_error(error_msg.str());
                 }
             }
         }

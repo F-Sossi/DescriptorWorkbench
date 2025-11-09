@@ -4,6 +4,24 @@
 #include <sstream>
 #include <unordered_set>
 
+namespace {
+
+bool descriptorRequiresColor(thesis_project::DescriptorType type) {
+    using thesis_project::DescriptorType;
+    switch (type) {
+        case DescriptorType::RGBSIFT:
+        case DescriptorType::RGBSIFT_CHANNEL_AVG:
+        case DescriptorType::HoNC:
+        case DescriptorType::DSPRGBSIFT_V2:
+        case DescriptorType::DSPHONC_V2:
+            return true;
+        default:
+            return false;
+    }
+}
+
+}
+
 
 namespace thesis_project::config {
 
@@ -184,8 +202,28 @@ namespace thesis_project::config {
                     stringToRootingStage(desc_node["rooting_stage"].as<std::string>());
             }
 
+            bool use_color_specified = false;
+            bool use_color_value = false;
             if (desc_node["use_color"]) {
-                desc_config.params.use_color = desc_node["use_color"].as<bool>();
+                use_color_specified = true;
+                use_color_value = desc_node["use_color"].as<bool>();
+                desc_config.params.use_color = use_color_value;
+            }
+
+            if (desc_config.type != DescriptorType::NONE && descriptorRequiresColor(desc_config.type)) {
+                if (use_color_specified && !use_color_value) {
+                    throw std::runtime_error(
+                        "Descriptor '" + desc_config.name + "' of type '" +
+                        thesis_project::toString(desc_config.type) +
+                        "' requires use_color: true, but the configuration set use_color: false."
+                    );
+                }
+                if (!desc_config.params.use_color) {
+                    desc_config.params.use_color = true;
+                    LOG_WARNING("Descriptor '" + desc_config.name + "' (" +
+                                thesis_project::toString(desc_config.type) +
+                                ") requires color input; automatically enabling use_color: true.");
+                }
             }
 
             if (desc_node["device"]) {
@@ -255,6 +293,8 @@ namespace thesis_project::config {
             if (desc_node["components"] && desc_node["components"].IsSequence()) {
                 // Recursively parse component descriptors
                 desc_config.components.clear();
+                bool composite_needs_color = false;
+
                 for (const auto& comp_node : desc_node["components"]) {
                     ExperimentConfig::DescriptorConfig comp_config;
                     comp_config.type = DescriptorType::NONE;
@@ -268,6 +308,9 @@ namespace thesis_project::config {
                         throw std::runtime_error("Component descriptor must have 'descriptor' or 'type' field");
                     }
 
+                    bool comp_use_color_specified = false;
+                    bool comp_use_color_value = false;
+
                     // Parse component weight (optional)
                     if (comp_node["weight"]) {
                         comp_config.weight = comp_node["weight"].as<double>();
@@ -278,9 +321,31 @@ namespace thesis_project::config {
                         comp_config.params.device = comp_node["device"].as<std::string>();
                     }
                     if (comp_node["use_color"]) {
-                        comp_config.params.use_color = comp_node["use_color"].as<bool>();
+                        comp_use_color_specified = true;
+                        comp_use_color_value = comp_node["use_color"].as<bool>();
+                        comp_config.params.use_color = comp_use_color_value;
                     }
                     // Add more param parsing here if needed
+
+                    if (comp_config.type != DescriptorType::NONE && descriptorRequiresColor(comp_config.type)) {
+                        if (comp_use_color_specified && !comp_use_color_value) {
+                            throw std::runtime_error(
+                                "Composite descriptor '" + desc_config.name + "' component '" +
+                                thesis_project::toString(comp_config.type) +
+                                "' requires use_color: true, but the configuration set use_color: false."
+                            );
+                        }
+                        if (!comp_config.params.use_color) {
+                            comp_config.params.use_color = true;
+                            LOG_WARNING("Composite descriptor '" + desc_config.name + "' component '" +
+                                        thesis_project::toString(comp_config.type) +
+                                        "' requires color input; automatically enabling use_color: true.");
+                        }
+                    }
+
+                    if (comp_config.params.use_color) {
+                        composite_needs_color = true;
+                    }
 
                     desc_config.components.push_back(comp_config);
                 }
@@ -294,13 +359,18 @@ namespace thesis_project::config {
 
                 // IMPORTANT: Set use_color=true for composite if ANY component needs color
                 // This prevents grayscale conversion that would create fake color (R=G=B)
-                if (desc_config.type == DescriptorType::COMPOSITE) {
-                    for (const auto& comp : desc_config.components) {
-                        if (comp.params.use_color) {
-                            desc_config.params.use_color = true;
-                            LOG_INFO("Composite descriptor '" + desc_config.name + "' requires color image (component needs color)");
-                            break;
-                        }
+                if (desc_config.type == DescriptorType::COMPOSITE && composite_needs_color) {
+                    if (use_color_specified && !use_color_value) {
+                        throw std::runtime_error(
+                            "Composite descriptor '" + desc_config.name +
+                            "' has color-dependent components; set use_color: true."
+                        );
+                    }
+                    if (!desc_config.params.use_color) {
+                        desc_config.params.use_color = true;
+                        LOG_WARNING("Composite descriptor '" + desc_config.name +
+                                    "' requires color input because one or more components need color; "
+                                    "automatically enabling use_color: true.");
                     }
                 }
             }
@@ -674,4 +744,3 @@ namespace thesis_project::config {
     }
 
 } // namespace thesis_project::config
-
