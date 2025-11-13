@@ -5,12 +5,18 @@
 
 #include "CompositeDescriptorExtractor.hpp"
 #include "src/core/descriptor/factories/DescriptorFactory.hpp"
+#include "thesis_project/database/DatabaseManager.hpp"
 #include "thesis_project/logging.hpp"
 #include <stdexcept>
 #include <sstream>
 #include <numeric>
 
 namespace thesis_project {
+
+    CompositeDescriptorExtractor::ThreadLocalContext& CompositeDescriptorExtractor::threadContext() {
+        thread_local ThreadLocalContext ctx;
+        return ctx;
+    }
 
     CompositeDescriptorExtractor::CompositeDescriptorExtractor(
         std::vector<ComponentConfig> components,
@@ -67,7 +73,7 @@ namespace thesis_project {
             }
         }
 
-        LOG_INFO(
+        LOG_DEBUG(
             "CompositeDescriptorExtractor created with " +
             std::to_string(components_.size()) + " components, aggregation: " +
             aggregationMethodToString(aggregation_method_)
@@ -89,6 +95,9 @@ namespace thesis_project {
             return {};
         }
 
+        // Check if using paired keypoint sets
+        const bool using_paired_sets = usesPairedKeypointSets();
+
         // Extract descriptors from all components
         std::vector<cv::Mat> descriptors;
         descriptors.reserve(extractors_.size());
@@ -101,7 +110,64 @@ namespace thesis_project {
                     ? components_[i].params
                     : params;
 
-                cv::Mat desc = extractors_[i]->extract(image, keypoints, comp_params);
+                // Determine which keypoints to use for this component
+                std::vector<cv::KeyPoint> component_keypoints;
+
+                // When using paired sets, ALWAYS load from database (ignore passed keypoints)
+                // Otherwise, use passed keypoints
+                if (using_paired_sets) {
+                    auto& tls = threadContext();
+                    if (components_[i].keypoint_set_name.empty()) {
+                        throw std::runtime_error(
+                            "Component " + std::to_string(i) + " is missing keypoint_set_name. " +
+                            "When using paired keypoint sets, ALL components must specify keypoint_set_name."
+                        );
+                    }
+                    // Load component-specific keypoints from database
+                    if (!tls.db_manager) {
+                        throw std::runtime_error(
+                            "Component " + std::to_string(i) + " requires keypoint set '" +
+                            components_[i].keypoint_set_name +
+                            "' but database context not set. Call setDatabaseContext() first."
+                        );
+                    }
+
+                    // Get keypoint set ID from database
+                    int set_id = tls.db_manager->getKeypointSetId(components_[i].keypoint_set_name);
+                    if (set_id < 0) {
+                        throw std::runtime_error(
+                            "Component " + std::to_string(i) + " keypoint set '" +
+                            components_[i].keypoint_set_name + "' not found in database"
+                        );
+                    }
+
+                    // Load keypoints for this specific component
+                    component_keypoints = tls.db_manager->getLockedKeypointsFromSet(
+                        set_id,
+                        tls.scene_name,
+                        tls.image_name
+                    );
+
+                    if (component_keypoints.empty()) {
+                        throw std::runtime_error(
+                            "Component " + std::to_string(i) + " loaded 0 keypoints from set '" +
+                            components_[i].keypoint_set_name + "' for " +
+                            tls.scene_name + "/" + tls.image_name
+                        );
+                    }
+
+                    LOG_DEBUG(
+                        "Composite: Component " + std::to_string(i) + " loaded " +
+                        std::to_string(component_keypoints.size()) + " keypoints from set '" +
+                        components_[i].keypoint_set_name + "' for " +
+                        tls.scene_name + "/" + tls.image_name
+                    );
+                } else {
+                    // Normal mode: use passed keypoints for all components
+                    component_keypoints = keypoints;
+                }
+
+                cv::Mat desc = extractors_[i]->extract(image, component_keypoints, comp_params);
 
                 if (desc.empty()) {
                     throw std::runtime_error(
@@ -118,7 +184,7 @@ namespace thesis_project {
             }
         }
 
-        // Validate dimensions
+        // Validate dimensions (including row count for index alignment)
         validateDimensions(descriptors);
 
         // Aggregate descriptors
@@ -135,7 +201,7 @@ namespace thesis_project {
         }
 
         // All descriptors must have same number of rows (keypoints)
-        int num_keypoints = descriptors[0].rows;
+        const int num_keypoints = descriptors[0].rows;
         for (size_t i = 1; i < descriptors.size(); ++i) {
             if (descriptors[i].rows != num_keypoints) {
                 throw std::runtime_error(
@@ -367,8 +433,6 @@ namespace thesis_project {
             rgb_desc = descriptors[0];
         }
 
-        int num_keypoints = gray_desc.rows;
-
         // Split RGB descriptor into R, G, B channels (each 128D)
         cv::Mat r_channel = rgb_desc(cv::Range::all(), cv::Range(0, 128));
         cv::Mat g_channel = rgb_desc(cv::Range::all(), cv::Range(128, 256));
@@ -392,6 +456,43 @@ namespace thesis_project {
             cv::Mat result = (r_fused + g_fused + b_fused) / 3.0;
             return result;
         }
+    }
+
+    void CompositeDescriptorExtractor::setDatabaseContext(
+        thesis_project::database::DatabaseManager* db_manager,
+        const std::string& scene_name,
+        const std::string& image_name)
+    {
+        auto& ctx = threadContext();
+        ctx.db_manager = db_manager;
+        ctx.scene_name = scene_name;
+        ctx.image_name = image_name;
+    }
+
+    bool CompositeDescriptorExtractor::usesPairedKeypointSets() const
+    {
+        if (components_.empty()) {
+            return false;
+        }
+
+        // Check if any component has a different keypoint_set_name than the first
+        const std::string& first_set = components_[0].keypoint_set_name;
+
+        for (size_t i = 1; i < components_.size(); ++i) {
+            if (components_[i].keypoint_set_name != first_set) {
+                return true;  // Different sets = paired mode
+            }
+        }
+
+        // Also check if any component has a non-empty keypoint_set_name
+        // (indicating it wants a specific set, even if all are the same)
+        for (const auto& comp : components_) {
+            if (!comp.keypoint_set_name.empty()) {
+                return true;
+            }
+        }
+
+        return false;  // All same or all empty = single set mode
     }
 
 } // namespace thesis_project

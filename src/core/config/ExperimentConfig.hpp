@@ -33,6 +33,15 @@ namespace thesis_project::config {
         struct Keypoints {
             KeypointGenerator generator = KeypointGenerator::SIFT;
             KeypointParams params;
+            KeypointAssignmentMode assignment_mode = KeypointAssignmentMode::INHERIT_FROM_PRIMARY;
+
+            // Alternative keypoint sets for per-descriptor assignment
+            // Each alternative set can be referenced by descriptors via keypoint_set_name
+            struct AlternativeKeypointSet {
+                std::string keypoint_set_name;
+                std::string description;  // Optional: what this set is for
+            };
+            std::vector<AlternativeKeypointSet> alternative_keypoints;
         } keypoints;
 
         // Descriptor configurations (can have multiple for comparison)
@@ -40,6 +49,9 @@ namespace thesis_project::config {
             std::string name;
             DescriptorType type;
             DescriptorParams params;
+
+            // Flexible keypoint set assignment
+            std::string keypoint_set_name;  // Optional: override default keypoint set for this descriptor
 
             // Composite descriptor support
             std::vector<DescriptorConfig> components;  // Component descriptors for COMPOSITE type

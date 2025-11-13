@@ -16,6 +16,9 @@
 #include <map>
 
 namespace thesis_project {
+    namespace database {
+        class DatabaseManager;  // Forward declaration
+    }
 
     /**
      * @brief Composite descriptor that combines multiple descriptors
@@ -51,9 +54,10 @@ namespace thesis_project {
             DescriptorType type;              ///< Descriptor type
             double weight = 1.0;              ///< Weight for weighted averaging (default 1.0)
             DescriptorParams params;          ///< Component-specific parameters
+            std::string keypoint_set_name;    ///< Optional: keypoint set override for this component (for paired sets)
 
             ComponentConfig() = default;
-            ComponentConfig(DescriptorType t, double w = 1.0)
+            ComponentConfig(const DescriptorType t, const double w = 1.0)
                 : type(t), weight(w) {}
         };
 
@@ -116,6 +120,27 @@ namespace thesis_project {
          * @brief Get descriptor name
          */
         std::string name() const override;
+
+        /**
+         * @brief Set database context for component-specific keypoint loading
+         *
+         * This must be called before extract() when using paired keypoint sets.
+         *
+         * @param db_manager Pointer to database manager (or nullptr to disable)
+         * @param scene_name Current scene name
+         * @param image_name Current image name
+         */
+        static void setDatabaseContext(
+            thesis_project::database::DatabaseManager* db_manager,
+            const std::string& scene_name,
+            const std::string& image_name
+        );
+
+        /**
+         * @brief Check if components use different keypoint sets (paired mode)
+         * @return true if components have different keypoint_set_name values
+         */
+        bool usesPairedKeypointSets() const;
 
         /**
          * @brief Convert aggregation method enum to string
@@ -185,6 +210,14 @@ namespace thesis_project {
         AggregationMethod aggregation_method_;                       ///< Aggregation method
         OutputDimensionMode output_mode_;                            ///< Output dimension mode (for CHANNEL_WISE)
         mutable int cached_descriptor_size_ = -1;                    ///< Cached descriptor size
+
+        struct ThreadLocalContext {
+            thesis_project::database::DatabaseManager* db_manager = nullptr;
+            std::string scene_name;
+            std::string image_name;
+        };
+
+        static ThreadLocalContext& threadContext();
     };
 
 } // namespace thesis_project

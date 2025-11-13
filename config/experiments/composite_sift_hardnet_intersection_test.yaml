@@ -1,0 +1,134 @@
+schema_version: 1
+
+experiment:
+  name: "composite_sift_hardnet_intersection_controlled"
+  description: "Controlled test of SIFT+HardNet composite on intersection sets vs baselines"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []   # All scenes
+
+keypoints:
+  generator: "sift"
+  source: "database"
+  keypoint_set_name: "independent"  # Flag: every descriptor/component must choose its own set
+  use_locked_keypoints: true
+  alternative_keypoints:
+    - keypoint_set_name: "keynet_sift_8k_a"
+      description: "KeyNet native positions from intersection (ID 13)"
+    - keypoint_set_name: "keynet_sift_8k_b"
+      description: "SIFT native positions from intersection (ID 14)"
+
+descriptors:
+  # Baseline 1: Pure SIFT descriptor on intersection set
+  - name: "baseline_sift_intersection"
+    type: "sift"
+    keypoint_set_name: "keynet_sift_8k_b"  # Native SIFT keypoints from intersection
+    pooling: "none"
+    normalization:
+      type: "none"
+
+  # Baseline 2: Pure HardNet descriptor on intersection set
+  - name: "baseline_hardnet_intersection"
+    type: "libtorch_hardnet"
+    device: "auto"
+    keypoint_set_name: "keynet_sift_8k_a"  # Native keynet keypoints
+    pooling: "none"
+    normalization:
+      type: "l2"
+
+  # Test 1: SIFT + HardNet composite (simple average)
+  - name: "composite_sift_hardnet_average"
+    type: "composite"
+    components:
+      - descriptor: "sift"
+        keypoint_set_name: "keynet_sift_8k_b"
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "keynet_sift_8k_a"
+    aggregation: "average"
+    normalization:
+      type: "l2"
+
+  # Test 2: SIFT + HardNet composite (weighted average 50/50)
+  - name: "composite_sift_hardnet_weighted_avg"
+    type: "composite"
+    components:
+      - descriptor: "sift"
+        weight: 0.5
+        keypoint_set_name: "keynet_sift_8k_b"
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        weight: 0.5
+        keypoint_set_name: "keynet_sift_8k_a"
+    aggregation: "weighted_avg"
+    normalization:
+      type: "l2"
+
+  # Test 3: SIFT + HardNet composite (max pooling)
+  - name: "composite_sift_hardnet_max"
+    type: "composite"
+    components:
+      - descriptor: "sift"
+        keypoint_set_name: "keynet_sift_8k_b"
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "keynet_sift_8k_a"
+    aggregation: "max"
+    normalization:
+      type: "l2"
+
+  # Test 4: SIFT + HardNet composite (min pooling)
+  - name: "composite_sift_hardnet_min"
+    type: "composite"
+    components:
+      - descriptor: "sift"
+        keypoint_set_name: "keynet_sift_8k_b"
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "keynet_sift_8k_a"
+    aggregation: "min"
+    normalization:
+      type: "l2"
+
+  # Test 5: SIFT + HardNet composite (concatenation)
+  - name: "composite_sift_hardnet_concat"
+    type: "composite"
+    components:
+      - descriptor: "sift"
+        keypoint_set_name: "keynet_sift_8k_b"
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "keynet_sift_8k_a"
+    aggregation: "concatenate"
+    normalization:
+      type: "l2"
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+
+  # Enable verification and retrieval for comprehensive metrics
+  keypoint_verification:
+    enabled: true
+    num_distractor_scenes: 10
+    num_distractors_per_scene: 20
+    seed: 42
+
+  keypoint_retrieval:
+    enabled: true
+    num_distractor_scenes: 1
+    num_distractors_per_scene: 10
+    seed: 42
+
+performance:
+  parallel_scenes: true
+  num_threads: 0  # Auto-detect
+
+database:
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false

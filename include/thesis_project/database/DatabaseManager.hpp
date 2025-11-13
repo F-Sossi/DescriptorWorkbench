@@ -317,19 +317,34 @@ public:
                              bool valid_bounds = true) const;
 
     /**
+     * @brief Batch insert multiple keypoints in a single transaction (Phase 1 optimization)
+     * @param keypoint_set_id ID of the keypoint set
+     * @param scene_name Scene name (same for all keypoints in batch)
+     * @param image_name Image name (same for all keypoints in batch)
+     * @param keypoints Vector of keypoints to insert
+     * @param valid_bounds Whether all keypoints have valid bounds (default true)
+     * @return Number of keypoints successfully inserted
+     */
+    [[nodiscard]] int insertLockedKeypointsBatch(int keypoint_set_id,
+                                    const std::string& scene_name,
+                                    const std::string& image_name,
+                                    const std::vector<cv::KeyPoint>& keypoints,
+                                    bool valid_bounds = true) const;
+
+    /**
      * @brief Upsert detector-specific attributes for locked keypoints
      */
-    bool upsertDetectorAttributes(const std::vector<DetectorAttributeRecord>& records) const;
+    [[nodiscard]] bool upsertDetectorAttributes(const std::vector<DetectorAttributeRecord>& records) const;
 
     /**
      * @brief Remove detector attributes for a given detector and keypoint set
      */
-    bool clearDetectorAttributesForSet(int keypoint_set_id, const std::string& detector_type) const;
+    [[nodiscard]] bool clearDetectorAttributesForSet(int keypoint_set_id, const std::string& detector_type) const;
 
     /**
      * @brief Retrieve detector-specific attributes for all keypoints in a scene/image
      */
-    std::unordered_map<int, DetectorAttributes> getDetectorAttributesForImage(
+    [[nodiscard]] std::unordered_map<int, DetectorAttributes> getDetectorAttributesForImage(
         int keypoint_set_id,
         const std::string& scene_name,
         const std::string& image_name,
@@ -339,42 +354,42 @@ public:
      * @brief Get all available keypoint sets
      * @return Vector of {id, name, generation_method} tuples
      */
-    std::vector<std::tuple<int, std::string, std::string>> getAvailableKeypointSets() const;
+    [[nodiscard]] std::vector<std::tuple<int, std::string, std::string>> getAvailableKeypointSets() const;
 
     /**
      * @brief Retrieve metadata for a keypoint set by name
      */
-    std::optional<KeypointSetInfo> getKeypointSetInfo(const std::string& name) const;
+    [[nodiscard]] std::optional<KeypointSetInfo> getKeypointSetInfo(const std::string& name) const;
 
     /**
      * @brief Get list of scenes for a specific keypoint set
      */
-    std::vector<std::string> getScenesForSet(int keypoint_set_id) const;
+    [[nodiscard]] std::vector<std::string> getScenesForSet(int keypoint_set_id) const;
 
     /**
      * @brief Get list of images for a scene within a keypoint set
      */
-    std::vector<std::string> getImagesForSet(int keypoint_set_id, const std::string& scene_name) const;
+    [[nodiscard]] std::vector<std::string> getImagesForSet(int keypoint_set_id, const std::string& scene_name) const;
 
     /**
      * @brief Get list of detector types with attributes stored for a keypoint set
      */
-    std::vector<std::string> getDetectorsForSet(int keypoint_set_id) const;
+    [[nodiscard]] std::vector<std::string> getDetectorsForSet(int keypoint_set_id) const;
 
     /**
      * @brief Remove all keypoints for a keypoint set
      */
-    bool clearKeypointsForSet(int keypoint_set_id) const;
+    [[nodiscard]] bool clearKeypointsForSet(int keypoint_set_id) const;
 
     /**
      * @brief Update aggregated statistics for a keypoint set generation.
      */
-    bool updateKeypointSetStats(const KeypointSetStats& stats) const;
+    [[nodiscard]] bool updateKeypointSetStats(const KeypointSetStats& stats) const;
 
     /**
      * @brief Remove all detector attributes associated with a keypoint set
      */
-    bool clearAllDetectorAttributesForSet(int keypoint_set_id) const;
+    [[nodiscard]] bool clearAllDetectorAttributesForSet(int keypoint_set_id) const;
 
     /**
      * @brief Store descriptors for keypoints in an experiment
@@ -389,7 +404,7 @@ public:
      * @param pooling_applied Type of pooling applied
      * @return true if successfully stored
      */
-    bool storeDescriptors(int experiment_id,
+    [[nodiscard]] bool storeDescriptors(int experiment_id,
                          const std::string& scene_name,
                          const std::string& image_name,
                          const std::vector<cv::KeyPoint>& keypoints,
@@ -406,7 +421,7 @@ public:
      * @param image_name Name of the image
      * @return cv::Mat of descriptors (empty if not found or disabled)
      */
-    cv::Mat getDescriptors(int experiment_id,
+    [[nodiscard]] cv::Mat getDescriptors(int experiment_id,
                           const std::string& scene_name,
                           const std::string& image_name) const;
 
@@ -417,7 +432,7 @@ public:
      * @param rooting_applied Rooting type to filter by (optional)
      * @return Vector of {scene, image, descriptors} tuples
      */
-    std::vector<std::tuple<std::string, std::string, cv::Mat>> getDescriptorsByMethod(
+    [[nodiscard]] std::vector<std::tuple<std::string, std::string, cv::Mat>> getDescriptorsByMethod(
         const std::string& processing_method,
         const std::string& normalization_applied = "",
         const std::string& rooting_applied = "") const;
@@ -426,7 +441,7 @@ public:
      * @brief Get all unique processing methods stored in database
      * @return Vector of processing method strings
      */
-    std::vector<std::string> getAvailableProcessingMethods() const;
+    [[nodiscard]] std::vector<std::string> getAvailableProcessingMethods() const;
 
     /**
      * @brief Store matches for an experiment between two images
@@ -440,7 +455,7 @@ public:
      * @param correctness_flags Vector indicating if each match is correct (same size as matches)
      * @return true if successfully stored
      */
-    bool storeMatches(int experiment_id,
+    [[nodiscard]] bool storeMatches(int experiment_id,
                      const std::string& scene_name,
                      const std::string& query_image,
                      const std::string& train_image,
@@ -457,7 +472,7 @@ public:
      * @param train_image Name of the train image
      * @return Vector of DMatch objects (empty if not found or disabled)
      */
-    std::vector<cv::DMatch> getMatches(int experiment_id,
+    [[nodiscard]] std::vector<cv::DMatch> getMatches(int experiment_id,
                                       const std::string& scene_name,
                                       const std::string& query_image,
                                       const std::string& train_image) const;
@@ -472,7 +487,7 @@ public:
      * @param metadata Optional JSON metadata string
      * @return true if successfully stored
      */
-    bool storeVisualization(int experiment_id,
+    [[nodiscard]] bool storeVisualization(int experiment_id,
                            const std::string& scene_name,
                            const std::string& visualization_type,
                            const std::string& image_pair,
@@ -487,7 +502,7 @@ public:
      * @param image_pair Image pair identifier
      * @return cv::Mat containing the visualization image (empty if not found or disabled)
      */
-    cv::Mat getVisualization(int experiment_id,
+    [[nodiscard]] cv::Mat getVisualization(int experiment_id,
                             const std::string& scene_name,
                             const std::string& visualization_type,
                             const std::string& image_pair) const;
@@ -496,7 +511,7 @@ public:
      * @brief Initialize database tables (safe to call multiple times)
      * @return true if successful or disabled
      */
-    bool initializeTables() const;
+    [[nodiscard]] bool initializeTables() const;
 
 private:
     class Impl;
@@ -608,6 +623,10 @@ struct KeypointSetStats {
     int source_a_keypoints = 0;
     int source_b_keypoints = 0;
     double keypoint_reduction_pct = 0.0;
+    // Detailed profiling for intersection generation (Phase 0)
+    double fetch_time_ms = 0.0;        // Time spent fetching keypoints from database
+    double search_time_ms = 0.0;       // Time spent in FLANN index build + search
+    double write_time_ms = 0.0;        // Time spent writing matched keypoints to database
 };
 
 } // namespace database

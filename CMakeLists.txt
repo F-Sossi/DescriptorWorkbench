@@ -378,7 +378,7 @@ function(create_gtest_if_exists test_source test_name)
                 src/core/matching/FLANNMatching.cpp
                 src/core/matching/MatchingFactory.cpp
             )
-            target_link_libraries(${test_name} ${OpenCV_LIBRARIES} keypoints)
+            target_link_libraries(${test_name} ${OpenCV_LIBRARIES} keypoints thesis_database)
             target_include_directories(${test_name} PRIVATE ${OpenCV_INCLUDE_DIRS} src descriptor_compare keypoints)
         elseif(${test_name} MATCHES "pooling")
             # Pooling tests need OpenCV, keypoints, and pooling source files
@@ -402,7 +402,7 @@ function(create_gtest_if_exists test_source test_name)
                        src/core/descriptor/extractors/wrappers/ORBWrapper.cpp
                        src/core/descriptor/extractors/wrappers/SURFWrapper.cpp
             )
-            target_link_libraries(${test_name} ${OpenCV_LIBRARIES} keypoints)
+            target_link_libraries(${test_name} ${OpenCV_LIBRARIES} keypoints thesis_database)
             target_include_directories(${test_name} PRIVATE ${OpenCV_INCLUDE_DIRS} src keypoints descriptor_compare)
         endif()
         
@@ -518,6 +518,27 @@ if(TARGET test_dsp_color_wrappers_gtest)
         src/core/descriptor/extractors/wrappers/DSPHoNCWrapperV2.cpp)
     target_link_libraries(test_dsp_color_wrappers_gtest keypoints ${OpenCV_LIBRARIES})
     target_include_directories(test_dsp_color_wrappers_gtest PRIVATE src include keypoints descriptor_compare ${OpenCV_INCLUDE_DIRS})
+endif()
+
+create_gtest_if_exists("tests/unit/descriptors/test_composite_thread_safety_gtest.cpp" "test_composite_thread_safety_gtest")
+if(TARGET test_composite_thread_safety_gtest)
+    target_sources(test_composite_thread_safety_gtest PRIVATE
+        src/core/descriptor/extractors/CompositeDescriptorExtractor.cpp
+        src/core/descriptor/factories/DescriptorFactory.cpp
+        src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/RGBSIFTChannelAverageWrapper.cpp
+        src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
+        src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/DSPRGBSIFTWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/DSPHoWHWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/DSPHoNCWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/VGGWrapper.cpp
+        src/core/descriptor/extractors/wrappers/ORBWrapper.cpp
+        src/core/descriptor/extractors/wrappers/SURFWrapper.cpp)
+    target_link_libraries(test_composite_thread_safety_gtest ${OpenCV_LIBRARIES} keypoints thesis_database)
+    target_include_directories(test_composite_thread_safety_gtest PRIVATE src include keypoints descriptor_compare ${OpenCV_INCLUDE_DIRS})
 endif()
 
 # Google Test DSP SIFT Wrapper V2 (pyramid reuse validation tests)
@@ -879,6 +900,14 @@ if(BUILD_KEYPOINT_MANAGER)
         else()
             target_link_libraries(keypoint_manager ${OpenCV_LIBRARIES})
             target_link_libraries(keypoint_manager ${SQLite3_LIBRARIES})
+        endif()
+
+        # Phase 2 optimization: OpenMP for parallel image processing in intersection builds
+        if(OpenMP_CXX_FOUND)
+            target_link_libraries(keypoint_manager OpenMP::OpenMP_CXX)
+            message(STATUS "OpenMP enabled for parallel intersection generation")
+        else()
+            message(WARNING "OpenMP not found - keypoint_manager intersection builds will run sequentially")
         endif()
 
         message(STATUS "Keypoint manager CLI tool configured")

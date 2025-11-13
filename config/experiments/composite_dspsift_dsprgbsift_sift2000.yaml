@@ -1,0 +1,89 @@
+schema_version: 1
+
+experiment:
+  name: "composite_dspsift_dsprgbsift_sift2000"
+  description: |
+    DSP-focused composite study pairing DSPSIFT_V2 with DSPRGBSIFT_V2 to mirror the
+    SIFT+RGBSIFT fusion sweep. Evaluates both channel-wise projections (128D + 384D
+    outputs) and high-dimensional concatenation on the sift_2000 keypoint set.
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # All scenes
+
+keypoints:
+  generator: "sift"
+  source: "database"
+  keypoint_set_name: "sift_2000"
+  use_locked_keypoints: true
+
+descriptors:
+  # Baseline descriptors ------------------------------------------------------
+  - name: "baseline_dspsift_v2"
+    type: "dspsift_v2"
+    pooling: "none"
+
+  - name: "baseline_dsprgbsift_v2"
+    type: "dsprgbsift_v2"
+    pooling: "none"
+    use_color: true
+
+  # NOTE: The current factory exposes only the 384D DSPRGBSIFT variant.
+  # Channel-wise composites below provide 128D projections when needed.
+
+  # --------------------------------------------------------------------------
+  # Pairwise fusion: DSPSIFT_V2 + DSPRGBSIFT_V2 (channel-wise projection)
+  # --------------------------------------------------------------------------
+  - name: "dspsift_dsprgbsift_channelwise_128d"
+    type: "composite"
+    components:
+      - descriptor: "dspsift_v2"
+      - descriptor: "dsprgbsift_v2"
+        use_color: true
+    aggregation: "channel_wise"
+    output_dimension: "128"
+
+  - name: "dspsift_dsprgbsift_channelwise_384d"
+    type: "composite"
+    components:
+      - descriptor: "dspsift_v2"
+      - descriptor: "dsprgbsift_v2"
+        use_color: true
+    aggregation: "channel_wise"
+    output_dimension: "384"
+
+  - name: "dspsift_dsprgbsift_concat"
+    type: "composite"
+    components:
+      - descriptor: "dspsift_v2"
+      - descriptor: "dsprgbsift_v2"
+        use_color: true
+    aggregation: "concatenate"
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+
+  keypoint_verification:
+    enabled: true
+    num_distractor_scenes: 10
+    num_distractors_per_scene: 20
+    seed: 42
+
+  keypoint_retrieval:
+    enabled: true
+    num_distractor_scenes: 1
+    num_distractors_per_scene: 10
+    seed: 42
+
+performance:
+  parallel_scenes: true
+  num_threads: 0  # Auto-detect
+
+database:
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false

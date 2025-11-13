@@ -3,8 +3,31 @@
 #include <fstream>
 #include <sstream>
 #include <unordered_set>
+#include <algorithm>
+#include <cctype>
+#include <vector>
 
 namespace {
+
+std::string trimCopy(const std::string& value) {
+    const auto first = value.find_first_not_of(" \t\n\r");
+    if (first == std::string::npos) {
+        return "";
+    }
+    const auto last = value.find_last_not_of(" \t\n\r");
+    return value.substr(first, last - first + 1);
+}
+
+std::string toLowerCopy(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return value;
+}
+
+bool isExplicitAssignmentToken(const std::string& raw_value) {
+    const auto normalized = toLowerCopy(trimCopy(raw_value));
+    return normalized == "independent" || normalized == "none";
+}
 
 bool descriptorRequiresColor(thesis_project::DescriptorType type) {
     using thesis_project::DescriptorType;
@@ -18,6 +41,22 @@ bool descriptorRequiresColor(thesis_project::DescriptorType type) {
         default:
             return false;
     }
+}
+
+std::string formatAvailableSets(const std::unordered_set<std::string>& sets) {
+    if (sets.empty()) {
+        return "<none>";
+    }
+    std::vector<std::string> sorted(sets.begin(), sets.end());
+    std::sort(sorted.begin(), sorted.end());
+    std::ostringstream oss;
+    for (size_t i = 0; i < sorted.size(); ++i) {
+        if (i > 0) {
+            oss << ", ";
+        }
+        oss << sorted[i];
+    }
+    return oss.str();
 }
 
 }
@@ -107,7 +146,7 @@ namespace thesis_project::config {
         if (node["generator"]) {
             keypoints.generator = stringToKeypointGenerator(node["generator"].as<std::string>());
         }
-        
+
         // Parse keypoint parameters
         if (node["max_features"]) {
             keypoints.params.max_features = node["max_features"].as<int>();
@@ -136,6 +175,40 @@ namespace thesis_project::config {
         if (node["locked_keypoints_path"]) {
             keypoints.params.locked_keypoints_path = node["locked_keypoints_path"].as<std::string>();
         }
+
+        const bool explicit_token = isExplicitAssignmentToken(keypoints.params.keypoint_set_name);
+        if (explicit_token) {
+            // Clear sentinel values so we don't treat them as actual DB set names later
+            keypoints.params.keypoint_set_name.clear();
+        }
+
+        const bool database_requires_explicit =
+            keypoints.params.source == KeypointSource::DATABASE &&
+            keypoints.params.keypoint_set_name.empty();
+
+        keypoints.assignment_mode = (explicit_token || database_requires_explicit)
+            ? KeypointAssignmentMode::EXPLICIT_ONLY
+            : KeypointAssignmentMode::INHERIT_FROM_PRIMARY;
+
+        // Parse alternative keypoint sets
+        if (node["alternative_keypoints"] && node["alternative_keypoints"].IsSequence()) {
+            keypoints.alternative_keypoints.clear();
+            for (const auto& alt_node : node["alternative_keypoints"]) {
+                ExperimentConfig::Keypoints::AlternativeKeypointSet alt_set;
+
+                if (alt_node["keypoint_set_name"]) {
+                    alt_set.keypoint_set_name = alt_node["keypoint_set_name"].as<std::string>();
+                } else {
+                    throw std::runtime_error("Alternative keypoint set must have 'keypoint_set_name' field");
+                }
+
+                if (alt_node["description"]) {
+                    alt_set.description = alt_node["description"].as<std::string>();
+                }
+
+                keypoints.alternative_keypoints.push_back(alt_set);
+            }
+        }
     }
     
     void YAMLConfigLoader::parseDescriptors(const YAML::Node& node, std::vector<ExperimentConfig::DescriptorConfig>& descriptors) {
@@ -156,7 +229,12 @@ namespace thesis_project::config {
             if (desc_node["type"]) {
                 desc_config.type = stringToDescriptorType(desc_node["type"].as<std::string>());
             }
-            
+
+            // Parse keypoint set override (optional)
+            if (desc_node["keypoint_set_name"]) {
+                desc_config.keypoint_set_name = desc_node["keypoint_set_name"].as<std::string>();
+            }
+
             // Parse descriptor parameters
             if (desc_node["pooling"]) {
                 desc_config.params.pooling = stringToPoolingStrategy(desc_node["pooling"].as<std::string>());
@@ -316,6 +394,11 @@ namespace thesis_project::config {
                         comp_config.weight = comp_node["weight"].as<double>();
                     }
 
+                    // Parse component keypoint set override (optional)
+                    if (comp_node["keypoint_set_name"]) {
+                        comp_config.keypoint_set_name = comp_node["keypoint_set_name"].as<std::string>();
+                    }
+
                     // Parse component-specific params (optional)
                     if (comp_node["device"]) {
                         comp_config.params.device = comp_node["device"].as<std::string>();
@@ -452,6 +535,84 @@ namespace thesis_project::config {
             throw std::runtime_error("YAML validation error: keypoints.sigma must be > 0");
         }
 
+        // Validate keypoint set assignments
+        const bool explicit_assignment_mode =
+            config.keypoints.assignment_mode == KeypointAssignmentMode::EXPLICIT_ONLY;
+
+        // Build set of all valid keypoint set names (primary + alternatives)
+        std::unordered_set<std::string> valid_keypoint_sets;
+
+        // Add primary keypoint set if specified and we're in inheritance mode
+        if (!explicit_assignment_mode && !config.keypoints.params.keypoint_set_name.empty()) {
+            valid_keypoint_sets.insert(config.keypoints.params.keypoint_set_name);
+        }
+
+        // Add alternative keypoint sets
+        for (const auto& alt : config.keypoints.alternative_keypoints) {
+            if (alt.keypoint_set_name.empty()) {
+                throw std::runtime_error("YAML validation error: alternative_keypoints entry must have keypoint_set_name");
+            }
+            if (!valid_keypoint_sets.insert(alt.keypoint_set_name).second) {
+                throw std::runtime_error(
+                    "YAML validation error: duplicate keypoint set name in alternatives: " + alt.keypoint_set_name
+                );
+            }
+        }
+        auto ensureKeypointSetKnown = [&](const std::string& context, const std::string& set_name) {
+            if (valid_keypoint_sets.empty()) {
+                throw std::runtime_error(
+                    "YAML validation error: " + context +
+                    " references keypoint_set_name '" + set_name +
+                    "' but no keypoint sets are defined (set keypoints.keypoint_set_name or add alternative_keypoints)."
+                );
+            }
+            if (!valid_keypoint_sets.count(set_name)) {
+                throw std::runtime_error(
+                    "YAML validation error: " + context +
+                    " references unknown keypoint_set_name '" + set_name +
+                    "'. Available sets: " + formatAvailableSets(valid_keypoint_sets)
+                );
+            }
+        };
+
+        // Validate descriptor keypoint set overrides
+        for (const auto& desc : config.descriptors) {
+            const bool descriptor_is_composite = desc.type == DescriptorType::COMPOSITE;
+            const bool descriptor_has_override = !desc.keypoint_set_name.empty();
+
+            if (descriptor_has_override) {
+                ensureKeypointSetKnown("Descriptor '" + desc.name + "'", desc.keypoint_set_name);
+            } else if (explicit_assignment_mode && !descriptor_is_composite) {
+                throw std::runtime_error(
+                    "YAML validation error: Descriptor '" + desc.name +
+                    "' must specify keypoint_set_name because keypoints.keypoint_set_name "
+                    "is set to an explicit assignment flag."
+                );
+            }
+
+            if (descriptor_is_composite) {
+                bool all_components_have_sets = true;
+                for (size_t i = 0; i < desc.components.size(); ++i) {
+                    if (const auto& comp = desc.components[i]; !comp.keypoint_set_name.empty()) {
+                        ensureKeypointSetKnown(
+                            "Composite descriptor '" + desc.name + "' component " + std::to_string(i),
+                            comp.keypoint_set_name
+                        );
+                    } else {
+                        all_components_have_sets = false;
+                    }
+                }
+
+                if (explicit_assignment_mode && !descriptor_has_override && !all_components_have_sets) {
+                    throw std::runtime_error(
+                        "YAML validation error: Composite descriptor '" + desc.name +
+                        "' must specify keypoint_set_name on the descriptor or on every component "
+                        "because keypoints.keypoint_set_name enforces explicit assignments."
+                    );
+                }
+            }
+        }
+
         // Evaluation threshold typical range [0,1]
         if (config.evaluation.params.match_threshold < 0.0f || config.evaluation.params.match_threshold > 1.0f) {
             throw std::runtime_error("YAML validation error: evaluation.matching.threshold must be in [0,1]");
@@ -468,8 +629,7 @@ namespace thesis_project::config {
             }
             
             if (matching["norm"]) {
-                std::string norm_str = matching["norm"].as<std::string>();
-                if (norm_str == "l1") evaluation.params.norm_type = cv::NORM_L1;
+                if (const auto norm_str = matching["norm"].as<std::string>(); norm_str == "l1") evaluation.params.norm_type = cv::NORM_L1;
                 else if (norm_str == "l2") evaluation.params.norm_type = cv::NORM_L2;
                 else evaluation.params.norm_type = cv::NORM_L2; // default
             }
