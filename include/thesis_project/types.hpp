@@ -61,7 +61,8 @@ namespace thesis_project {
     enum class DescriptorType {
         SIFT,                  ///< Standard SIFT descriptor
         HoNC,                  ///< Histogram of Normalized Colors
-        RGBSIFT,               ///< RGB color SIFT
+        RGBSIFT,               ///< RGB color SIFT (384D = 3×128D)
+        RGBSIFT_CHANNEL_AVG,   ///< RGBSIFT with RGB channels averaged to 128D
         vSIFT,                 ///< Vanilla SIFT implementation
         DSPSIFT,               ///< Domain-Size Pooled SIFT (professor's implementation)
         DSPSIFT_V2,            ///< Pyramid-aware DSP wrapper with configurable aggregation (VanillaSIFT only)
@@ -75,6 +76,7 @@ namespace thesis_project {
         LIBTORCH_L2NET,        ///< LibTorch L2-Net CNN descriptor
         ORB,                   ///< OpenCV ORB binary descriptor
         SURF,                  ///< OpenCV SURF descriptor (requires opencv_contrib)
+        COMPOSITE,             ///< Composite descriptor combining multiple descriptors
         NONE                   ///< No descriptor
     };
 
@@ -120,7 +122,13 @@ namespace thesis_project {
      */
     enum class KeypointSource {
         HOMOGRAPHY_PROJECTION,  ///< Transform keypoints from reference using homography (controlled evaluation)
-        INDEPENDENT_DETECTION   ///< Detect keypoints fresh on each image (realistic evaluation)
+        INDEPENDENT_DETECTION,  ///< Detect keypoints fresh on each image (realistic evaluation)
+        DATABASE                ///< Load pre-generated keypoints from the experiments database
+    };
+
+    enum class KeypointAssignmentMode {
+        INHERIT_FROM_PRIMARY,  ///< Descriptors inherit the primary keypoint set unless they override it
+        EXPLICIT_ONLY          ///< Every descriptor/component must provide its own keypoint_set_name
     };
 
     /**
@@ -271,6 +279,7 @@ namespace thesis_project {
         switch (source) {
             case KeypointSource::HOMOGRAPHY_PROJECTION: return "homography_projection";
             case KeypointSource::INDEPENDENT_DETECTION: return "independent_detection";
+            case KeypointSource::DATABASE: return "database";
             default: return "unknown";
         }
     }
@@ -278,7 +287,16 @@ namespace thesis_project {
     inline KeypointSource keypointSourceFromString(const std::string& str) {
         if (str == "homography_projection") return KeypointSource::HOMOGRAPHY_PROJECTION;
         if (str == "independent_detection") return KeypointSource::INDEPENDENT_DETECTION;
+        if (str == "database") return KeypointSource::DATABASE;
         return KeypointSource::HOMOGRAPHY_PROJECTION; // Default to controlled evaluation
+    }
+
+    inline std::string toString(KeypointAssignmentMode mode) {
+        switch (mode) {
+            case KeypointAssignmentMode::INHERIT_FROM_PRIMARY: return "inheritance";
+            case KeypointAssignmentMode::EXPLICIT_ONLY: return "explicit";
+            default: return "unknown";
+        }
     }
 
     inline std::string toString(MatchingMethod method) {

@@ -52,38 +52,23 @@ namespace thesis_project::wrappers {
     cv::Mat LibTorchWrapper::extract(const cv::Mat& imageBgrOrGray,
                                      const std::vector<cv::KeyPoint>& keypoints,
                                      const DescriptorParams& params) {
-        // Debug: Show device settings
-        std::cout << "LibTorch DEBUG: params.device = '" << params.device << "'" << std::endl;
-        std::cout << "LibTorch DEBUG: constructor device_ = " << (device_.is_cuda() ? "CUDA" : "CPU") << std::endl;
 
         // Override device if specified in params
         torch::Device target_device = device_;
         if (params.device == "cpu") {
-            std::cout << "LibTorch DEBUG: Setting target device to CPU" << std::endl;
             target_device = torch::Device(torch::kCPU);
         } else if (params.device == "cuda" && torch::cuda::is_available()) {
-            std::cout << "LibTorch DEBUG: Setting target device to CUDA" << std::endl;
             target_device = torch::Device(torch::kCUDA, 0);
         }
-        // "auto" uses the device_ set in constructor
-
-        std::cout << "LibTorch DEBUG: target_device = " << (target_device.is_cuda() ? "CUDA" : "CPU") << std::endl;
-
-        // Log device override if different from default
         const bool devices_different = (target_device.type() != device_.type()) ||
                                  (target_device.is_cuda() && device_.is_cuda() && target_device.index() != device_.index());
 
         if (devices_different) {
-            std::cout << "LibTorch: Device overridden to " << (target_device.is_cuda() ? "CUDA" : "CPU")
-                    << " via YAML config" << std::endl;
-            // Move model to new device if different from construction device
             model_.to(target_device);
-        } else {
-            std::cout << "LibTorch DEBUG: No device change needed" << std::endl;
         }
 
         if (keypoints.empty()) {
-            return cv::Mat();
+            return {};
         }
 
         // Convert to grayscale if needed
@@ -114,7 +99,7 @@ namespace thesis_project::wrappers {
 
             // Forward pass
             std::vector<torch::jit::IValue> inputs;
-            inputs.push_back(batch);
+            inputs.emplace_back(batch);
 
             torch::Tensor output = model_.forward(inputs).toTensor();
 
@@ -192,7 +177,7 @@ namespace thesis_project::wrappers {
 
     cv::Mat LibTorchWrapper::tensorToMat(const torch::Tensor& tensor) {
         // Tensor shape should be [N, descriptor_size]
-        auto sizes = tensor.sizes();
+        const auto sizes = tensor.sizes();
         if (sizes.size() != 2) {
             throw std::runtime_error("Expected 2D tensor [N, descriptor_size], got " +
                                      std::to_string(sizes.size()) + "D");

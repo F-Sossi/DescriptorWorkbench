@@ -1,6 +1,7 @@
 #include "src/core/config/YAMLConfigLoader.hpp"
 #include "src/core/descriptor/extractors/wrappers/DNNPatchWrapper.hpp"
 #include "src/core/descriptor/extractors/wrappers/PseudoDNNWrapper.hpp"
+#include "src/core/descriptor/extractors/CompositeDescriptorExtractor.hpp"
 #include "thesis_project/logging.hpp"
 #include "src/core/descriptor/factories/DescriptorFactory.hpp"
 // #include "thesis_project/keypoints/KeypointAttributeAdapter.hpp" // No longer needed with pure intersection sets
@@ -38,6 +39,89 @@ static void printUsage(const std::string& binaryName) {
     std::cout << "  -h, --help        Show this help message and exit" << std::endl;
     std::cout << "Example:" << std::endl;
     std::cout << "  " << binaryName << " ../config/experiments/sift_baseline.yaml" << std::endl;
+}
+
+/**
+ * @brief Resolve the keypoint set name to database ID for a descriptor
+ *
+ * Resolution priority:
+ * 1. Descriptor-level keypoint_set_name override
+ * 2. Composite descriptors: fall back to first component's keypoint_set_name (paired mode)
+ * 3. Primary experiment-level keypoint set (inheritance mode only)
+ *
+ * Throws when running in explicit assignment mode and no descriptor/component set is provided.
+ */
+static int resolveKeypointSetForLoading(
+    thesis_project::database::DatabaseManager* db,
+    const thesis_project::config::ExperimentConfig& yaml_config,
+    const thesis_project::config::ExperimentConfig::DescriptorConfig& desc_config
+) {
+    auto resolveByName = [&](const std::string& set_name,
+                             const std::string& context) -> int {
+        if (set_name.empty()) {
+            return -1;
+        }
+        if (!db || !db->isEnabled()) {
+            LOG_WARNING(context + " requires keypoint set '" + set_name +
+                        "' but database access is disabled");
+            return -1;
+        }
+
+        const int resolved_id = db->getKeypointSetId(set_name);
+        if (resolved_id < 0) {
+            throw std::runtime_error(
+                context + " references keypoint_set_name '" + set_name +
+                "' which does not exist in the database. " +
+                "Generate it first using keypoint_manager."
+            );
+        }
+
+        LOG_INFO(context + " loading keypoints from: " + set_name +
+                 " (ID=" + std::to_string(resolved_id) + ")");
+        return resolved_id;
+    };
+
+    if (!desc_config.keypoint_set_name.empty()) {
+        return resolveByName(desc_config.keypoint_set_name,
+                             "Descriptor '" + desc_config.name + "'");
+    }
+
+    // Composite descriptors with paired sets load keypoints from the first component
+    if (desc_config.type == thesis_project::DescriptorType::COMPOSITE &&
+        !desc_config.components.empty() &&
+        !desc_config.components.front().keypoint_set_name.empty()) {
+
+        LOG_INFO(
+            "Composite descriptor '" + desc_config.name +
+            "' will load scene keypoints from component[0] set '" +
+            desc_config.components.front().keypoint_set_name + "'"
+        );
+        return resolveByName(
+            desc_config.components.front().keypoint_set_name,
+            "Composite '" + desc_config.name + "'"
+        );
+    }
+
+    if (yaml_config.keypoints.assignment_mode == thesis_project::KeypointAssignmentMode::EXPLICIT_ONLY) {
+        throw std::runtime_error(
+            "Cannot resolve keypoint set for descriptor '" + desc_config.name + "': "
+            "keypoints.keypoint_set_name is configured for explicit assignment, "
+            "but neither the descriptor nor its components specify keypoint_set_name."
+        );
+    }
+
+    if (yaml_config.keypoints.params.keypoint_set_id >= 0) {
+        return yaml_config.keypoints.params.keypoint_set_id;
+    }
+
+    if (!yaml_config.keypoints.params.keypoint_set_name.empty()) {
+        return resolveByName(
+            yaml_config.keypoints.params.keypoint_set_name,
+            "Descriptor '" + desc_config.name + "'"
+        );
+    }
+
+    return -1;
 }
 
 using namespace thesis_project;
@@ -345,7 +429,7 @@ struct ImageRetrievalAccumulator {
     }
 
 private:
-    const ImageFeatures* findFeatures(const std::string& scene, const std::string& image) const {
+    [[nodiscard]] const ImageFeatures* findFeatures(const std::string& scene, const std::string& image) const {
         auto scene_it = feature_store_.find(scene);
         if (scene_it == feature_store_.end()) {
             return nullptr;
@@ -358,7 +442,7 @@ private:
         return &image_it->second;
     }
 
-    std::size_t totalCandidateCount() const {
+    [[nodiscard]] std::size_t totalCandidateCount() const {
         std::size_t count = 0;
         for (const auto& [scene, images] : feature_store_) {
             count += images.size();
@@ -715,15 +799,22 @@ static std::pair<::ExperimentMetrics, ThreadLocalProfiling> processSingleScene(
     auto computeDescriptors = [&](const cv::Mat& image,
                                   const std::vector<cv::KeyPoint>& keypoints,
                                   cv::Mat& descriptors,
-                                  const std::string& log_prefix) -> bool {
-        auto t0 = std::chrono::high_resolution_clock::now();
+                                  const std::string& scene_name,
+                                  const std::string& image_name) -> bool {
+        // Set database context for composite descriptors before extraction
+        if (const auto* composite_extractor = dynamic_cast<thesis_project::CompositeDescriptorExtractor*>(&ctx.extractor);
+            composite_extractor && composite_extractor->usesPairedKeypointSets()) {
+            thesis_project::CompositeDescriptorExtractor::setDatabaseContext(ctx.db_ptr, scene_name, image_name);
+        }
+
+        const auto t0 = std::chrono::high_resolution_clock::now();
         descriptors = experiment_helpers::computeDescriptorsWithPooling(
             image, keypoints, ctx.extractor, ctx.pooling, ctx.desc_config);
         if (descriptors.empty()) {
-            LOG_ERROR("Failed to compute descriptors for " + log_prefix);
+            LOG_ERROR("Failed to compute descriptors for " + scene_name + "/" + image_name);
             return false;
         }
-        auto t1 = std::chrono::high_resolution_clock::now();
+        const auto t1 = std::chrono::high_resolution_clock::now();
         prof.compute_ms += std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
         return true;
     };
@@ -753,7 +844,7 @@ static std::pair<::ExperimentMetrics, ThreadLocalProfiling> processSingleScene(
 
     auto maybeStoreVisualization = [&](const std::string& scene_name,
                                        const std::string& image_name,
-                                       int image_index,
+                                       const int image_index,
                                        const cv::Mat& image1,
                                        const cv::Mat& image2,
                                        const std::vector<cv::KeyPoint>& keypoints1,
@@ -814,7 +905,7 @@ static std::pair<::ExperimentMetrics, ThreadLocalProfiling> processSingleScene(
     }
 
     cv::Mat descriptors1;
-    if (!computeDescriptors(image1, keypoints1, descriptors1, scene_name + "/" + base_image_name)) {
+    if (!computeDescriptors(image1, keypoints1, descriptors1, scene_name, base_image_name)) {
         return {metrics, prof};
     }
 
@@ -853,7 +944,7 @@ static std::pair<::ExperimentMetrics, ThreadLocalProfiling> processSingleScene(
         }
 
         cv::Mat descriptors2;
-        if (!computeDescriptors(image2, keypoints2, descriptors2, scene_name + "/" + image_name)) {
+        if (!computeDescriptors(image2, keypoints2, descriptors2, scene_name, image_name)) {
             continue;
         }
 
@@ -924,6 +1015,7 @@ static ::ExperimentMetrics processDirectoryNew(
     const config::ExperimentConfig::DescriptorConfig& desc_config,
     thesis_project::database::DatabaseManager* db_ptr,
     int experiment_id,
+    int descriptor_keypoint_set_id,
     ProfilingSummary& profile
 ) {
     namespace fs = std::filesystem;
@@ -935,10 +1027,10 @@ static ::ExperimentMetrics processDirectoryNew(
             return ::ExperimentMetrics::createError("Invalid data folder: " + yaml_config.dataset.path);
         }
 
-        const int keypoint_set_id = yaml_config.keypoints.params.keypoint_set_id;
         const bool use_db_keypoints = db_ptr &&
             (yaml_config.keypoints.params.source == thesis_project::KeypointSource::HOMOGRAPHY_PROJECTION ||
-             yaml_config.keypoints.params.source == thesis_project::KeypointSource::INDEPENDENT_DETECTION);
+             yaml_config.keypoints.params.source == thesis_project::KeypointSource::INDEPENDENT_DETECTION ||
+             yaml_config.keypoints.params.source == thesis_project::KeypointSource::DATABASE);
 
         // Build extractor and pooling strategy for this descriptor (Schema v1)
         std::unique_ptr<IDescriptorExtractor> extractor;
@@ -968,6 +1060,62 @@ static ::ExperimentMetrics processDirectoryNew(
                 );
                 LOG_INFO("Lightweight CNN baseline created successfully");
             }
+        } else if (desc_config.type == thesis_project::DescriptorType::COMPOSITE) {
+            // Composite descriptor requires components
+            if (desc_config.components.empty()) {
+                throw std::runtime_error("composite descriptor requires components in YAML configuration");
+            }
+            if (desc_config.aggregation_method.empty()) {
+                throw std::runtime_error("composite descriptor requires aggregation method in YAML configuration");
+            }
+
+            LOG_INFO("Creating CompositeDescriptorExtractor with " +
+                     std::to_string(desc_config.components.size()) + " components, aggregation: " +
+                     desc_config.aggregation_method);
+
+            // Build component configs
+            std::vector<thesis_project::CompositeDescriptorExtractor::ComponentConfig> component_configs;
+            component_configs.reserve(desc_config.components.size());
+
+            for (const auto& comp_desc : desc_config.components) {
+                thesis_project::CompositeDescriptorExtractor::ComponentConfig comp_config;
+                comp_config.type = comp_desc.type;
+                comp_config.weight = comp_desc.weight;
+                comp_config.params = comp_desc.params;
+                comp_config.keypoint_set_name = comp_desc.keypoint_set_name;  // NEW: Pass component keypoint set
+                component_configs.push_back(comp_config);
+
+                std::string kp_info = comp_desc.keypoint_set_name.empty() ?
+                    "" : " (keypoint_set: " + comp_desc.keypoint_set_name + ")";
+                LOG_INFO("  Component: " + toString(comp_desc.type) +
+                         ", weight: " + std::to_string(comp_desc.weight) + kp_info);
+            }
+
+            // Parse aggregation method
+            auto aggregation = thesis_project::CompositeDescriptorExtractor::stringToAggregationMethod(
+                desc_config.aggregation_method);
+
+            // Parse output dimension mode (for channel_wise fusion)
+            auto output_mode = thesis_project::CompositeDescriptorExtractor::OutputDimensionMode::COLLAPSE_GRAY;  // Default: 128D
+            if (!desc_config.output_dimension.empty()) {
+                if (desc_config.output_dimension == "384") {
+                    output_mode = thesis_project::CompositeDescriptorExtractor::OutputDimensionMode::PRESERVE_RGB;
+                    LOG_INFO("  Output dimension: 384D (PRESERVE_RGB)");
+                } else if (desc_config.output_dimension == "128") {
+                    output_mode = thesis_project::CompositeDescriptorExtractor::OutputDimensionMode::COLLAPSE_GRAY;
+                    LOG_INFO("  Output dimension: 128D (COLLAPSE_GRAY)");
+                } else {
+                    LOG_WARNING("  Unknown output_dimension '" + desc_config.output_dimension + "', defaulting to 128D");
+                }
+            }
+
+            // Create composite extractor
+            extractor = std::make_unique<thesis_project::CompositeDescriptorExtractor>(
+                component_configs,
+                aggregation,
+                output_mode);
+
+            LOG_INFO("CompositeDescriptorExtractor created successfully: " + extractor->name());
         } else {
             extractor = thesis_project::factories::DescriptorFactory::create(desc_config.type);
         }
@@ -1028,7 +1176,7 @@ static ::ExperimentMetrics processDirectoryNew(
             *matcher,
             retrieval_ptr,
             use_db_keypoints,
-            keypoint_set_id,
+            descriptor_keypoint_set_id,
             store_descriptors,
             store_matches,
             store_visualizations,
@@ -1248,8 +1396,12 @@ int main(int argc, char** argv) {
             LOG_INFO("Database tracking disabled");
         }
 
-        // Resolve keypoint set name to ID for any source type that uses database keypoints
-        if (db.isEnabled() && !yaml_config.keypoints.params.keypoint_set_name.empty()) {
+        LOG_INFO("Keypoint assignment mode: " + toString(yaml_config.keypoints.assignment_mode));
+
+        // Resolve keypoint set name to ID for inheritance mode
+        if (db.isEnabled() &&
+            yaml_config.keypoints.assignment_mode == KeypointAssignmentMode::INHERIT_FROM_PRIMARY &&
+            !yaml_config.keypoints.params.keypoint_set_name.empty()) {
             int resolved_set_id = db.getKeypointSetId(yaml_config.keypoints.params.keypoint_set_name);
             if (resolved_set_id == -1) {
                 LOG_ERROR("Keypoint set '" + yaml_config.keypoints.params.keypoint_set_name + "' not found in database");
@@ -1257,6 +1409,11 @@ int main(int argc, char** argv) {
             }
             yaml_config.keypoints.params.keypoint_set_id = resolved_set_id;
             LOG_INFO("Using keypoint set '" + yaml_config.keypoints.params.keypoint_set_name + "' (id=" + std::to_string(resolved_set_id) + ") with source: " + toString(yaml_config.keypoints.params.source));
+        } else {
+            yaml_config.keypoints.params.keypoint_set_id = -1;
+            if (yaml_config.keypoints.assignment_mode == KeypointAssignmentMode::EXPLICIT_ONLY) {
+                LOG_INFO("Primary keypoint set disabled (explicit assignment mode)");
+            }
         }
 
         LOG_INFO("Experiment: " + yaml_config.experiment.name);
@@ -1270,6 +1427,12 @@ int main(int argc, char** argv) {
 
             LOG_INFO("Running experiment with descriptor: " + desc_config.name);
             const std::string execution_device = normalizeDeviceString(desc_config.params.device);
+
+            const int descriptor_keypoint_set_id = resolveKeypointSetForLoading(
+                db.isEnabled() ? &db : nullptr,
+                yaml_config,
+                desc_config
+            );
 
             auto start_time = std::chrono::high_resolution_clock::now();
             int experiment_id = -1;
@@ -1289,7 +1452,7 @@ int main(int argc, char** argv) {
                 dbConfig.parameters["execution_device"] = execution_device;
 
                 // Record keypoint tracking information
-                dbConfig.keypoint_set_id = yaml_config.keypoints.params.keypoint_set_id;
+                dbConfig.keypoint_set_id = descriptor_keypoint_set_id;
                 dbConfig.keypoint_source = toString(yaml_config.keypoints.params.source);
 
                 start_time = std::chrono::high_resolution_clock::now();
@@ -1303,6 +1466,7 @@ int main(int argc, char** argv) {
                 desc_config,
                 db.isEnabled() ? &db : nullptr,
                 experiment_id,
+                descriptor_keypoint_set_id,
                 profile);
             
             if (experiment_id != -1) {
@@ -1369,6 +1533,15 @@ int main(int argc, char** argv) {
                 results.total_pipeline_cpu_ms = profile.detect_ms + profile.compute_ms + profile.match_ms;
                 results.total_pipeline_gpu_ms = 0.0;
                 results.metadata["success"] = experiment_metrics.success ? "true" : "false";
+
+                // Log and store error message if experiment failed
+                if (!experiment_metrics.success && !experiment_metrics.error_message.empty()) {
+                    LOG_ERROR("Experiment failed for descriptor '" + desc_config.name + "': " + experiment_metrics.error_message);
+                    results.metadata["error_message"] = experiment_metrics.error_message;
+                    std::cerr << "\n[ERROR] Descriptor '" << desc_config.name << "' failed:\n"
+                              << experiment_metrics.error_message << "\n" << std::endl;
+                }
+
                 results.metadata["experiment_name"] = yaml_config.experiment.name;
                 results.metadata["execution_device"] = execution_device;
                 results.metadata["descriptor_dimension"] = std::to_string(profile.descriptor_dimension);

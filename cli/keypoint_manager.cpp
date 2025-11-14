@@ -941,21 +941,33 @@ int main(int argc, char** argv) {
         size_t skipped_images = 0;
         const auto intersection_start = std::chrono::steady_clock::now();
 
+        // Phase 0 profiling: Detailed timing breakdown
+        double total_fetch_time_ms = 0.0;
+        double total_search_time_ms = 0.0;
+        double total_write_time_ms = 0.0;
+
         for (const auto& scene : scenes_to_process) {
             auto images_a = db.getImagesForSet(source_a_info->id, scene);
             auto images_b = db.getImagesForSet(source_b_info->id, scene);
 
             std::unordered_set<std::string> image_lookup_b(images_b.begin(), images_b.end());
 
-            for (const auto& image : images_a) {
+            // Phase 2 optimization: Parallel processing of images within scene
+            #pragma omp parallel for schedule(dynamic) reduction(+:total_pairs,total_inserted_a,total_inserted_b,total_candidates_a,total_candidates_b,processed_images,skipped_images,total_fetch_time_ms,total_search_time_ms,total_write_time_ms)
+            for (size_t img_idx = 0; img_idx < images_a.size(); ++img_idx) {
+                const auto& image = images_a[img_idx];
                 if (!image_lookup_b.count(image)) {
                     ++skipped_images;
                     LOG_WARNING("⚠️  Skipping " + scene + "/" + image + " (missing in " + source_b_info->name + ")");
                     continue;
                 }
 
+                // Phase 0 profiling: Measure database fetch time
+                const auto fetch_start = std::chrono::steady_clock::now();
                 auto records_a = db.getLockedKeypointsWithIds(source_a_info->id, scene, image);
                 auto records_b = db.getLockedKeypointsWithIds(source_b_info->id, scene, image);
+                const auto fetch_end = std::chrono::steady_clock::now();
+                total_fetch_time_ms += std::chrono::duration<double, std::milli>(fetch_end - fetch_start).count();
 
                 if (records_a.empty() || records_b.empty()) {
                     ++skipped_images;
@@ -968,58 +980,118 @@ int main(int argc, char** argv) {
                 total_candidates_a += records_a.size();
                 total_candidates_b += records_b.size();
 
-                cv::Mat points_a(static_cast<int>(records_a.size()), 2, CV_32F);
-                cv::Mat points_b(static_cast<int>(records_b.size()), 2, CV_32F);
-
-                for (size_t i = 0; i < records_a.size(); ++i) {
-                    points_a.at<float>(static_cast<int>(i), 0) = static_cast<float>(records_a[i].keypoint.pt.x);
-                    points_a.at<float>(static_cast<int>(i), 1) = static_cast<float>(records_a[i].keypoint.pt.y);
-                }
-
-                for (size_t i = 0; i < records_b.size(); ++i) {
-                    points_b.at<float>(static_cast<int>(i), 0) = static_cast<float>(records_b[i].keypoint.pt.x);
-                    points_b.at<float>(static_cast<int>(i), 1) = static_cast<float>(records_b[i].keypoint.pt.y);
-                }
-
-                cv::flann::Index index_a(points_a, cv::flann::KDTreeIndexParams(4));
-                cv::flann::Index index_b(points_b, cv::flann::KDTreeIndexParams(4));
+                // Phase 0 profiling: Measure FLANN index build and search time
+                const auto search_start = std::chrono::steady_clock::now();
 
                 std::vector<std::pair<size_t, size_t>> matches;
                 matches.reserve(std::min(records_a.size(), records_b.size()));
 
-                std::vector<int> nn_index(1);
-                std::vector<float> nn_dist(1);
-                std::vector<int> reverse_index(1);
-                std::vector<float> reverse_dist(1);
-                std::vector<char> used_b(records_b.size(), 0);
+                // Phase 3 optimization: Use brute-force for small keypoint sets to avoid FLANN overhead
+                constexpr size_t BRUTE_FORCE_THRESHOLD = 64;
 
-                for (size_t a_idx = 0; a_idx < records_a.size(); ++a_idx) {
-                    cv::Mat query_a = points_a.row(static_cast<int>(a_idx));
-                    index_b.knnSearch(query_a, nn_index, nn_dist, 1, search_params);
+                if (const bool use_brute_force = (records_a.size() < BRUTE_FORCE_THRESHOLD || records_b.size() < BRUTE_FORCE_THRESHOLD)) {
+                    // Brute-force mutual nearest neighbor search
+                    std::vector<char> used_b(records_b.size(), 0);
 
-                    int b_idx = nn_index[0];
-                    if (b_idx < 0 || static_cast<size_t>(b_idx) >= records_b.size()) {
-                        continue;
+                    for (size_t a_idx = 0; a_idx < records_a.size(); ++a_idx) {
+                        const auto& pt_a = records_a[a_idx].keypoint.pt;
+
+                        // Find nearest in B
+                        int best_b_idx = -1;
+                        float best_dist_sq = tolerance_sq;
+
+                        for (size_t b_idx = 0; b_idx < records_b.size(); ++b_idx) {
+                            if (used_b[b_idx]) continue;
+
+                            const auto& pt_b = records_b[b_idx].keypoint.pt;
+                            float dx = pt_a.x - pt_b.x;
+                            float dy = pt_a.y - pt_b.y;
+
+                            if (float dist_sq = dx * dx + dy * dy; dist_sq < best_dist_sq) {
+                                best_dist_sq = dist_sq;
+                                best_b_idx = static_cast<int>(b_idx);
+                            }
+                        }
+
+                        if (best_b_idx < 0) continue;
+
+                        // Check mutual nearest neighbor
+                        const auto& pt_b = records_b[best_b_idx].keypoint.pt;
+                        float reverse_best_dist_sq = tolerance_sq;
+                        int reverse_best_idx = -1;
+
+                        for (size_t aa_idx = 0; aa_idx < records_a.size(); ++aa_idx) {
+                            const auto& pt_aa = records_a[aa_idx].keypoint.pt;
+                            float dx = pt_b.x - pt_aa.x;
+                            float dy = pt_b.y - pt_aa.y;
+                            float dist_sq = dx * dx + dy * dy;
+
+                            if (dist_sq < reverse_best_dist_sq) {
+                                reverse_best_dist_sq = dist_sq;
+                                reverse_best_idx = static_cast<int>(aa_idx);
+                            }
+                        }
+
+                        if (reverse_best_idx == static_cast<int>(a_idx)) {
+                            used_b[best_b_idx] = 1;
+                            matches.emplace_back(a_idx, static_cast<size_t>(best_b_idx));
+                        }
+                    }
+                } else {
+                    // FLANN-based search for larger keypoint sets
+                    cv::Mat points_a(static_cast<int>(records_a.size()), 2, CV_32F);
+                    cv::Mat points_b(static_cast<int>(records_b.size()), 2, CV_32F);
+
+                    for (size_t i = 0; i < records_a.size(); ++i) {
+                        points_a.at<float>(static_cast<int>(i), 0) = static_cast<float>(records_a[i].keypoint.pt.x);
+                        points_a.at<float>(static_cast<int>(i), 1) = static_cast<float>(records_a[i].keypoint.pt.y);
                     }
 
-                    if (nn_dist[0] > tolerance_sq) {
-                        continue;
+                    for (size_t i = 0; i < records_b.size(); ++i) {
+                        points_b.at<float>(static_cast<int>(i), 0) = static_cast<float>(records_b[i].keypoint.pt.x);
+                        points_b.at<float>(static_cast<int>(i), 1) = static_cast<float>(records_b[i].keypoint.pt.y);
                     }
 
-                    if (used_b[static_cast<size_t>(b_idx)]) {
-                        continue;
+                    cv::flann::Index index_a(points_a, cv::flann::KDTreeIndexParams(4));
+                    cv::flann::Index index_b(points_b, cv::flann::KDTreeIndexParams(4));
+
+                    std::vector<int> nn_index(1);
+                    std::vector<float> nn_dist(1);
+                    std::vector<int> reverse_index(1);
+                    std::vector<float> reverse_dist(1);
+                    std::vector<char> used_b(records_b.size(), 0);
+
+                    for (size_t a_idx = 0; a_idx < records_a.size(); ++a_idx) {
+                        cv::Mat query_a = points_a.row(static_cast<int>(a_idx));
+                        index_b.knnSearch(query_a, nn_index, nn_dist, 1, search_params);
+
+                        int b_idx = nn_index[0];
+                        if (b_idx < 0 || static_cast<size_t>(b_idx) >= records_b.size()) {
+                            continue;
+                        }
+
+                        if (nn_dist[0] > tolerance_sq) {
+                            continue;
+                        }
+
+                        if (used_b[static_cast<size_t>(b_idx)]) {
+                            continue;
+                        }
+
+                        cv::Mat query_b = points_b.row(b_idx);
+                        index_a.knnSearch(query_b, reverse_index, reverse_dist, 1, search_params);
+
+                        if (reverse_index[0] != static_cast<int>(a_idx) || reverse_dist[0] > tolerance_sq) {
+                            continue;
+                        }
+
+                        used_b[static_cast<size_t>(b_idx)] = 1;
+                        matches.emplace_back(a_idx, static_cast<size_t>(b_idx));
                     }
-
-                    cv::Mat query_b = points_b.row(b_idx);
-                    index_a.knnSearch(query_b, reverse_index, reverse_dist, 1, search_params);
-
-                    if (reverse_index[0] != static_cast<int>(a_idx) || reverse_dist[0] > tolerance_sq) {
-                        continue;
-                    }
-
-                    used_b[static_cast<size_t>(b_idx)] = 1;
-                    matches.emplace_back(a_idx, static_cast<size_t>(b_idx));
                 }
+
+                const auto search_end = std::chrono::steady_clock::now();
+                total_search_time_ms += std::chrono::duration<double, std::milli>(search_end - search_start).count();
 
                 if (matches.empty()) {
                     LOG_WARNING(scene + "/" + image + ": no mutually close keypoints within " + std::to_string(tolerance_px) + "px");
@@ -1028,29 +1100,41 @@ int main(int argc, char** argv) {
 
                 total_pairs += matches.size();
 
-                // Pure intersection: just insert spatially matched keypoints with native parameters
+                // Phase 1 optimization: Accumulate keypoints for batched insert
+                std::vector<cv::KeyPoint> keypoints_a;
+                std::vector<cv::KeyPoint> keypoints_b;
+                keypoints_a.reserve(matches.size());
+                keypoints_b.reserve(matches.size());
 
-                // Insert spatially matched keypoints with their native detector parameters
                 for (const auto& match : matches) {
-                    const auto& record_a = records_a[match.first];
-                    const auto& record_b = records_b[match.second];
+                    keypoints_a.push_back(records_a[match.first].keypoint);
+                    keypoints_b.push_back(records_b[match.second].keypoint);
+                }
 
-                    // Insert keypoint A with its native parameters from source set A
-                    int new_a_id = db.insertLockedKeypoint(output_a_id, scene, image, record_a.keypoint, true);
-                    if (new_a_id >= 0) {
-                        ++total_inserted_a;
+                // Phase 0 profiling: Measure database write time
+                const auto write_start = std::chrono::steady_clock::now();
+
+                // Phase 2 optimization: Thread-safe database writes
+                #pragma omp critical(db_write)
+                {
+                    // Phase 1 optimization: Batched insert with single transaction per image
+                    int inserted_a = db.insertLockedKeypointsBatch(output_a_id, scene, image, keypoints_a, true);
+                    if (inserted_a > 0) {
+                        total_inserted_a += inserted_a;
                     } else {
-                        LOG_ERROR("❌ Failed to insert keypoint for " + scene + "/" + image + " into " + output_a_name);
+                        LOG_ERROR("❌ Failed to batch insert keypoints for " + scene + "/" + image + " into " + output_a_name);
                     }
 
-                    // Insert keypoint B with its native parameters from source set B
-                    int new_b_id = db.insertLockedKeypoint(output_b_id, scene, image, record_b.keypoint, true);
-                    if (new_b_id >= 0) {
-                        ++total_inserted_b;
+                    int inserted_b = db.insertLockedKeypointsBatch(output_b_id, scene, image, keypoints_b, true);
+                    if (inserted_b > 0) {
+                        total_inserted_b += inserted_b;
                     } else {
-                        LOG_ERROR("❌ Failed to insert keypoint for " + scene + "/" + image + " into " + output_b_name);
+                        LOG_ERROR("❌ Failed to batch insert keypoints for " + scene + "/" + image + " into " + output_b_name);
                     }
                 }
+
+                const auto write_end = std::chrono::steady_clock::now();
+                total_write_time_ms += std::chrono::duration<double, std::milli>(write_end - write_start).count();
 
                 // Pure intersection sets use native keypoint parameters - no attribute copying needed
             }
@@ -1076,6 +1160,10 @@ int main(int argc, char** argv) {
         stats_a.source_a_keypoints = static_cast<int>(total_candidates_a);
         stats_a.source_b_keypoints = static_cast<int>(total_candidates_b);
         stats_a.keypoint_reduction_pct = reduction_a;
+        // Phase 0 profiling: Record detailed timing breakdown
+        stats_a.fetch_time_ms = total_fetch_time_ms;
+        stats_a.search_time_ms = total_search_time_ms;
+        stats_a.write_time_ms = total_write_time_ms;
 
         thesis_project::database::KeypointSetStats stats_b = stats_a;
         stats_b.keypoint_set_id = output_b_id;
@@ -1086,10 +1174,10 @@ int main(int argc, char** argv) {
         stats_b.keypoint_reduction_pct = reduction_b;
 
         if (!db.updateKeypointSetStats(stats_a)) {
-            LOG_WARNING("⚠️  Failed to persist stats for set " + output_a_name);
+            LOG_WARNING("Failed to persist stats for set " + output_a_name);
         }
         if (!db.updateKeypointSetStats(stats_b)) {
-            LOG_WARNING("⚠️  Failed to persist stats for set " + output_b_name);
+            LOG_WARNING("Failed to persist stats for set " + output_b_name);
         }
 
         LOG_INFO("Intersection complete within " + std::to_string(tolerance_px) + "px");
@@ -1118,6 +1206,22 @@ int main(int argc, char** argv) {
                              << "📉 Reduction → " << output_a_name << ": " << reduction_a << "%"
                              << ", " << output_b_name << ": " << reduction_b << "%";
             LOG_INFO(reduction_stream.str());
+        }
+
+        // Phase 0 profiling: Display detailed timing breakdown
+        {
+            std::ostringstream profiling_stream;
+            profiling_stream << std::fixed << std::setprecision(2)
+                             << "\n⏱️  Detailed Timing Breakdown:\n"
+                             << "   Database Fetch:  " << total_fetch_time_ms << " ms ("
+                             << (total_fetch_time_ms / intersection_time_ms * 100.0) << "%)\n"
+                             << "   FLANN Search:    " << total_search_time_ms << " ms ("
+                             << (total_search_time_ms / intersection_time_ms * 100.0) << "%)\n"
+                             << "   Database Write:  " << total_write_time_ms << " ms ("
+                             << (total_write_time_ms / intersection_time_ms * 100.0) << "%)\n"
+                             << "   Total:           " << intersection_time_ms << " ms\n"
+                             << "   Throughput:      " << (processed_images / (intersection_time_ms / 1000.0)) << " images/sec";
+            LOG_INFO(profiling_stream.str());
         }
 
     } else if (command == "generate-non-overlapping") {
@@ -1183,7 +1287,7 @@ int main(int argc, char** argv) {
                 if (!fs::is_directory(scene_entry)) continue;
                 
                 std::string scene_name = scene_entry.path().filename().string();
-                LOG_INFO("📁 Processing scene: " + scene_name);
+                LOG_INFO("Processing scene: " + scene_name);
                 
                 // Process each image independently (1.ppm to 6.ppm)
                 for (int i = 1; i <= 6; ++i) {

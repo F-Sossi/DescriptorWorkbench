@@ -1,6 +1,7 @@
 #include "ExperimentHelpers.hpp"
 
 #include "src/core/metrics/TrueAveragePrecision.hpp"
+#include "thesis_project/logging.hpp"
 #include <algorithm>
 #include <limits>
 
@@ -19,7 +20,8 @@ cv::Mat computeDescriptorsWithPooling(
 
     try {
         return poolingStrategy.computeDescriptors(image, keypoints, extractor, descCfg);
-    } catch (const std::exception&) {
+    } catch (const std::exception& e) {
+        LOG_ERROR("computeDescriptorsWithPooling failed: " + std::string(e.what()));
         return cv::Mat();
     }
 }
