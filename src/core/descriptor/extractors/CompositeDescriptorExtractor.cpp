@@ -105,10 +105,7 @@ namespace thesis_project {
         for (size_t i = 0; i < extractors_.size(); ++i) {
             try {
                 // Use component-specific params if provided, otherwise use global params
-                const DescriptorParams& comp_params =
-                    components_[i].params.pooling != PoolingStrategy::NONE
-                    ? components_[i].params
-                    : params;
+                const DescriptorParams& comp_params = components_[i].params;
 
                 // Determine which keypoints to use for this component
                 std::vector<cv::KeyPoint> component_keypoints;

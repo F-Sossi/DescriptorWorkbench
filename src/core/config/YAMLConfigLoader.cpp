@@ -280,6 +280,10 @@ namespace thesis_project::config {
                     stringToRootingStage(desc_node["rooting_stage"].as<std::string>());
             }
 
+            if (desc_node["extended"]) {
+                desc_config.params.surf_extended = desc_node["extended"].as<bool>();
+            }
+
             bool use_color_specified = false;
             bool use_color_value = false;
             if (desc_node["use_color"]) {
@@ -407,6 +411,11 @@ namespace thesis_project::config {
                         comp_use_color_specified = true;
                         comp_use_color_value = comp_node["use_color"].as<bool>();
                         comp_config.params.use_color = comp_use_color_value;
+                    }
+
+                    // SURF extended flag (128D descriptors)
+                    if (comp_node["extended"]) {
+                        comp_config.params.surf_extended = comp_node["extended"].as<bool>();
                     }
                     // Add more param parsing here if needed
 
@@ -860,6 +869,9 @@ namespace thesis_project::config {
             }
             out << YAML::Key << "normalize_after_pooling" << YAML::Value << desc.params.normalize_after_pooling;
             out << YAML::Key << "use_color" << YAML::Value << desc.params.use_color;
+            if (desc.params.surf_extended) {
+                out << YAML::Key << "extended" << YAML::Value << true;
+            }
             if (desc.params.device != "auto") {
                 out << YAML::Key << "device" << YAML::Value << desc.params.device;
             }

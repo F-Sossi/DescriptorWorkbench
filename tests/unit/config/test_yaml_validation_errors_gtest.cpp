@@ -3,6 +3,7 @@
 #include "thesis_project/types.hpp"
 
 using thesis_project::config::YAMLConfigLoader;
+using thesis_project::DescriptorType;
 
 TEST(YAMLValidationErrors, MissingDatasetPathUsesDefault) {
     const char* yaml = R"YAML(
@@ -101,6 +102,51 @@ descriptors:
         auto cfg = YAMLConfigLoader::loadFromString(yaml);
         EXPECT_EQ(cfg.keypoints.assignment_mode, thesis_project::KeypointAssignmentMode::EXPLICIT_ONLY);
     });
+}
+
+TEST(YAMLValidationErrors, SurfExtendedFlagParsedOnDescriptor) {
+    const char* yaml = R"YAML(
+dataset: { type: hpatches, path: data/hp }
+descriptors:
+  - name: surf_ext
+    type: surf
+    pooling: none
+    extended: true
+)YAML";
+    auto cfg = YAMLConfigLoader::loadFromString(yaml);
+    ASSERT_EQ(cfg.descriptors.size(), 1);
+    EXPECT_EQ(cfg.descriptors[0].type, DescriptorType::SURF);
+    EXPECT_TRUE(cfg.descriptors[0].params.surf_extended);
+}
+
+TEST(YAMLValidationErrors, SurfExtendedFlagParsedOnCompositeComponent) {
+    const char* yaml = R"YAML(
+dataset: { type: hpatches, path: data/hp }
+keypoints:
+  generator: sift
+  source: database
+  keypoint_set_name: none
+  alternative_keypoints:
+    - keypoint_set_name: a
+    - keypoint_set_name: b
+descriptors:
+  - name: composite_surf_ext
+    type: composite
+    aggregation: weighted_avg
+    components:
+      - descriptor: dspsift_v2
+        keypoint_set_name: a
+        weight: 0.5
+      - descriptor: surf
+        keypoint_set_name: b
+        weight: 0.5
+        extended: true
+)YAML";
+    auto cfg = YAMLConfigLoader::loadFromString(yaml);
+    ASSERT_EQ(cfg.descriptors.size(), 1);
+    ASSERT_EQ(cfg.descriptors[0].components.size(), 2);
+    EXPECT_EQ(cfg.descriptors[0].components[1].type, DescriptorType::SURF);
+    EXPECT_TRUE(cfg.descriptors[0].components[1].params.surf_extended);
 }
 
 TEST(YAMLValidationErrors, ExplicitAssignmentRequiresCompositeComponentSets) {

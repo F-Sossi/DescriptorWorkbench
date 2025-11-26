@@ -7,6 +7,7 @@ SURFWrapper::SURFWrapper() {
     // Create SURF with default parameters
     // hessianThreshold=400, nOctaves=4, nOctaveLayers=3, extended=false, upright=false
     surf_ = cv::xfeatures2d::SURF::create();
+    extended_ = surf_ ? surf_->getExtended() : false;
 }
 
 cv::Mat SURFWrapper::extract(const cv::Mat& image,
@@ -14,6 +15,18 @@ cv::Mat SURFWrapper::extract(const cv::Mat& image,
                             const DescriptorParams& params) {
     cv::Mat descriptors;
     std::vector<cv::KeyPoint> mutable_keypoints = keypoints;
+
+    // Reconfigure SURF if extended flag changed (64D vs 128D descriptors)
+    if (const bool want_extended = params.surf_extended; !surf_ || want_extended != extended_) {
+        surf_ = cv::xfeatures2d::SURF::create(
+            400.0,   // hessianThreshold (default)
+            4,       // nOctaves (default)
+            3,       // nOctaveLayers (default)
+            want_extended,
+            false    // upright
+        );
+        extended_ = want_extended;
+    }
 
     // SURF is similar to SIFT and should work well with SIFT keypoints
     // However, we'll apply some basic validation to ensure compatibility
