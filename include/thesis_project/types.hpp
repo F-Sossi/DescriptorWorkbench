@@ -382,6 +382,9 @@ namespace thesis_project {
         bool vgg_use_scale_orientation = true; // Use keypoint scale and orientation
         float vgg_scale_factor = 6.25f; // Sampling window scale (6.25 for KAZE/SURF, 6.75 for SIFT)
         bool vgg_dsc_normalize = false; // Normalize descriptor after extraction
+
+        // SURF descriptor params
+        bool surf_extended = false;   // Use 128D SURF (extended=true) instead of default 64D
     };
 
     struct ImageRetrievalParams {

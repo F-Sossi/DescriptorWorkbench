@@ -159,6 +159,8 @@ descriptors:
 | `"libtorch_sosnet"` | SOSNet CNN | ✅ | CPU/GPU |
 | `"dnn_patch"` | ONNX-based CNN | ✅ | CPU |
 
+**SURF extended (128D)**: add `extended: true` to a SURF descriptor (or composite component) to use 128-dimensional SURF instead of the 64D default. Useful for dimension-safe fusion (e.g., weighted_avg with SIFT/DSPSIFT at 128D).
+
 #### Pooling Strategies
 
 ##### No Pooling (Default)
@@ -219,6 +221,12 @@ device: "cuda"                       # Requires CUDA-capable GPU
     support_multiplier: 1.0          # Patch scale multiplier
     rotate_to_upright: true          # Canonical orientation
     per_patch_standardize: true      # Z-score normalization
+
+#### Composite Aggregation Dimensionality Rules
+
+- `weighted_avg` / `average` / `max` / `min`: **All components must have the same descriptor dimension.** For SURF+SIFT/DSPSIFT fusion, set `extended: true` on SURF to reach 128D or use `concatenate` instead.
+- `concatenate`: Safe with mixed dimensions; output dim is the sum of component dims.
+- `channel_wise`: Special-case for 128D grayscale + 384D RGB (see composite color fusion examples).
 ```
 
 ### 5. Evaluation Section
