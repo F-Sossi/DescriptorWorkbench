@@ -17,41 +17,55 @@ namespace thesis_project::cli::keypoint_commands {
 
 int generateKorniaKeynet(thesis_project::database::DatabaseManager& db, int argc, char** argv) {
     if (argc < 3) {
-        std::cerr << "Usage: " << argv[0] << " generate-kornia-keynet <data_folder> [set_name] [max_kp] [device] [--mode independent|projected] [--overwrite]" << std::endl;
-        std::cerr << "  Example: " << argv[0] << " generate-kornia-keynet ../data keynet_reference 2000 auto --overwrite" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " generate-kornia-keynet <data_folder> [set_name] [--max-features N] [--device cpu|cuda|auto] [--mode independent|projected] [--overwrite]" << std::endl;
+        std::cerr << "  Example: " << argv[0] << " generate-kornia-keynet ../data keynet_reference --max-features 8000 --device auto --overwrite" << std::endl;
         return 1;
     }
 
     std::string data_folder = argv[2];
-    std::string set_name = (argc >= 4 && std::string(argv[3]).rfind("--", 0) != 0)
-        ? argv[3]
-        : ("keynet_kornia_" + std::to_string(std::time(nullptr)));
+    int arg_index = 3;
 
-    int arg_index = 4;
+    std::string set_name;
+    if (arg_index < argc && std::string(argv[arg_index]).rfind("--", 0) != 0) {
+        set_name = argv[arg_index];
+        ++arg_index;
+    } else {
+        set_name = "keynet_kornia_" + std::to_string(std::time(nullptr));
+    }
+
     int max_kp = 2000;
-    if (arg_index < argc && std::string(argv[arg_index]).rfind("--", 0) != 0) {
-        max_kp = std::stoi(argv[arg_index]);
-        ++arg_index;
-    }
-
     std::string device_arg = "auto";
-    if (arg_index < argc && std::string(argv[arg_index]).rfind("--", 0) != 0) {
-        device_arg = argv[arg_index];
-        ++arg_index;
-    }
-
     std::string mode_arg = "independent";
     bool overwrite = false;
+
     while (arg_index < argc) {
-        std::string extra = argv[arg_index];
-        if (extra == "--overwrite") {
-            overwrite = true;
-            ++arg_index;
-        } else if (extra == "--mode" && (arg_index + 1) < argc) {
+        std::string arg = argv[arg_index];
+        if (arg == "--max-features") {
+            if (arg_index + 1 >= argc) {
+                std::cerr << "Missing value for --max-features" << std::endl;
+                return 1;
+            }
+            max_kp = std::stoi(argv[arg_index + 1]);
+            arg_index += 2;
+        } else if (arg == "--device") {
+            if (arg_index + 1 >= argc) {
+                std::cerr << "Missing value for --device" << std::endl;
+                return 1;
+            }
+            device_arg = argv[arg_index + 1];
+            arg_index += 2;
+        } else if (arg == "--mode") {
+            if (arg_index + 1 >= argc) {
+                std::cerr << "Missing value for --mode" << std::endl;
+                return 1;
+            }
             mode_arg = argv[arg_index + 1];
             arg_index += 2;
+        } else if (arg == "--overwrite") {
+            overwrite = true;
+            ++arg_index;
         } else {
-            std::cerr << "Unknown option for generate-kornia-keynet: " << extra << std::endl;
+            std::cerr << "Unknown option for generate-kornia-keynet: " << arg << std::endl;
             return 1;
         }
     }
