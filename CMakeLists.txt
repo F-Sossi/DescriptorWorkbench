@@ -288,9 +288,21 @@ function(create_test_if_exists test_source test_name)
                 target_link_libraries(${test_name} keypoints)
                 target_include_directories(${test_name} PRIVATE descriptor_compare keypoints)
             endif()
-        elseif(${test_name} MATCHES "interface|headers")
+elseif(${test_name} MATCHES "interface|headers")
             target_link_libraries(${test_name} keypoints)
             target_include_directories(${test_name} PRIVATE keypoints descriptor_compare)
+        elseif(${test_name} MATCHES "experiment_runner_cli")
+            target_sources(${test_name} PRIVATE
+                cli/experiment_runner/cli_args.cpp
+                cli/experiment_runner/helpers.cpp
+            )
+            target_include_directories(${test_name} PRIVATE
+                ${CMAKE_SOURCE_DIR}
+                ${CMAKE_SOURCE_DIR}/include
+                ${CMAKE_SOURCE_DIR}/src
+                ${OpenCV_INCLUDE_DIRS}
+            )
+            target_link_libraries(${test_name} ${OpenCV_LIBRARIES})
         endif()
 
         # Add to CTest
@@ -580,11 +592,77 @@ create_gtest_if_exists("tests/unit/database/test_database_standalone_gtest.cpp" 
 
 # Google Test utility tests
 create_gtest_if_exists("tests/unit/utils/test_python_environment_gtest.cpp" "test_python_environment_gtest")
+create_gtest_if_exists("tests/unit/cli/test_experiment_runner_cli_gtest.cpp" "test_experiment_runner_cli_gtest")
+create_gtest_if_exists("tests/unit/cli/test_experiment_runner_processing_gtest.cpp" "test_experiment_runner_processing_gtest")
 if(TARGET test_python_environment_gtest)
     target_sources(test_python_environment_gtest PRIVATE
         src/core/utils/PythonEnvironment.cpp
     )
     target_include_directories(test_python_environment_gtest PRIVATE src include ${CMAKE_SOURCE_DIR})
+endif()
+
+if(TARGET test_experiment_runner_cli_gtest)
+    target_sources(test_experiment_runner_cli_gtest PRIVATE
+        cli/experiment_runner/cli_args.cpp
+        cli/experiment_runner/helpers.cpp
+        src/core/experiment/ExperimentHelpers.cpp
+        src/core/metrics/TrueAveragePrecision.cpp
+    )
+    target_include_directories(test_experiment_runner_cli_gtest PRIVATE
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/src
+        ${OpenCV_INCLUDE_DIRS}
+    )
+    target_link_libraries(test_experiment_runner_cli_gtest ${OpenCV_LIBRARIES})
+endif()
+
+if(TARGET test_experiment_runner_processing_gtest)
+    target_sources(test_experiment_runner_processing_gtest PRIVATE
+        cli/experiment_runner/processing.cpp
+        cli/experiment_runner/helpers.cpp
+        src/core/experiment/ExperimentHelpers.cpp
+        src/core/pooling/NoPooling.cpp
+        src/core/pooling/DomainSizePooling.cpp
+        src/core/pooling/StackingPooling.cpp
+        src/core/pooling/PoolingFactory.cpp
+        src/core/matching/BruteForceMatching.cpp
+        src/core/matching/FLANNMatching.cpp
+        src/core/matching/RatioTestMatching.cpp
+        src/core/matching/MatchingFactory.cpp
+        src/core/metrics/TrueAveragePrecision.cpp
+        src/core/metrics/KeypointVerification.cpp
+        src/core/descriptor/factories/DescriptorFactory.cpp
+        src/core/descriptor/extractors/CompositeDescriptorExtractor.cpp
+        src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/RGBSIFTChannelAverageWrapper.cpp
+        src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
+        src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/DNNPatchWrapper.cpp
+        src/core/descriptor/extractors/wrappers/PseudoDNNWrapper.cpp
+        src/core/descriptor/extractors/wrappers/VGGWrapper.cpp
+        src/core/descriptor/extractors/wrappers/ORBWrapper.cpp
+        src/core/descriptor/extractors/wrappers/SURFWrapper.cpp
+        src/core/descriptor/extractors/wrappers/DSPRGBSIFTWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/DSPHoWHWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/DSPHoNCWrapperV2.cpp
+        src/core/utils/PythonEnvironment.cpp
+    )
+    target_include_directories(test_experiment_runner_processing_gtest PRIVATE
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/src
+        ${OpenCV_INCLUDE_DIRS}
+    )
+    target_link_libraries(test_experiment_runner_processing_gtest
+        ${OpenCV_LIBRARIES}
+        keypoints
+        thesis_database
+        Boost::system
+        Boost::filesystem
+    )
 endif()
 
 # Custom targets for running test groups
@@ -705,6 +783,13 @@ if(BUILD_EXPERIMENT_CLI)
     if(EXISTS "${CMAKE_SOURCE_DIR}/cli/experiment_runner.cpp")
         add_executable(experiment_runner
                        cli/experiment_runner.cpp
+                       cli/experiment_runner/helpers.cpp
+                       cli/experiment_runner/bootstrap.cpp
+                       cli/experiment_runner/cli_args.cpp
+                       cli/experiment_runner/keypoint_resolution.cpp
+                       cli/experiment_runner/descriptor_run.cpp
+                       cli/experiment_runner/processing.cpp
+                       cli/experiment_runner/result_recording.cpp
                        src/core/config/YAMLConfigLoader.cpp
                        src/core/pooling/NoPooling.cpp
                        src/core/pooling/DomainSizePooling.cpp
@@ -829,6 +914,13 @@ if(BUILD_KEYPOINT_MANAGER)
     if(EXISTS "${CMAKE_SOURCE_DIR}/cli/keypoint_manager.cpp")
         add_executable(keypoint_manager
                        cli/keypoint_manager.cpp
+                       cli/keypoint_manager/commands/list_commands.cpp
+                       cli/keypoint_manager/commands/import_export.cpp
+                       cli/keypoint_manager/commands/generation_basic.cpp
+                       cli/keypoint_manager/commands/generation_detector.cpp
+                       cli/keypoint_manager/commands/subset_commands.cpp
+                       cli/keypoint_manager/commands/intersection_commands.cpp
+                       cli/keypoint_manager/commands/non_overlapping.cpp
                        src/core/keypoints/locked_in_keypoints.cpp
                        src/core/keypoints/KeypointGeneratorFactory.cpp
                        src/core/keypoints/KeypointAttributeAdapter.cpp

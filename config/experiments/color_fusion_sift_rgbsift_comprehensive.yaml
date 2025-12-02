@@ -1,0 +1,347 @@
+# Color Fusion Evaluation: SIFT + RGBSIFT Comprehensive Study
+#
+# This experiment tests whether adding color information (RGBSIFT) to grayscale SIFT
+# improves descriptor performance, following the scale-controlled methodology from
+# the HardNet fusion investigation.
+#
+# Research Questions:
+# 1. Does RGBSIFT outperform grayscale SIFT?
+# 2. Which fusion strategy works best for color+grayscale?
+# 3. Is 128D collapsed output or 384D preserved RGB better for matching?
+# 4. Does concatenation (512D) outperform other fusion methods?
+#
+# Experimental Design:
+# - Phase 1: Baselines (SIFT, RGBSIFT, RGBSIFT_CHANNEL_AVG)
+# - Phase 2: Scale-controlled baselines (top-N by size)
+# - Phase 3: Fusion strategies on main keypoint set
+#   - channel_wise (128D output) - Fuse SIFT with RGB channels, collapse to grayscale
+#   - channel_wise (384D output) - Fuse SIFT with RGB channels, preserve color
+#   - concatenate (512D) - SIFT (128D) + RGBSIFT (384D)
+#   - average (128D) - SIFT + RGBSIFT_CHANNEL_AVG
+#   - weighted_avg (128D) - SIFT + RGBSIFT_CHANNEL_AVG with weights
+#   - max (128D) - Element-wise max of SIFT + RGBSIFT_CHANNEL_AVG
+#
+# Expected Runtime: ~12-15 hours for all 15+ descriptor configurations
+# Database: Results stored in experiments.db with full metrics
+
+experiment:
+  name: "color_fusion_sift_rgbsift_comprehensive"
+  description: "Comprehensive evaluation of SIFT+RGBSIFT fusion with multiple aggregation strategies and scale control"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # Empty = all 116 scenes (696 images)
+
+keypoints:
+  source: "database"
+  keypoint_set_name: "independent"  # Explicit assignment mode
+  use_locked_keypoints: true
+
+  alternative_keypoints:
+    # ===== PHASE 1: UNCONTROLLED BASELINES =====
+    - keypoint_set_name: "sift_8000"
+      description: "Full SIFT keypoints (2.5M keypoints, avg 4.45px) - uncontrolled scale"
+
+    # ===== PHASE 2: SCALE-CONTROLLED BASELINES =====
+    - keypoint_set_name: "sift_scale_matched_6px"
+      description: "SIFT top 25% by size (645K keypoints, avg 10.03px) - scale-controlled"
+
+    # ===== PHASE 3: INTERSECTION SETS (if we want to compare with intersection) =====
+    - keypoint_set_name: "keynet_sift_8k_b"
+      description: "SIFT positions from SIFT-KeyNet intersection (565K, avg 3.51px)"
+
+descriptors:
+  # ===================================================================
+  # PHASE 1: BASELINES - Individual Descriptors (Uncontrolled)
+  # Purpose: Establish baseline performance for grayscale and color descriptors
+  # ===================================================================
+
+  - name: "phase1_sift_baseline"
+    type: "sift"
+    keypoint_set_name: "sift_8000"
+    pooling: "none"
+    # Expected: ~42.6% MAP (known from investigation)
+
+  - name: "phase1_rgbsift_full"
+    type: "rgbsift"
+    keypoint_set_name: "sift_8000"
+    pooling: "none"
+    use_color: true
+    # Expected: UNKNOWN - test if full 384D color helps
+    # Hypothesis: May be worse due to curse of dimensionality
+
+  - name: "phase1_rgbsift_channel_avg"
+    type: "rgbsift_channel_avg"
+    keypoint_set_name: "sift_8000"
+    pooling: "none"
+    use_color: true
+    # Expected: UNKNOWN - test if averaged 128D color helps
+    # Hypothesis: Should be close to SIFT if color provides minimal benefit
+
+  # ===================================================================
+  # PHASE 2: SCALE-CONTROLLED BASELINES
+  # Purpose: Test if scale filtering improves color descriptors like it does for SIFT
+  # ===================================================================
+
+  - name: "phase2_sift_scale_controlled"
+    type: "sift"
+    keypoint_set_name: "sift_scale_matched_6px"
+    pooling: "none"
+    # Expected: ~63.9% MAP (known from top_size experiment)
+
+  - name: "phase2_rgbsift_full_scale_controlled"
+    type: "rgbsift"
+    keypoint_set_name: "sift_scale_matched_6px"
+    pooling: "none"
+    use_color: true
+    # Expected: CRITICAL - does scale filtering help RGBSIFT?
+
+  - name: "phase2_rgbsift_channel_avg_scale_controlled"
+    type: "rgbsift_channel_avg"
+    keypoint_set_name: "sift_scale_matched_6px"
+    pooling: "none"
+    use_color: true
+    # Expected: Test if 128D color benefits from scale control
+
+  # ===================================================================
+  # PHASE 3: FUSION STRATEGIES - Main Keypoint Set (sift_8000)
+  # Purpose: Test all valid fusion combinations to find best strategy
+  # ===================================================================
+
+  # Strategy 1: Channel-wise fusion → 128D (collapsed to grayscale)
+  # Fuses SIFT with each RGB channel separately, then averages back to 128D
+  - name: "phase3_fusion_channelwise_128d"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "sift"
+        weight: 0.5
+      - descriptor: "rgbsift"
+        use_color: true
+        weight: 0.5
+    aggregation: "channel_wise"
+    output_dimension: "128"
+    # Expected: Test if channel-wise fusion with grayscale output helps
+
+  # Strategy 2: Channel-wise fusion → 384D (preserve RGB)
+  # Fuses SIFT with each RGB channel separately, outputs 3x128D
+  - name: "phase3_fusion_channelwise_384d"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "sift"
+        weight: 0.5
+      - descriptor: "rgbsift"
+        use_color: true
+        weight: 0.5
+    aggregation: "channel_wise"
+    output_dimension: "384"
+    # Expected: Test if preserving color information helps matching
+
+  # Strategy 3: Concatenation → 512D (SIFT 128D + RGBSIFT 384D)
+  # High-dimensional descriptor combining both representations
+  - name: "phase3_fusion_concatenate_512d"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "sift"
+      - descriptor: "rgbsift"
+        use_color: true
+    aggregation: "concatenate"
+    # Expected: Test if high-dimensional descriptor improves robustness
+
+  # Strategy 4: Simple average → 128D (SIFT + RGBSIFT_CHANNEL_AVG)
+  # Average of grayscale and color-averaged descriptors
+  - name: "phase3_fusion_average_128d"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "sift"
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+    aggregation: "average"
+    # Expected: Test if simple averaging helps
+
+  # Strategy 5: 4-Way Equal Averaging → 128D (RECOMMENDED)
+  # Treats all 4 channels equally: SIFT_gray (25%) + R (25%) + G (25%) + B (25%)
+  # See FOUR_WAY_AVERAGING_EXPLAINED.md for mathematical proof
+  - name: "phase3_fusion_4way_equal"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "sift"
+        weight: 0.25          # Grayscale: 25%
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+        weight: 0.75          # RGB: 75% = 25% per channel after internal averaging
+    aggregation: "weighted_avg"
+    # Expected: Better than 50/50 by treating all channels equally
+
+  # Strategy 6: Traditional 50/50 Averaging → 128D (for comparison)
+  # Gives grayscale 3x more weight per channel than each color channel
+  - name: "phase3_fusion_traditional_5050"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "sift"
+        weight: 0.5           # Grayscale: 50%
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+        weight: 0.5           # RGB: 50% = 16.67% per channel
+    aggregation: "weighted_avg"
+    # Expected: Compare to 4-way equal to see if equal weighting helps
+
+  # Strategy 7: Element-wise max → 128D
+  # Take maximum response across grayscale and color
+  - name: "phase3_fusion_max_128d"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "sift"
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+    aggregation: "max"
+    # Expected: Test if max pooling combines best of both
+
+  # ===================================================================
+  # PHASE 4: SCALE-CONTROLLED FUSION
+  # Purpose: Test if fusion benefits persist with scale control
+  # CRITICAL: Fair comparison against phase2 baselines
+  # ===================================================================
+
+  - name: "phase4_fusion_channelwise_128d_scaled"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "sift"
+        weight: 0.5
+      - descriptor: "rgbsift"
+        use_color: true
+        weight: 0.5
+    aggregation: "channel_wise"
+    output_dimension: "128"
+    # CRITICAL: Compare to phase2_sift_scale_controlled (63.9% MAP)
+
+  - name: "phase4_fusion_channelwise_384d_scaled"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "sift"
+        weight: 0.5
+      - descriptor: "rgbsift"
+        use_color: true
+        weight: 0.5
+    aggregation: "channel_wise"
+    output_dimension: "384"
+    # CRITICAL: Test if RGB preservation helps with scale control
+
+  - name: "phase4_fusion_concatenate_512d_scaled"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "sift"
+      - descriptor: "rgbsift"
+        use_color: true
+    aggregation: "concatenate"
+    # CRITICAL: Test high-dimensional fusion with scale control
+
+  - name: "phase4_fusion_average_128d_scaled"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "sift"
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+    aggregation: "average"
+    # CRITICAL: Test if averaging provides benefit over single descriptor
+
+  - name: "phase4_fusion_4way_equal_scaled"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "sift"
+        weight: 0.25
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+        weight: 0.75
+    aggregation: "weighted_avg"
+    # CRITICAL: 4-way equal with scale control - compare to phase2_sift (63.9%)
+
+evaluation:
+  matching:
+    method: "ratio_test"
+    norm: "l2"
+    cross_check: true
+    ratio_threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+  keypoint_verification:
+    enabled: true
+    num_distractor_scenes: 10
+    num_distractors_per_scene: 20
+    seed: 42
+
+  keypoint_retrieval:
+    enabled: true
+    num_distractor_scenes: 1
+    num_distractors_per_scene: 10
+    seed: 42
+
+performance:
+  parallel_scenes: true
+  num_threads: 0  # Auto-detect CPU cores
+  batch_size: 512
+
+database:
+  connection: "sqlite:///experiments.db"
+  save_descriptors: false  # Reduce storage (descriptors are large)
+  save_matches: false      # Reduce storage (matches are large)
+  save_visualizations: false  # Disable for batch experiments
+
+# ===================================================================
+# EXPECTED OUTCOMES AND INTERPRETATION
+# ===================================================================
+#
+# Key Comparisons:
+#
+# 1. Color vs Grayscale Baseline:
+#    phase1_rgbsift_full vs phase1_sift_baseline
+#    phase1_rgbsift_channel_avg vs phase1_sift_baseline
+#    → Does color information help?
+#
+# 2. Scale Effect on Color:
+#    phase2_rgbsift_* vs phase1_rgbsift_*
+#    → Does scale filtering help color descriptors?
+#
+# 3. Best Fusion Strategy (Uncontrolled):
+#    MAX(phase3_fusion_*) vs MAX(phase1_*)
+#    → Which fusion method works best?
+#
+# 4. Fusion Benefit with Scale Control (CRITICAL):
+#    phase4_fusion_* vs phase2_sift_scale_controlled
+#    → Does fusion help beyond scale filtering alone?
+#
+# 5. Dimensionality Effect:
+#    phase3_fusion_channelwise_128d vs phase3_fusion_channelwise_384d vs phase3_fusion_concatenate_512d
+#    → Is higher dimensionality better or worse?
+#
+# Success Criteria:
+#
+# ✅ Color is useful if:
+#    - phase1_rgbsift_* > phase1_sift_baseline
+#    - phase4_fusion_* > phase2_sift_scale_controlled
+#
+# ❌ Color provides minimal benefit if:
+#    - phase1_rgbsift_* ≈ phase1_sift_baseline
+#    - phase4_fusion_* ≈ phase2_sift_scale_controlled
+#
+# Fusion Strategy Ranking:
+#    - Sort all phase4_fusion_* by MAP
+#    - Compare to phase2_sift_scale_controlled (63.9% MAP baseline)
+#
+# ===================================================================

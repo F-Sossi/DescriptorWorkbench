@@ -1,4 +1,4 @@
 # Legacy YAMLs tracked by the unit test suite. Update this list when reorganizing configs.
-config/experiments/Sift_Only/sift_experiments.yaml
-config/experiments/Sift_Only/rgbsift_experiments.yaml
-config/experiments/Orb_Only/orb_experiments.yaml
+tests/unit/config/test_configs/orb_experiments.yaml
+tests/unit/config/test_configs/rgbsift_experiments.yaml
+tests/unit/config/test_configs/sift_experiments.yaml
