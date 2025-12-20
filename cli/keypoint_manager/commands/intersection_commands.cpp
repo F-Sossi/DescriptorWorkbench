@@ -210,18 +210,26 @@ int buildIntersection(thesis_project::database::DatabaseManager& db, int argc, c
                 continue;
             }
 
+            cv::Mat data_a(static_cast<int>(kp_a_records.size()), 2, CV_32F);
             cv::Mat data_b(static_cast<int>(kp_b_records.size()), 2, CV_32F);
+
+            for (size_t i = 0; i < kp_a_records.size(); ++i) {
+                data_a.at<float>(static_cast<int>(i), 0) = kp_a_records[i].keypoint.pt.x;
+                data_a.at<float>(static_cast<int>(i), 1) = kp_a_records[i].keypoint.pt.y;
+            }
             for (size_t i = 0; i < kp_b_records.size(); ++i) {
                 data_b.at<float>(static_cast<int>(i), 0) = kp_b_records[i].keypoint.pt.x;
                 data_b.at<float>(static_cast<int>(i), 1) = kp_b_records[i].keypoint.pt.y;
             }
 
+            cv::flann::Index kdtree_a(data_a, cv::flann::KDTreeIndexParams(4));
             cv::flann::Index kdtree(data_b, cv::flann::KDTreeIndexParams(4));
 
             std::vector<std::pair<int64_t, cv::KeyPoint>> intersection_a;
             std::vector<std::pair<int64_t, cv::KeyPoint>> intersection_b;
 
-            for (const auto& kp_a : kp_a_records) {
+            for (size_t idx_a = 0; idx_a < kp_a_records.size(); ++idx_a) {
+                const auto& kp_a = kp_a_records[idx_a];
                 cv::Mat query(1, 2, CV_32F);
                 query.at<float>(0, 0) = kp_a.keypoint.pt.x;
                 query.at<float>(0, 1) = kp_a.keypoint.pt.y;
@@ -245,9 +253,9 @@ int buildIntersection(thesis_project::database::DatabaseManager& db, int argc, c
 
                 std::vector<int> indices_back(1);
                 std::vector<float> dists_back(1);
-                kdtree.knnSearch(query_b, indices_back, dists_back, 1, search_params);
+                kdtree_a.knnSearch(query_b, indices_back, dists_back, 1, search_params);
 
-                if (indices_back[0] != static_cast<int>(&kp_a - &kp_a_records[0])) {
+                if (indices_back[0] != static_cast<int>(idx_a)) {
                     continue;
                 }
 

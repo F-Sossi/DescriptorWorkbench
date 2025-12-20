@@ -14,6 +14,8 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <functional>
+#include <limits>
 #include <map>
 #include <numeric>
 #include <opencv2/opencv.hpp>
@@ -55,7 +57,7 @@ struct ImageRetrievalAccumulator {
         auto& scene_bucket = feature_store_[scene_name];
         auto& features = scene_bucket[image_name];
         features.keypoints = keypoints;
-        features.descriptors = descriptors.clone();
+        features.descriptors = descriptors;
 
         if (is_query_image) {
             queries_.push_back({scene_name, image_name});
@@ -183,6 +185,9 @@ struct ImageRetrievalAccumulator {
             double retrieval_sum = std::accumulate(ap_per_query.begin(), ap_per_query.end(), 0.0);
             metrics.image_retrieval_map = retrieval_sum / static_cast<double>(ap_per_query.size());
         }
+
+        feature_store_.clear();
+        queries_.clear();
     }
 
 private:
@@ -949,16 +954,26 @@ static std::pair<::ExperimentMetrics, ThreadLocalProfiling> processSingleScene(
         if (retrieval_enabled && yaml_config.performance.parallel_scenes) {
             LOG_INFO("Image retrieval evaluation enabled: processing scenes sequentially for consistency");
         }
-        if (use_parallel) {
-            if (num_threads <= 0) {
-                num_threads = std::thread::hardware_concurrency();
-                if (num_threads <= 0) num_threads = 4;
+
+        int resolved_threads = num_threads;
+        if (resolved_threads <= 0) {
+            if (const auto hw_threads = std::thread::hardware_concurrency();
+                hw_threads > 0 && hw_threads <= static_cast<unsigned int>(std::numeric_limits<int>::max())){
+                resolved_threads = static_cast<int>(hw_threads);
+            } else {
+                resolved_threads = 4;
             }
-            omp_set_num_threads(num_threads);
+        }
+
+        // Apply thread cap globally (scenes and retrieval query-level parallelism use this)
+        omp_set_num_threads(resolved_threads);
+
+        if (use_parallel) {
             LOG_INFO("OpenMP enabled: processing " + std::to_string(scenes_to_process.size()) +
-                     " scenes with " + std::to_string(num_threads) + " threads");
+                     " scenes with " + std::to_string(resolved_threads) + " threads");
         } else {
-            LOG_INFO("Sequential processing: parallel_scenes disabled in configuration");
+            LOG_INFO("Sequential processing: parallel_scenes disabled in configuration "
+                     "(threads capped at " + std::to_string(resolved_threads) + " for any internal parallel sections)");
         }
 #else
         if (use_parallel) {
@@ -1061,6 +1076,33 @@ static std::pair<::ExperimentMetrics, ThreadLocalProfiling> processSingleScene(
             LOG_INFO("  HP-V retrieval AP: " + std::to_string(overall.retrieval_viewpoint_ap));
             LOG_INFO("  HP-I retrieval AP: " + std::to_string(overall.retrieval_illumination_ap));
         }
+
+        auto maybeCleanupEphemeral = [&](const std::string& label,
+                                         bool enabled,
+                                         bool stored,
+                                         const std::function<bool()>& action) {
+            if (!enabled || !stored) return;
+            if (!db_ptr || experiment_id == -1) return;
+            const bool ok = action();
+            if (ok) {
+                LOG_INFO("Ephemeral cleanup: removed " + label + " for experiment " + std::to_string(experiment_id));
+            } else {
+                LOG_WARNING("Ephemeral cleanup failed for " + label + " (experiment " +
+                            std::to_string(experiment_id) + ")");
+            }
+        };
+
+        maybeCleanupEphemeral(
+            "descriptors",
+            yaml_config.database.ephemeral_descriptors,
+            store_descriptors,
+            [&]() { return db_ptr->deleteDescriptorsForExperiment(experiment_id); });
+
+        maybeCleanupEphemeral(
+            "matches",
+            yaml_config.database.ephemeral_matches,
+            store_matches,
+            [&]() { return db_ptr->deleteMatchesForExperiment(experiment_id); });
 
         profile.detect_ms = detect_ms;
         profile.compute_ms = compute_ms;

@@ -508,6 +508,20 @@ public:
                             const std::string& image_pair) const;
 
     /**
+     * @brief Delete descriptors for a specific experiment (used for ephemeral storage)
+     * @param experiment_id ID of the experiment
+     * @return true if deletion succeeds (or DB disabled)
+     */
+    [[nodiscard]] bool deleteDescriptorsForExperiment(int experiment_id) const;
+
+    /**
+     * @brief Delete matches for a specific experiment (used for ephemeral storage)
+     * @param experiment_id ID of the experiment
+     * @return true if deletion succeeds (or DB disabled)
+     */
+    [[nodiscard]] bool deleteMatchesForExperiment(int experiment_id) const;
+
+    /**
      * @brief Initialize database tables (safe to call multiple times)
      * @return true if successful or disabled
      */

@@ -1,0 +1,175 @@
+# Thesis Verification and Retrieval Experiments
+#
+# Purpose: Complete Bojanic et al. (2020) evaluation metrics for thesis
+# Currently: Only SIFT baseline has verification (21.62%) and retrieval (27.40%)
+# Need: Verification/retrieval for CNN descriptors and fusion configurations
+#
+# Expected Runtime: 5-8 hours (single-threaded due to memory constraints)
+# Run command: ./experiment_runner ../config/experiments/thesis_verification_retrieval.yaml
+
+experiment:
+  name: "thesis_verification_retrieval_study"
+  description: "Verification and retrieval metrics for key thesis configurations"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # All 116 scenes
+
+keypoints:
+  source: "database"
+  keypoint_set_name: "independent"
+  use_locked_keypoints: true
+
+  alternative_keypoints:
+    # Scale-controlled sets (best performers)
+    - keypoint_set_name: "keynet_scale_matched_6px"
+      description: "KeyNet scale-controlled (645K, avg 92.39px)"
+    - keypoint_set_name: "sift_scale_matched_6px"
+      description: "SIFT scale-controlled (645K, avg 10.03px)"
+
+    # Scale-matched intersection (best fusion results)
+    - keypoint_set_name: "sift_keynet_scale_matched_intersection_b"
+      description: "KeyNet positions from scale-matched intersection (111K)"
+    - keypoint_set_name: "sift_keynet_scale_matched_intersection_a"
+      description: "SIFT positions from scale-matched intersection (111K)"
+
+    # Full KeyNet for baseline comparison
+    - keypoint_set_name: "keynet_8000"
+      description: "Full KeyNet keypoints (uncontrolled scale)"
+
+descriptors:
+  # ===================================================================
+  # SECTION 1: CNN BASELINES (Critical for thesis comparison)
+  # ===================================================================
+
+  # HardNet on scale-controlled KeyNet
+  - name: "hardnet__keynet_scale6px__verif_retr"
+    type: "libtorch_hardnet"
+    device: "auto"
+    keypoint_set_name: "keynet_scale_matched_6px"
+    pooling: "none"
+
+  # SOSNet on scale-controlled KeyNet
+  - name: "sosnet__keynet_scale6px__verif_retr"
+    type: "libtorch_sosnet"
+    device: "auto"
+    keypoint_set_name: "keynet_scale_matched_6px"
+    pooling: "none"
+
+  # HardNet on full KeyNet (baseline)
+  - name: "hardnet__keynet_8000__verif_retr"
+    type: "libtorch_hardnet"
+    device: "auto"
+    keypoint_set_name: "keynet_8000"
+    pooling: "none"
+
+  # ===================================================================
+  # SECTION 2: TRADITIONAL DESCRIPTOR BASELINES
+  # ===================================================================
+
+  # DSPSIFT on scale-controlled SIFT keypoints
+  - name: "dspsift__sift_scale6px__verif_retr"
+    type: "dspsift_v2"
+    keypoint_set_name: "sift_scale_matched_6px"
+    pooling: "none"
+
+  # RootSIFT on scale-controlled SIFT keypoints
+  - name: "rootsift__sift_scale6px__verif_retr"
+    type: "sift"
+    keypoint_set_name: "sift_scale_matched_6px"
+    pooling: "none"
+    root_normalization: true
+
+  # ===================================================================
+  # SECTION 3: BEST FUSION CONFIGURATIONS
+  # ===================================================================
+
+  # HardNet+SOSNet concatenation (BEST: 93.39% mAP)
+  - name: "fusion_hardnet+sosnet_concat__scale_matched__verif_retr"
+    type: "composite"
+    components:
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "sift_keynet_scale_matched_intersection_b"
+      - descriptor: "libtorch_sosnet"
+        device: "auto"
+        keypoint_set_name: "sift_keynet_scale_matched_intersection_b"
+    aggregation: "concatenate"
+
+  # HardNet+SOSNet averaging (for comparison: 92.26% mAP)
+  - name: "fusion_hardnet+sosnet_avg__scale_matched__verif_retr"
+    type: "composite"
+    components:
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "sift_keynet_scale_matched_intersection_b"
+        weight: 0.5
+      - descriptor: "libtorch_sosnet"
+        device: "auto"
+        keypoint_set_name: "sift_keynet_scale_matched_intersection_b"
+        weight: 0.5
+    aggregation: "weighted_avg"
+
+  # ===================================================================
+  # SECTION 4: SIFT+CNN FUSION (to show it fails in verification too)
+  # ===================================================================
+
+  # SIFT+HardNet concatenation (71.40% mAP - failed fusion)
+  - name: "fusion_sift+hardnet_concat__scale_matched__verif_retr"
+    type: "composite"
+    components:
+      - descriptor: "sift"
+        keypoint_set_name: "sift_keynet_scale_matched_intersection_a"
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "sift_keynet_scale_matched_intersection_b"
+    aggregation: "concatenate"
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+    ratio_test_threshold: 0.8
+
+  # CRITICAL: Enable verification and retrieval
+  keypoint_verification:
+    enabled: true
+    num_distractors: 500000  # Standard from Bojanic et al.
+
+  keypoint_retrieval:
+    enabled: true
+
+performance:
+  parallel_scenes: false  # Single-threaded for memory constraints
+  num_threads: 1
+  batch_size: 256
+
+database:
+  connection: "sqlite:///experiments.db"
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+# ===================================================================
+# EXPECTED RESULTS INTERPRETATION
+# ===================================================================
+#
+# Bojanic et al. (2020) Baselines:
+#   - SIFT verification: 25% AP
+#   - SIFT retrieval: 26% AP
+#
+# Your SIFT baseline (already collected):
+#   - Verification: 21.62% AP
+#   - Retrieval: 27.40% AP
+#
+# Expected for CNN descriptors:
+#   - Should significantly outperform SIFT in all metrics
+#   - HardNet/SOSNet likely ~40-60% verification (if matching pattern holds)
+#
+# Expected for fusion:
+#   - CNN+CNN fusion should maintain or improve CNN baselines
+#   - SIFT+CNN fusion may show degradation in verification too
+#
+# ===================================================================

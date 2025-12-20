@@ -1,0 +1,200 @@
+# Thesis Tolerance Parameter Study
+#
+# Purpose: Analyze how spatial tolerance affects intersection quality and matching
+# Tests: 1.0px, 2.0px, 3.0px (existing), 5.0px, 10.0px
+#
+# PREREQUISITE: Run generate_tolerance_study_sets.sh first to create keypoint sets
+#
+# Expected Runtime: ~2-3 hours
+# Run command: ./experiment_runner ../config/experiments/thesis_tolerance_study.yaml
+
+experiment:
+  name: "thesis_tolerance_parameter_study"
+  description: "Analyze effect of intersection tolerance on descriptor performance"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # All 116 scenes
+
+keypoints:
+  source: "database"
+  keypoint_set_name: "independent"
+  use_locked_keypoints: true
+
+  alternative_keypoints:
+    # Tolerance 1.0px (very strict)
+    - keypoint_set_name: "sift_keynet_tol1px_a"
+      description: "SIFT positions, 1.0px tolerance (strict)"
+    - keypoint_set_name: "sift_keynet_tol1px_b"
+      description: "KeyNet positions, 1.0px tolerance (strict)"
+
+    # Tolerance 2.0px
+    - keypoint_set_name: "sift_keynet_tol2px_a"
+      description: "SIFT positions, 2.0px tolerance"
+    - keypoint_set_name: "sift_keynet_tol2px_b"
+      description: "KeyNet positions, 2.0px tolerance"
+
+    # Tolerance 3.0px (default - use existing scale-matched for comparison)
+    # Already tested extensively - using existing results
+
+    # Tolerance 5.0px
+    - keypoint_set_name: "sift_keynet_tol5px_a"
+      description: "SIFT positions, 5.0px tolerance (relaxed)"
+    - keypoint_set_name: "sift_keynet_tol5px_b"
+      description: "KeyNet positions, 5.0px tolerance (relaxed)"
+
+    # Tolerance 10.0px (very relaxed)
+    - keypoint_set_name: "sift_keynet_tol10px_a"
+      description: "SIFT positions, 10.0px tolerance (very relaxed)"
+    - keypoint_set_name: "sift_keynet_tol10px_b"
+      description: "KeyNet positions, 10.0px tolerance (very relaxed)"
+
+descriptors:
+  # ===================================================================
+  # TOLERANCE 1.0px - Very Strict Matching
+  # Expected: Fewer keypoints, potentially higher quality
+  # ===================================================================
+
+  - name: "hardnet__tol1px__strict"
+    type: "libtorch_hardnet"
+    device: "auto"
+    keypoint_set_name: "sift_keynet_tol1px_b"
+    pooling: "none"
+
+  - name: "dspsift__tol1px__strict"
+    type: "dspsift_v2"
+    keypoint_set_name: "sift_keynet_tol1px_a"
+    pooling: "none"
+
+  # ===================================================================
+  # TOLERANCE 2.0px
+  # ===================================================================
+
+  - name: "hardnet__tol2px__moderate"
+    type: "libtorch_hardnet"
+    device: "auto"
+    keypoint_set_name: "sift_keynet_tol2px_b"
+    pooling: "none"
+
+  - name: "dspsift__tol2px__moderate"
+    type: "dspsift_v2"
+    keypoint_set_name: "sift_keynet_tol2px_a"
+    pooling: "none"
+
+  # ===================================================================
+  # TOLERANCE 5.0px - Relaxed Matching
+  # Expected: More keypoints, potentially lower quality alignment
+  # ===================================================================
+
+  - name: "hardnet__tol5px__relaxed"
+    type: "libtorch_hardnet"
+    device: "auto"
+    keypoint_set_name: "sift_keynet_tol5px_b"
+    pooling: "none"
+
+  - name: "dspsift__tol5px__relaxed"
+    type: "dspsift_v2"
+    keypoint_set_name: "sift_keynet_tol5px_a"
+    pooling: "none"
+
+  # ===================================================================
+  # TOLERANCE 10.0px - Very Relaxed Matching
+  # Expected: Most keypoints, but may include misaligned pairs
+  # ===================================================================
+
+  - name: "hardnet__tol10px__very_relaxed"
+    type: "libtorch_hardnet"
+    device: "auto"
+    keypoint_set_name: "sift_keynet_tol10px_b"
+    pooling: "none"
+
+  - name: "dspsift__tol10px__very_relaxed"
+    type: "dspsift_v2"
+    keypoint_set_name: "sift_keynet_tol10px_a"
+    pooling: "none"
+
+  # ===================================================================
+  # FUSION AT DIFFERENT TOLERANCES (if time permits)
+  # ===================================================================
+
+  # Best fusion at 2.0px tolerance
+  - name: "fusion_hardnet+sosnet__tol2px__concat"
+    type: "composite"
+    components:
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "sift_keynet_tol2px_b"
+      - descriptor: "libtorch_sosnet"
+        device: "auto"
+        keypoint_set_name: "sift_keynet_tol2px_b"
+    aggregation: "concatenate"
+
+  # Best fusion at 5.0px tolerance
+  - name: "fusion_hardnet+sosnet__tol5px__concat"
+    type: "composite"
+    components:
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "sift_keynet_tol5px_b"
+      - descriptor: "libtorch_sosnet"
+        device: "auto"
+        keypoint_set_name: "sift_keynet_tol5px_b"
+    aggregation: "concatenate"
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+    ratio_test_threshold: 0.8
+
+  keypoint_verification:
+    enabled: false  # Keep fast, can run verification separately if needed
+
+  keypoint_retrieval:
+    enabled: false
+
+performance:
+  parallel_scenes: true
+  num_threads: 4
+  batch_size: 512
+
+database:
+  connection: "sqlite:///experiments.db"
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+# ===================================================================
+# EXPECTED RESULTS AND ANALYSIS
+# ===================================================================
+#
+# Hypothesis: There's an optimal tolerance that balances:
+#   - Keypoint count (more = better coverage)
+#   - Alignment quality (stricter = better patch overlap)
+#
+# Expected Pattern (inverted U-curve):
+#
+#   mAP
+#    ^
+#    |         ___
+#    |        /   \
+#    |       /     \
+#    |      /       \
+#    |     /         \
+#    +----+-----+-----+-----+----> Tolerance
+#        1px   3px   5px  10px
+#
+# - Too strict (1px): Few keypoints, poor coverage
+# - Optimal (2-3px): Balance of coverage and alignment
+# - Too relaxed (10px): Many keypoints but misaligned patches
+#
+# Reference: Mikolajczyk & Schmid (2005) recommend 2.5-3.0px
+#
+# Additional Analysis:
+# - Report keypoint count at each tolerance
+# - Report average scale at each tolerance
+# - Correlate with mAP to find optimal trade-off
+#
+# ===================================================================

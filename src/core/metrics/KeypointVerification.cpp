@@ -78,7 +78,8 @@ namespace thesis_project::metrics {
         const cv::Mat& ref_descriptors,
         const std::map<std::string, std::pair<std::vector<cv::KeyPoint>, cv::Mat>>& scene_images,
         const std::map<std::string, cv::Mat>& scene_homographies,
-        const std::map<std::string, std::map<std::string, std::pair<std::vector<cv::KeyPoint>, cv::Mat>>>& distractor_scenes,
+        const std::map<std::string, std::map<std::string, std::pair<std::vector<cv::KeyPoint>, cv::Mat>>>& all_scenes,
+        const std::vector<std::string>& distractor_scene_names,
         int num_distractors_per_scene,
         int seed) {
 
@@ -139,7 +140,8 @@ namespace thesis_project::metrics {
             }
 
             // === PART 2: Out-of-sequence distractors (guaranteed negative) ===
-            for (const auto& [dist_scene, dist_images] : distractor_scenes) {
+            for (const auto& dist_scene : distractor_scene_names) {
+                const auto& dist_images = all_scenes.at(dist_scene);
                 if (dist_scene == scene_name) continue;  // Skip same scene
 
                 // Sample random image from distractor scene
@@ -292,12 +294,6 @@ namespace thesis_project::metrics {
             auto distractor_scene_names = sampleDistractorScenes(
                 scene_name, all_scenes, num_distractor_scenes, seed);
 
-            // Build distractor scene data map
-            std::map<std::string, std::map<std::string, std::pair<std::vector<cv::KeyPoint>, cv::Mat>>> distractor_data;
-            for (const auto& dist_scene : distractor_scene_names) {
-                distractor_data[dist_scene] = scene_data.at(dist_scene);
-            }
-
             // Build verification candidates for this scene
             auto candidates = buildVerificationCandidates(
                 scene_name,
@@ -305,7 +301,8 @@ namespace thesis_project::metrics {
                 ref_descriptors,
                 scene_images,
                 hom_it->second,
-                distractor_data,
+                scene_data,
+                distractor_scene_names,
                 num_distractors_per_scene,
                 seed
             );

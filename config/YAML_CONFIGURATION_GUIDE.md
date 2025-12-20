@@ -273,6 +273,8 @@ database:
   save_descriptors: false            # Store raw descriptors (large, usually disabled)
   save_matches: false                # Store match data (large, usually disabled)
   save_visualizations: true          # Store match visualization images
+  ephemeral_descriptors: false       # If true, delete stored descriptors after run completes
+  ephemeral_matches: false           # If true, delete stored matches after run completes
 ```
 
 **Storage Options**:
@@ -282,6 +284,8 @@ database:
 | `save_descriptors` | ⚠️ Very Large | Descriptor analysis/export | `false` |
 | `save_matches` | ⚠️ Very Large | Match debugging | `false` |
 | `save_visualizations` | 🟡 Moderate | Visual inspection | `true` |
+| `ephemeral_descriptors` | 🔄 Cleanup | Spill descriptors during run, then delete | `false` |
+| `ephemeral_matches` | 🔄 Cleanup | Spill matches during run, then delete | `false` |
 
 **Best Practices**:
 - **Development**: Set all to `false` for faster iteration
@@ -527,6 +531,7 @@ performance:
 database:
   save_descriptors: false            # Disable large storage
   save_matches: false
+  ephemeral_descriptors: true        # Spill if needed, then clean up
 ```
 
 **For Speed** (high-memory systems):

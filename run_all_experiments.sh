@@ -26,17 +26,17 @@ fi
 mkdir -p "$LOG_DIR"
 
 CONFIGS=(
-    "config/experiments/color_fusion_sift_rgbsift_comprehensive.yaml"
-    "config/experiments/dsp_color_fusion_comprehensive.yaml"
-    "config/experiments/dspsift_surf_composite_suite_extended.yaml"
-    "config/experiments/dspsift_surf_composite_suite.yaml"
-    "config/experiments/extract_descriptors_for_analysis.yaml"
-    "config/experiments/fair_fusion_sift_hardnet_comprehensive.yaml"
-    "config/experiments/fusion_dspsift_hardnet_scale_matched.yaml"
-    "config/experiments/fusion_rootsift_hardnet_scale_matched.yaml"
-    "config/experiments/sift_surf_composite_suite_extended.yaml"
-    "config/experiments/sift_surf_composite_suite.yaml"
-    "config/experiments/surf_extended_rgbsift_fusion_comprehensive.yaml"
+    "config/experiments/fusion_sift_rgbsift_keynet_scale6px.yaml"
+    "config/experiments/fusion_dspsift_rgbsift_keynet_scale6px.yaml"
+    "config/experiments/fusion_sift_hardnet_keynet_scale6px.yaml"
+    "config/experiments/fusion_dspsift_hardnet_keynet_scale6px.yaml"
+    "config/experiments/fusion_rootsift_hardnet_keynet_scale6px.yaml"
+    "config/experiments/fusion_sift_surf_intersections.yaml"
+    "config/experiments/fusion_sift_surf_ext_intersections.yaml"
+    "config/experiments/fusion_dspsift_surf_intersections.yaml"
+    "config/experiments/fusion_dspsift_surf_ext_intersections.yaml"
+    "config/experiments/fusion_surf_ext_rgbsift_intersections.yaml"
+    "config/experiments/fusion_hardnet_sosnet_keynet_intersections.yaml"
 )
 
 failures=()

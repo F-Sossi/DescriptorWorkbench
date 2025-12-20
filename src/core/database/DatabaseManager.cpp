@@ -1165,6 +1165,58 @@ std::vector<std::string> DatabaseManager::getAvailableProcessingMethods() const 
     return methods;
 }
 
+bool DatabaseManager::deleteDescriptorsForExperiment(int experiment_id) const {
+    if (!impl_->enabled || !impl_->db) return !impl_->enabled;
+
+    const char* sql = "DELETE FROM descriptors WHERE experiment_id = ?;";
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare descriptor delete statement: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    sqlite3_bind_int(stmt, 1, experiment_id);
+    rc = sqlite3_step(stmt);
+    const bool success = (rc == SQLITE_DONE);
+    if (!success) {
+        std::cerr << "Failed to delete descriptors for experiment " << experiment_id << ": "
+                  << sqlite3_errmsg(impl_->db) << std::endl;
+    } else {
+        const int deleted = sqlite3_changes(impl_->db);
+        std::cout << "Deleted " << deleted << " descriptors for experiment " << experiment_id << std::endl;
+    }
+
+    sqlite3_finalize(stmt);
+    return success;
+}
+
+bool DatabaseManager::deleteMatchesForExperiment(int experiment_id) const {
+    if (!impl_->enabled || !impl_->db) return !impl_->enabled;
+
+    const char* sql = "DELETE FROM matches WHERE experiment_id = ?;";
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare match delete statement: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    sqlite3_bind_int(stmt, 1, experiment_id);
+    rc = sqlite3_step(stmt);
+    const bool success = (rc == SQLITE_DONE);
+    if (!success) {
+        std::cerr << "Failed to delete matches for experiment " << experiment_id << ": "
+                  << sqlite3_errmsg(impl_->db) << std::endl;
+    } else {
+        const int deleted = sqlite3_changes(impl_->db);
+        std::cout << "Deleted " << deleted << " matches for experiment " << experiment_id << std::endl;
+    }
+
+    sqlite3_finalize(stmt);
+    return success;
+}
+
 int DatabaseManager::createKeypointSet(const std::string& name,
                                       const std::string& generator_type,
                                       const std::string& generation_method,

@@ -426,6 +426,8 @@ namespace thesis_project {
         bool save_descriptors = false;
         bool save_matches = false;
         bool save_visualizations = true;
+        bool ephemeral_descriptors = false; // If true, drop stored descriptors after run completes
+        bool ephemeral_matches = false;     // If true, drop stored matches after run completes
     };
 
     // ================================

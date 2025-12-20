@@ -20,7 +20,7 @@ DescriptorRunResult runDescriptor(
     thesis_project::database::ExperimentConfig dbConfig;
     int experiment_id = -1;
 
-    if (db_enabled) {
+    if (db_enabled && db_ptr != nullptr) {
         dbConfig.descriptor_type = desc_config.name;
         dbConfig.dataset_path = yaml_config.dataset.path;
         dbConfig.pooling_strategy = toString(desc_config.params.pooling);
@@ -53,10 +53,11 @@ DescriptorRunResult runDescriptor(
     result.experiment_id = experiment_id;
 
     if (db_enabled && experiment_id != -1) {
-        db_ptr->updateExperimentDescriptorMetadata(
-            experiment_id,
-            result.profile.descriptor_dimension,
-            execution_device);
+        const bool ok = db_ptr->updateExperimentDescriptorMetadata(
+            experiment_id, result.profile.descriptor_dimension, execution_device);
+        if (!ok) {
+            LOG_WARNING("Failed to update descriptor metadata for experiment " + std::to_string(experiment_id));
+        }
     }
 
     return result;

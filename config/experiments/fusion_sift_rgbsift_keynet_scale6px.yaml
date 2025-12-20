@@ -25,7 +25,7 @@
 # Database: Results stored in experiments.db with full metrics
 
 experiment:
-  name: "color_fusion_sift_rgbsift_comprehensive"
+  name: "fusion_sift+rgbsift_sift8000_scale6px_keynet_intersections"
   description: "Comprehensive evaluation of SIFT+RGBSIFT fusion with multiple aggregation strategies and scale control"
 
 dataset:
@@ -57,13 +57,13 @@ descriptors:
   # Purpose: Establish baseline performance for grayscale and color descriptors
   # ===================================================================
 
-  - name: "phase1_sift_baseline"
+  - name: "sift__sift_8000__baseline"
     type: "sift"
     keypoint_set_name: "sift_8000"
     pooling: "none"
     # Expected: ~42.6% MAP (known from investigation)
 
-  - name: "phase1_rgbsift_full"
+  - name: "rgbsift__sift_8000__full"
     type: "rgbsift"
     keypoint_set_name: "sift_8000"
     pooling: "none"
@@ -71,7 +71,7 @@ descriptors:
     # Expected: UNKNOWN - test if full 384D color helps
     # Hypothesis: May be worse due to curse of dimensionality
 
-  - name: "phase1_rgbsift_channel_avg"
+  - name: "rgbsift_channel_avg__sift_8000__channel_avg"
     type: "rgbsift_channel_avg"
     keypoint_set_name: "sift_8000"
     pooling: "none"
@@ -84,20 +84,20 @@ descriptors:
   # Purpose: Test if scale filtering improves color descriptors like it does for SIFT
   # ===================================================================
 
-  - name: "phase2_sift_scale_controlled"
+  - name: "sift__sift_scale_matched_6px__scale_controlled"
     type: "sift"
     keypoint_set_name: "sift_scale_matched_6px"
     pooling: "none"
     # Expected: ~63.9% MAP (known from top_size experiment)
 
-  - name: "phase2_rgbsift_full_scale_controlled"
+  - name: "rgbsift__sift_scale_matched_6px__full_scale_controlled"
     type: "rgbsift"
     keypoint_set_name: "sift_scale_matched_6px"
     pooling: "none"
     use_color: true
     # Expected: CRITICAL - does scale filtering help RGBSIFT?
 
-  - name: "phase2_rgbsift_channel_avg_scale_controlled"
+  - name: "rgbsift_channel_avg__sift_scale_matched_6px__scale_controlled"
     type: "rgbsift_channel_avg"
     keypoint_set_name: "sift_scale_matched_6px"
     pooling: "none"
@@ -111,7 +111,7 @@ descriptors:
 
   # Strategy 1: Channel-wise fusion → 128D (collapsed to grayscale)
   # Fuses SIFT with each RGB channel separately, then averages back to 128D
-  - name: "phase3_fusion_channelwise_128d"
+  - name: "fusion_sift+rgbsift__sift_8000__channelwise_128d"
     type: "composite"
     keypoint_set_name: "sift_8000"
     components:
@@ -126,7 +126,7 @@ descriptors:
 
   # Strategy 2: Channel-wise fusion → 384D (preserve RGB)
   # Fuses SIFT with each RGB channel separately, outputs 3x128D
-  - name: "phase3_fusion_channelwise_384d"
+  - name: "fusion_sift+rgbsift__sift_8000__channelwise_384d"
     type: "composite"
     keypoint_set_name: "sift_8000"
     components:
@@ -141,7 +141,7 @@ descriptors:
 
   # Strategy 3: Concatenation → 512D (SIFT 128D + RGBSIFT 384D)
   # High-dimensional descriptor combining both representations
-  - name: "phase3_fusion_concatenate_512d"
+  - name: "fusion_sift+rgbsift__sift_8000__concatenate_512d"
     type: "composite"
     keypoint_set_name: "sift_8000"
     components:
@@ -153,7 +153,7 @@ descriptors:
 
   # Strategy 4: Simple average → 128D (SIFT + RGBSIFT_CHANNEL_AVG)
   # Average of grayscale and color-averaged descriptors
-  - name: "phase3_fusion_average_128d"
+  - name: "fusion_sift+rgbsift_channel_avg__sift_8000__average_128d"
     type: "composite"
     keypoint_set_name: "sift_8000"
     components:
@@ -166,7 +166,7 @@ descriptors:
   # Strategy 5: 4-Way Equal Averaging → 128D (RECOMMENDED)
   # Treats all 4 channels equally: SIFT_gray (25%) + R (25%) + G (25%) + B (25%)
   # See FOUR_WAY_AVERAGING_EXPLAINED.md for mathematical proof
-  - name: "phase3_fusion_4way_equal"
+  - name: "fusion_sift+rgbsift_channel_avg__sift_8000__4way_equal"
     type: "composite"
     keypoint_set_name: "sift_8000"
     components:
@@ -180,7 +180,7 @@ descriptors:
 
   # Strategy 6: Traditional 50/50 Averaging → 128D (for comparison)
   # Gives grayscale 3x more weight per channel than each color channel
-  - name: "phase3_fusion_traditional_5050"
+  - name: "fusion_sift+rgbsift_channel_avg__sift_8000__traditional_5050"
     type: "composite"
     keypoint_set_name: "sift_8000"
     components:
@@ -194,7 +194,7 @@ descriptors:
 
   # Strategy 7: Element-wise max → 128D
   # Take maximum response across grayscale and color
-  - name: "phase3_fusion_max_128d"
+  - name: "fusion_sift+rgbsift_channel_avg__sift_8000__max_128d"
     type: "composite"
     keypoint_set_name: "sift_8000"
     components:
@@ -210,7 +210,7 @@ descriptors:
   # CRITICAL: Fair comparison against phase2 baselines
   # ===================================================================
 
-  - name: "phase4_fusion_channelwise_128d_scaled"
+  - name: "fusion_sift+rgbsift__sift_scale_matched_6px__channelwise_128d"
     type: "composite"
     keypoint_set_name: "sift_scale_matched_6px"
     components:
@@ -223,7 +223,7 @@ descriptors:
     output_dimension: "128"
     # CRITICAL: Compare to phase2_sift_scale_controlled (63.9% MAP)
 
-  - name: "phase4_fusion_channelwise_384d_scaled"
+  - name: "fusion_sift+rgbsift__sift_scale_matched_6px__channelwise_384d"
     type: "composite"
     keypoint_set_name: "sift_scale_matched_6px"
     components:
@@ -236,7 +236,7 @@ descriptors:
     output_dimension: "384"
     # CRITICAL: Test if RGB preservation helps with scale control
 
-  - name: "phase4_fusion_concatenate_512d_scaled"
+  - name: "fusion_sift+rgbsift__sift_scale_matched_6px__concatenate_512d"
     type: "composite"
     keypoint_set_name: "sift_scale_matched_6px"
     components:
@@ -246,7 +246,7 @@ descriptors:
     aggregation: "concatenate"
     # CRITICAL: Test high-dimensional fusion with scale control
 
-  - name: "phase4_fusion_average_128d_scaled"
+  - name: "fusion_sift+rgbsift_channel_avg__sift_scale_matched_6px__average_128d"
     type: "composite"
     keypoint_set_name: "sift_scale_matched_6px"
     components:
@@ -256,7 +256,7 @@ descriptors:
     aggregation: "average"
     # CRITICAL: Test if averaging provides benefit over single descriptor
 
-  - name: "phase4_fusion_4way_equal_scaled"
+  - name: "fusion_sift+rgbsift_channel_avg__sift_scale_matched_6px__4way_equal"
     type: "composite"
     keypoint_set_name: "sift_scale_matched_6px"
     components:
@@ -281,16 +281,10 @@ evaluation:
     min_matches: 10
 
   keypoint_verification:
-    enabled: true
-    num_distractor_scenes: 10
-    num_distractors_per_scene: 20
-    seed: 42
+    enabled: false
 
   keypoint_retrieval:
-    enabled: true
-    num_distractor_scenes: 1
-    num_distractors_per_scene: 10
-    seed: 42
+    enabled: false
 
 performance:
   parallel_scenes: true
