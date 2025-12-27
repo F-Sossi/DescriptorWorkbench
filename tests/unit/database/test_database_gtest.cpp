@@ -659,12 +659,18 @@ TEST_F(DatabaseTest, CategoryMetrics_MultipleExperimentsComparison) {
     auto recent_results = db.getRecentResults(10);
     ASSERT_GE(recent_results.size(), 2) << "Should retrieve at least 2 results";
 
-    // Find SIFT and RGBSIFT results (most recent first - DESC order)
-    // RGBSIFT was inserted last, so it comes first (index 0) - but has SIFT values
-    // SIFT was inserted first, so it comes second (index 1) - but has RGBSIFT values
-    // This seems backwards - swap them
-    const auto* sift_result = &recent_results[0];
-    const auto* rgbsift_result = &recent_results[1];
+    // Find SIFT and RGBSIFT results (most recent first - DESC order).
+    const thesis_project::database::ExperimentResults* sift_result = nullptr;
+    const thesis_project::database::ExperimentResults* rgbsift_result = nullptr;
+    for (const auto& result : recent_results) {
+        if (result.descriptor_type == "SIFT") {
+            sift_result = &result;
+        } else if (result.descriptor_type == "RGBSIFT") {
+            rgbsift_result = &result;
+        }
+    }
+    ASSERT_NE(sift_result, nullptr) << "SIFT results not found in recent results";
+    ASSERT_NE(rgbsift_result, nullptr) << "RGBSIFT results not found in recent results";
 
     // Verify SIFT has viewpoint advantage (0.50 > 0.40)
     EXPECT_GT(sift_result->viewpoint_map, sift_result->illumination_map)

@@ -19,7 +19,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$SCRIPT_DIR"
 
 # Change to build directory
-BUILD_DIR="$REPO_ROOT/build"
+BUILD_DIR="$REPO_ROOT/build-docker"
 if [ ! -d "$BUILD_DIR" ]; then
     echo "ERROR: Build directory not found at $BUILD_DIR"
     echo "Please run cmake and make first:"

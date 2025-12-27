@@ -11,12 +11,19 @@ services:
     volumes:
       # Mount your source code
       - .:/workspace
+      # Mount docker-specific build directory
+      - ./build-docker:/workspace/build-docker
       # Mount X11 socket for GUI applications (for analysis visualizations)
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
 
     environment:
       # X11 forwarding for analysis and visualization
       - DISPLAY=${DISPLAY}
+      # NVIDIA runtime (optional, for GPU support)
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+    runtime: nvidia
 
     # Keep container running for development
     command: tail -f /dev/null

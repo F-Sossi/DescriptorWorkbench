@@ -34,8 +34,8 @@ This reduces aliasing with respect to domain size and increases robustness to bl
     5) Average by dividing the sum by the number of contributing scales.
     6) Optionally apply RootSIFT (AFTER_POOLING) and/or per-row normalization (AFTER_POOLING).
 
-- New-interface path (Stage 7):
-  - Identical pooling logic via `IDescriptorExtractor::extract(image, kps_scaled)` when the migration toggle routes to the modern interface.
+- Modern interface:
+  - Pooling logic uses `IDescriptorExtractor::extract(image, kps_scaled)` with the same algorithm.
 
 - Shape safety and validation:
   - We require identical row/col/type across scales. If any scale produces a different shape (e.g., differing number of surviving keypoints), we return an empty matrix to signal failure. This keeps the behavior deterministic and debuggable.
@@ -83,7 +83,6 @@ This reduces aliasing with respect to domain size and increases robustness to bl
   5) Concatenate horizontally.
 
 - Notes & limitations
-  - Stage 7: Stacking remains on the legacy path until dual-extractor design is introduced in the migration layer.
   - Advanced alignment: If detectors drop different rows, a robust intersection/reordering strategy could be added; we currently fail fast to avoid undefined pairing.
 
 ## Testing Guidance

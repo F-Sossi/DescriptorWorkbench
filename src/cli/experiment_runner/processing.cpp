@@ -89,9 +89,10 @@ struct ImageRetrievalAccumulator {
         const std::size_t total_candidates = totalCandidateCount();
 
 #ifdef _OPENMP
-        bool parallel_queries = config.performance.parallel_scenes && query_count > 1;
+        const bool parallel_queries = config.performance.parallel_scenes && query_count > 1;
 #else
-        bool parallel_queries = false;
+        const bool parallel_queries = false;
+        (void)parallel_queries;
 #endif
 
 #ifdef _OPENMP
@@ -948,9 +949,8 @@ static std::pair<::ExperimentMetrics, ThreadLocalProfiling> processSingleScene(
         const bool retrieval_enabled = yaml_config.evaluation.params.image_retrieval.enabled;
         const bool use_parallel = yaml_config.performance.parallel_scenes &&
                                   !retrieval_enabled;
-        int num_threads = yaml_config.performance.num_threads;
-
 #ifdef _OPENMP
+        int num_threads = yaml_config.performance.num_threads;
         if (retrieval_enabled && yaml_config.performance.parallel_scenes) {
             LOG_INFO("Image retrieval evaluation enabled: processing scenes sequentially for consistency");
         }

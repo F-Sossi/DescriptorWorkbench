@@ -25,7 +25,7 @@ Before adding a new descriptor, ensure you understand:
 
 ### 1. Add Descriptor Type to Enum
 
-**File**: `include/thesis_project/types.hpp`
+**File**: `src/include/thesis_project/types.hpp`
 
 Add your new descriptor to the `DescriptorType` enum:
 
@@ -33,23 +33,30 @@ Add your new descriptor to the `DescriptorType` enum:
 enum class DescriptorType {
     SIFT,                  ///< Standard SIFT descriptor
     HoNC,                  ///< Histogram of Normalized Colors
-    RGBSIFT,               ///< RGB color SIFT
+    RGBSIFT,               ///< RGB color SIFT (384D = 3x128D)
+    RGBSIFT_CHANNEL_AVG,   ///< RGBSIFT with RGB channels averaged to 128D
     vSIFT,                 ///< Vanilla SIFT implementation
-    DSPSIFT,               ///< Domain-Size Pooled SIFT
+    DSPSIFT,               ///< Domain-Size Pooled SIFT (professor's implementation)
+    DSPSIFT_V2,            ///< Pyramid-aware DSP wrapper with configurable aggregation
+    DSPRGBSIFT_V2,         ///< Pyramid-aware DSP wrapper for RGBSIFT
+    DSPHOWH_V2,            ///< Pyramid-aware DSP wrapper for HoWH
+    DSPHONC_V2,            ///< Pyramid-aware DSP wrapper for HoNC
     VGG,                   ///< VGG descriptor from OpenCV xfeatures2d
     DNN_PATCH,             ///< ONNX-backed patch descriptor via cv::dnn
     LIBTORCH_HARDNET,      ///< LibTorch HardNet CNN descriptor
     LIBTORCH_SOSNET,       ///< LibTorch SOSNet CNN descriptor
     LIBTORCH_L2NET,        ///< LibTorch L2-Net CNN descriptor
-    ORB,                   ///< OpenCV ORB binary descriptor  // ← ADD HERE
-    YOUR_DESCRIPTOR,       ///< Your new descriptor          // ← ADD HERE
+    ORB,                   ///< OpenCV ORB binary descriptor
+    SURF,                  ///< OpenCV SURF descriptor (requires opencv_contrib)
+    COMPOSITE,             ///< Composite descriptor combining multiple descriptors
+    YOUR_DESCRIPTOR,       ///< Your new descriptor  // ← ADD HERE
     NONE                   ///< No descriptor
 };
 ```
 
 ### 2. Add String Conversion Support
 
-**File**: `include/thesis_project/types.hpp`
+**File**: `src/include/thesis_project/types.hpp`
 
 Add string conversion in the `toString()` function:
 
@@ -61,12 +68,14 @@ inline std::string toString(DescriptorType type) {
         case DescriptorType::RGBSIFT: return "rgbsift";
         case DescriptorType::vSIFT: return "vsift";
         case DescriptorType::DSPSIFT: return "dspsift";
+        case DescriptorType::DSPSIFT_V2: return "dspsift_v2";
         case DescriptorType::VGG: return "vgg";
         case DescriptorType::DNN_PATCH: return "dnn_patch";
         case DescriptorType::LIBTORCH_HARDNET: return "libtorch_hardnet";
         case DescriptorType::LIBTORCH_SOSNET: return "libtorch_sosnet";
         case DescriptorType::LIBTORCH_L2NET: return "libtorch_l2net";
         case DescriptorType::ORB: return "orb";
+        case DescriptorType::SURF: return "surf";
         case DescriptorType::YOUR_DESCRIPTOR: return "your_descriptor";  // ← ADD HERE
         case DescriptorType::NONE: return "none";
         default: return "unknown";
@@ -172,21 +181,29 @@ std::unique_ptr<IDescriptorExtractor> DescriptorFactory::create(thesis_project::
             return createSIFT();
         case thesis_project::DescriptorType::RGBSIFT:
             return createRGBSIFT();
+        case thesis_project::DescriptorType::RGBSIFT_CHANNEL_AVG:
+            return std::make_unique<wrappers::RGBSIFTChannelAverageWrapper>();
         case thesis_project::DescriptorType::HoNC:
             return std::make_unique<wrappers::HoNCWrapper>();
         case thesis_project::DescriptorType::vSIFT:
             return std::make_unique<wrappers::VSIFTWrapper>();
         case thesis_project::DescriptorType::DSPSIFT:
             return std::make_unique<wrappers::DSPSIFTWrapper>();
+        case thesis_project::DescriptorType::DSPSIFT_V2:
+            return std::make_unique<wrappers::DSPSIFTWrapperV2>();
+        case thesis_project::DescriptorType::DSPRGBSIFT_V2:
+            return std::make_unique<wrappers::DSPRGBSIFTWrapperV2>();
         case thesis_project::DescriptorType::VGG:
             return std::make_unique<wrappers::VGGWrapper>();
         case thesis_project::DescriptorType::ORB:
             return std::make_unique<wrappers::ORBWrapper>();
+        case thesis_project::DescriptorType::SURF:
+            return std::make_unique<wrappers::SURFWrapper>();
         case thesis_project::DescriptorType::YOUR_DESCRIPTOR:  // ← ADD HERE
             return std::make_unique<wrappers::YourDescriptorWrapper>();
-        // ... other cases
+        // ... CNN and COMPOSITE cases
         default:
-            throw std::runtime_error("Unsupported descriptor type in factory (new-config)");
+            throw std::runtime_error("Unsupported descriptor type in factory");
     }
 }
 ```
@@ -197,11 +214,21 @@ bool DescriptorFactory::isSupported(thesis_project::DescriptorType type) {
     switch (type) {
         case thesis_project::DescriptorType::SIFT:
         case thesis_project::DescriptorType::RGBSIFT:
+        case thesis_project::DescriptorType::RGBSIFT_CHANNEL_AVG:
         case thesis_project::DescriptorType::HoNC:
         case thesis_project::DescriptorType::vSIFT:
         case thesis_project::DescriptorType::DSPSIFT:
+        case thesis_project::DescriptorType::DSPSIFT_V2:
+        case thesis_project::DescriptorType::DSPRGBSIFT_V2:
+        case thesis_project::DescriptorType::DSPHOWH_V2:
+        case thesis_project::DescriptorType::DSPHONC_V2:
         case thesis_project::DescriptorType::VGG:
         case thesis_project::DescriptorType::ORB:
+        case thesis_project::DescriptorType::SURF:
+        case thesis_project::DescriptorType::LIBTORCH_HARDNET:
+        case thesis_project::DescriptorType::LIBTORCH_SOSNET:
+        case thesis_project::DescriptorType::LIBTORCH_L2NET:
+        case thesis_project::DescriptorType::COMPOSITE:
         case thesis_project::DescriptorType::YOUR_DESCRIPTOR:  // ← ADD HERE
             return true;
         default:
@@ -220,15 +247,22 @@ Add string-to-enum conversion in `stringToDescriptorType()`:
 DescriptorType YAMLConfigLoader::stringToDescriptorType(const std::string& str) {
     if (str == "sift") return DescriptorType::SIFT;
     if (str == "rgbsift") return DescriptorType::RGBSIFT;
+    if (str == "rgbsift_channel_avg") return DescriptorType::RGBSIFT_CHANNEL_AVG;
     if (str == "vsift" || str == "vanilla_sift") return DescriptorType::vSIFT;
     if (str == "honc") return DescriptorType::HoNC;
     if (str == "dnn_patch") return DescriptorType::DNN_PATCH;
     if (str == "vgg") return DescriptorType::VGG;
     if (str == "dspsift") return DescriptorType::DSPSIFT;
+    if (str == "dspsift_v2") return DescriptorType::DSPSIFT_V2;
+    if (str == "dsprgbsift_v2") return DescriptorType::DSPRGBSIFT_V2;
+    if (str == "dsphowh_v2") return DescriptorType::DSPHOWH_V2;
+    if (str == "dsphonc_v2") return DescriptorType::DSPHONC_V2;
     if (str == "libtorch_hardnet") return DescriptorType::LIBTORCH_HARDNET;
     if (str == "libtorch_sosnet") return DescriptorType::LIBTORCH_SOSNET;
     if (str == "libtorch_l2net") return DescriptorType::LIBTORCH_L2NET;
     if (str == "orb") return DescriptorType::ORB;
+    if (str == "surf") return DescriptorType::SURF;
+    if (str == "composite") return DescriptorType::COMPOSITE;
     if (str == "your_descriptor") return DescriptorType::YOUR_DESCRIPTOR;  // ← ADD HERE
     throw std::runtime_error("Unknown descriptor type: " + str);
 }

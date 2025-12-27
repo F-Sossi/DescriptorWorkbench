@@ -10,7 +10,8 @@ The DescriptorWorkbench metrics system provides comprehensive evaluation metrics
 
 ### **Key Files:**
 - **`src/core/metrics/ExperimentMetrics.hpp`** - Main metrics container and computation logic
-- **`src/core/metrics/TrueAveragePrecision.hpp/.cpp`** - IR-style mAP implementation  
+- **`src/core/metrics/TrueAveragePrecision.hpp/.cpp`** - IR-style mAP implementation
+- **`src/core/metrics/KeypointVerification.hpp/.cpp`** - Bojanic verification/retrieval tasks
 - **`src/core/metrics/MetricsCalculator.hpp`** - Utility functions for metrics aggregation
 
 ---
@@ -53,19 +54,48 @@ The DescriptorWorkbench metrics system provides comprehensive evaluation metrics
 - **Range**: [0.0, 1.0]
 - **Advantage**: Equal weight to all scene types regardless of query count
 
+#### **Viewpoint/Illumination Split**
+- **Viewpoint mAP** (`viewpoint_map`)
+  - mAP for `v_*` sequences only (geometric changes)
+  - Typically **lower** due to perspective distortion
+
+- **Illumination mAP** (`illumination_map`)
+  - mAP for `i_*` sequences only (photometric changes)
+  - Typically **higher** (geometry unchanged)
+
 #### **Punitive mAP Variants** (Including R=0 Queries)
 - **Micro Including Zeros** (`true_map_micro_including_zeros`)
   - Includes R=0 queries as AP=0.0 in the average
   - Formula: `Σ(AP_all_queries) / N_total_queries`
   - **Lower** values than regular mAP (more conservative)
-  
+
 - **Macro Including Zeros** (`true_map_macro_by_scene_including_zeros`)
   - Scene-balanced version including R=0 penalties per scene
   - Penalizes descriptors that fail on many queries
 
 ---
 
-### **3. Precision@K and Recall@K Metrics**
+### **3. Bojanic et al. (2020) Metrics**
+
+These metrics implement the evaluation protocol from "Image Feature Matching: What Works" (Bojanic et al., 2020).
+
+#### **Keypoint Verification** (`keypoint_verification_ap`)
+- **Definition**: Tests discriminative power using distractor keypoints
+- **Formula**: AP computed with distractors from other images
+- **Columns**: `keypoint_verification_ap`, `verification_viewpoint_ap`, `verification_illumination_ap`
+- **Use Case**: Tests if descriptor can distinguish true matches from distractors
+
+#### **Keypoint Retrieval** (`keypoint_retrieval_ap`)
+- **Definition**: Three-tier labeling system (y ∈ {-1, 0, +1})
+  - `y = +1`: True positive (correct match)
+  - `y = 0`: Hard negative (same image, different keypoint)
+  - `y = -1`: Distractor (different image)
+- **Columns**: `keypoint_retrieval_ap`, `retrieval_viewpoint_ap`, `retrieval_illumination_ap`
+- **Additional Counts**: `retrieval_num_true_positives`, `retrieval_num_hard_negatives`, `retrieval_num_distractors`
+
+---
+
+### **4. Precision@K and Recall@K Metrics**
 
 #### **Precision@K** (`precision_at_1`, `precision_at_5`, `precision_at_10`)
 - **Definition**: Percentage of queries where true match is in top-K results
@@ -136,22 +166,31 @@ int dome_images = metrics.per_scene_image_count["i_dome"];
 
 ##  **Real-World Example Analysis**
 
-Based on actual experiment results:
+Based on actual experiment results on HPatches:
 
-### **SIFT + DSP Pooling Performance:**
+### **SIFT-Family Performance (scale-matched keypoints):**
 ```
-Legacy Mean Precision: 0.3703
-True Micro mAP:       0.3724  
-True Macro mAP:       0.3703
-P@1:                  0.2833 (28.3% exact match rate)
-P@5:                  0.4681 (46.8% top-5 match rate)
-Processing Time:      202.0 seconds
+Descriptor          mAP     Viewpoint   Illumination
+-------------------------------------------------
+SIFT (baseline)    63.86%    65.66%      59.79%
+DSPSIFT_V2         65.31%    66.75%      60.59%
+DSPRGBSIFT_V2      66.03%    67.55%      61.90%
+RGBSIFT            64.69%    66.50%      61.14%
+```
+
+### **With Intersection Filtering:**
+```
+Descriptor          mAP     Keypoint Set
+-------------------------------------------------
+DSPSIFT_V2         74.93%   sift_surf_intersection
+RGBSIFT            75.03%   sift_surf_intersection
+SURF               75.08%   sift_surf_intersection
 ```
 
 ### **Performance Interpretation:**
-- **Micro > Macro mAP**: Some scenes perform better than others (unbalanced)
-- **P@5 > P@1**: Many correct matches rank in positions 2-5 (descriptor ranking can improve)
-- **~37% mAP**: Moderate performance, typical for SIFT on HPatches
+- **Viewpoint > Illumination**: Geometric changes typically harder than photometric
+- **Scale filtering**: +21% absolute improvement (42.64% → 63.86%)
+- **Intersection filtering**: Additional +10% on top of scale filtering
 
 ---
 
@@ -263,10 +302,11 @@ view_perf /= view_count;    // Average viewpoint scene performance
 | **Practical Application** | `precision_at_5` | Real-world retrieval cutoff |
 | **Legacy Comparison** | `mean_precision` | Backward compatibility |
 
-### **Typical Value Ranges:**
-- **Excellent Descriptor**: mAP > 0.5, P@5 > 0.7
-- **Good Descriptor**: mAP 0.3-0.5, P@5 0.5-0.7  
-- **Poor Descriptor**: mAP < 0.3, P@5 < 0.5
+### **Typical Value Ranges (with scale-filtered keypoints):**
+- **Excellent Descriptor**: mAP > 70%, Best intersection sets achieve 75%+
+- **Good Descriptor**: mAP 60-70%, Most DSP variants
+- **Baseline**: mAP ~64%, Standard SIFT on scale-matched keypoints
+- **Poor (unfiltered)**: mAP ~43%, SIFT on all keypoints (no scale filtering)
 
 ---
 
@@ -323,13 +363,30 @@ The metrics system supports rigorous academic evaluation with:
 
 ### **Database Storage**
 ```sql
--- Main metrics stored in results table
+-- Main metrics stored in results table (schema v3.3)
 CREATE TABLE results (
-    mean_average_precision REAL,    -- Legacy macro precision
-    precision_at_1 REAL,           -- P@1 
-    precision_at_5 REAL,           -- P@5
-    processing_time_ms REAL,       -- Timing
-    metadata TEXT                  -- Full metrics serialization
+    -- Primary IR-style mAP
+    true_map_micro REAL,
+    true_map_macro REAL,
+
+    -- Viewpoint/Illumination split
+    viewpoint_map REAL,
+    illumination_map REAL,
+
+    -- Bojanic metrics
+    keypoint_verification_ap REAL,
+    keypoint_retrieval_ap REAL,
+
+    -- Precision@K
+    precision_at_1 REAL,
+    precision_at_5 REAL,
+
+    -- Legacy
+    mean_average_precision REAL,
+
+    -- Timing
+    processing_time_ms REAL,
+    metadata TEXT
 );
 ```
 

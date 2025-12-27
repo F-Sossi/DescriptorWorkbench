@@ -55,7 +55,7 @@ public:
 
 First, verify that your matcher is already defined in the enum system. Check:
 ```
-include/thesis_project/types.hpp
+src/include/thesis_project/types.hpp
 ```
 
 Look for the `MatchingMethod` enum:

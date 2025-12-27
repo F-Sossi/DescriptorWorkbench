@@ -15,8 +15,8 @@ namespace thesis_project::database {
 class DatabaseManager::Impl {
 public:
     sqlite3* db = nullptr;
-    bool enabled = false;
     DatabaseConfig config;
+    bool enabled = false;
 
     explicit Impl(const DatabaseConfig& cfg) : config(cfg), enabled(cfg.enabled) {
         if (!enabled) {
@@ -422,8 +422,8 @@ public:
 // DatabaseManager implementation
 DatabaseManager::DatabaseManager(const DatabaseConfig& config)
     : impl_(std::make_unique<Impl>(config)) {
-    if (impl_->enabled) {
-        initializeTables();
+    if (impl_->enabled && !initializeTables()) {
+        std::cerr << "DatabaseManager: Failed to initialize tables" << std::endl;
     }
 }
 
@@ -806,7 +806,7 @@ bool DatabaseManager::storeLockedKeypoints(const std::string& scene_name, const 
         return false;
     }
 
-    int stored_count = 0;
+    size_t stored_count = 0;
     bool success = true;
 
     // Batch insert all keypoints within single transaction
@@ -980,7 +980,7 @@ bool DatabaseManager::storeDescriptors(int experiment_id,
                                       const std::string& pooling_applied) const {
     if (!impl_->enabled || !impl_->db) return !impl_->enabled;
 
-    if (keypoints.size() != descriptors.rows) {
+    if (keypoints.size() != static_cast<size_t>(descriptors.rows)) {
         std::cerr << "Error: Keypoints count (" << keypoints.size() 
                   << ") does not match descriptor rows (" << descriptors.rows << ")" << std::endl;
         return false;

@@ -270,7 +270,9 @@ namespace thesis_project::metrics {
         std::vector<std::string> valid_scenes;
 
         // OpenMP parallel loop over scenes (each scene is independent)
+        #ifdef _OPENMP
         #pragma omp parallel for schedule(dynamic)
+        #endif
         for (size_t i = 0; i < all_scenes.size(); i++) {
             const auto& scene_name = all_scenes[i];
             const auto& scene_images = scene_data.at(scene_name);
@@ -312,7 +314,9 @@ namespace thesis_project::metrics {
 
             // Thread-safe aggregation of results
             if (scene_result.total_candidates > 0) {
+                #ifdef _OPENMP
                 #pragma omp critical
+                #endif
                 {
                     scene_aps.push_back(scene_result.average_precision);
                     valid_scenes.push_back(scene_name);
@@ -620,7 +624,9 @@ namespace thesis_project::metrics {
         std::vector<std::string> valid_scenes;
 
         // OpenMP parallel loop over scenes (each scene is independent)
+        #ifdef _OPENMP
         #pragma omp parallel for schedule(dynamic)
+        #endif
         for (size_t i = 0; i < all_scenes.size(); i++) {
             const auto& scene_name = all_scenes[i];
             const auto& scene_images = scene_data.at(scene_name);
@@ -677,7 +683,9 @@ namespace thesis_project::metrics {
 
             // Thread-safe aggregation of results
             if (scene_result.total_candidates > 0) {
+                #ifdef _OPENMP
                 #pragma omp critical
+                #endif
                 {
                     scene_aps.push_back(scene_result.average_precision);
                     valid_scenes.push_back(scene_name);
