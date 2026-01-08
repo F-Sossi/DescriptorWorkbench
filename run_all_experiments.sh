@@ -26,17 +26,8 @@ fi
 mkdir -p "$LOG_DIR"
 
 CONFIGS=(
-    "config/experiments/fusion_sift_rgbsift_keynet_scale6px.yaml"
-    "config/experiments/fusion_dspsift_rgbsift_keynet_scale6px.yaml"
-    "config/experiments/fusion_sift_hardnet_keynet_scale6px.yaml"
-    "config/experiments/fusion_dspsift_hardnet_keynet_scale6px.yaml"
-    "config/experiments/fusion_rootsift_hardnet_keynet_scale6px.yaml"
-    "config/experiments/fusion_sift_surf_intersections.yaml"
-    "config/experiments/fusion_sift_surf_ext_intersections.yaml"
-    "config/experiments/fusion_dspsift_surf_intersections.yaml"
-    "config/experiments/fusion_dspsift_surf_ext_intersections.yaml"
-    "config/experiments/fusion_surf_ext_rgbsift_intersections.yaml"
-    "config/experiments/fusion_hardnet_sosnet_keynet_intersections.yaml"
+"config/experiments/dsprgbsift_intersection.yaml"
+"config/experiments/scale_vs_intersection_study.yaml"
 )
 
 failures=()
