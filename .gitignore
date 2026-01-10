@@ -73,6 +73,11 @@ data/*
 !data/.gitkeep
 !data/README.md
 
+!hpatches-release/
+hpatches-release/*
+!hpatches-release/.gitkeep
+!hpatches-release/README.md
+
 # Results directory (experimental outputs)
 !results/
 results/*

@@ -1040,6 +1040,103 @@ else()
     message(STATUS "Keypoint manager disabled (use -DBUILD_KEYPOINT_MANAGER=ON to enable)")
 endif()
 
+# Patch benchmark CLI tool (HPatches patch-based evaluation)
+option(BUILD_PATCH_BENCHMARK "Build patch benchmark CLI tool for HPatches evaluation" ON)
+
+if(BUILD_PATCH_BENCHMARK)
+    message(STATUS "Building patch benchmark CLI tool")
+
+    if(EXISTS "${CMAKE_SOURCE_DIR}/cli/patch_benchmark.cpp")
+        add_executable(patch_benchmark
+            cli/patch_benchmark.cpp
+            src/core/patches/PatchLoader.cpp
+            src/core/patches/PatchCNNExtractor.cpp
+            src/core/patches/PatchTraditionalExtractor.cpp
+            src/core/patches/PatchFusionExtractor.cpp
+            src/core/patches/PatchDescriptorFactory.cpp
+            src/core/benchmark/PatchMetrics.cpp
+            src/core/benchmark/HPatchesBenchmark.cpp
+            src/core/descriptor/factories/DescriptorFactory.cpp
+            src/core/database/DatabaseManager.cpp
+            src/core/descriptor/extractors/CompositeDescriptorExtractor.cpp
+            src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
+            src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
+            src/core/descriptor/extractors/wrappers/RGBSIFTChannelAverageWrapper.cpp
+            src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
+            src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
+            src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
+            src/core/descriptor/extractors/wrappers/DSPRGBSIFTWrapperV2.cpp
+            src/core/descriptor/extractors/wrappers/DSPHoWHWrapperV2.cpp
+            src/core/descriptor/extractors/wrappers/DSPHoNCWrapperV2.cpp
+            src/core/descriptor/extractors/wrappers/VGGWrapper.cpp
+            src/core/descriptor/extractors/wrappers/ORBWrapper.cpp
+            src/core/descriptor/extractors/wrappers/SURFWrapper.cpp
+        )
+
+        # LibTorch wrapper (if available)
+        if(BUILD_LIBTORCH_DESCRIPTORS)
+            target_sources(patch_benchmark PRIVATE
+                src/core/descriptor/extractors/wrappers/LibTorchWrapper.cpp
+                src/core/descriptor/extractors/wrappers/LibTorchFactory.cpp)
+            target_link_libraries(patch_benchmark ${TORCH_LIBRARIES})
+            target_compile_definitions(patch_benchmark PRIVATE BUILD_LIBTORCH_DESCRIPTORS=1)
+            message(STATUS "LibTorch wrapper added to patch_benchmark")
+        endif()
+
+        target_compile_features(patch_benchmark PRIVATE cxx_std_17)
+
+        # Include directories
+        target_include_directories(patch_benchmark PRIVATE
+            ${CMAKE_SOURCE_DIR}
+            ${CMAKE_SOURCE_DIR}/include
+            ${CMAKE_SOURCE_DIR}/src
+            ${CMAKE_SOURCE_DIR}/descriptor_compare
+        )
+
+        # Link libraries
+        target_link_libraries(patch_benchmark
+            keypoints
+            Boost::filesystem
+        )
+
+        # Add OpenCV dependencies
+        if(USE_CONAN)
+            target_link_libraries(patch_benchmark ${OpenCV_LIBS})
+            target_link_libraries(patch_benchmark ${SQLite3_LIBS})
+        else()
+            target_link_libraries(patch_benchmark ${OpenCV_LIBRARIES})
+            target_link_libraries(patch_benchmark ${SQLite3_LIBRARIES})
+        endif()
+
+        # YAML-cpp dependency for config loading
+        find_package(PkgConfig QUIET)
+        if(PkgConfig_FOUND)
+            pkg_check_modules(YAMLCPP yaml-cpp)
+        endif()
+        if(YAMLCPP_FOUND)
+            target_link_libraries(patch_benchmark ${YAMLCPP_LIBRARIES})
+            target_include_directories(patch_benchmark PRIVATE ${YAMLCPP_INCLUDE_DIRS})
+            message(STATUS "yaml-cpp found via pkg-config for patch_benchmark")
+        else()
+            target_link_libraries(patch_benchmark yaml-cpp)
+            message(STATUS "Using system yaml-cpp library for patch_benchmark")
+        endif()
+
+        # OpenMP for parallel scene processing (optional)
+        if(OpenMP_CXX_FOUND)
+            target_link_libraries(patch_benchmark OpenMP::OpenMP_CXX)
+            message(STATUS "OpenMP enabled for parallel patch processing")
+        endif()
+
+        message(STATUS "Patch benchmark CLI tool configured")
+
+    else()
+        message(WARNING "patch_benchmark.cpp not found - skipping patch benchmark CLI")
+    endif()
+else()
+    message(STATUS "Patch benchmark disabled (use -DBUILD_PATCH_BENCHMARK=ON to enable)")
+endif()
+
 # Stage 7 migration system removed: new pipeline is the default
 # YAML negative validation tests
 create_gtest_if_exists("tests/unit/config/test_yaml_validation_errors_gtest.cpp" "test_yaml_validation_errors_gtest")

@@ -18,6 +18,7 @@ struct ExperimentResults;
 struct ExperimentConfig;
 struct DatabaseConfig;
 struct KeypointSetStats;
+struct PatchBenchmarkResults;
 
 /**
  * @brief Optional database manager for experiment tracking
@@ -109,6 +110,13 @@ public:
      * @return true if successfully recorded (or disabled), false on error
      */
     bool recordExperiment(const ExperimentResults& results) const;
+
+    /**
+     * @brief Record patch benchmark results (HPatches pre-extracted patches)
+     * @param results Patch benchmark results to store
+     * @return true if successfully recorded (or disabled), false on error
+     */
+    bool recordPatchBenchmarkResults(const PatchBenchmarkResults& results) const;
 
     /**
      * @brief Record experiment configuration
@@ -602,6 +610,30 @@ struct ExperimentResults {
     double total_pipeline_cpu_ms = 0.0;
     double total_pipeline_gpu_ms = 0.0;
     std::string timestamp;
+    std::map<std::string, std::string> metadata;
+};
+
+/**
+ * @brief Patch benchmark results structure for database storage
+ */
+struct PatchBenchmarkResults {
+    int experiment_id = -1;
+    std::string descriptor_name;
+    int descriptor_dimension = 0;
+    double map_overall = 0.0;
+    double accuracy_overall = 0.0;
+    double map_easy = 0.0;
+    double map_hard = 0.0;
+    double map_tough = 0.0;
+    double map_illumination = 0.0;
+    double map_viewpoint = 0.0;
+    double map_illumination_easy = 0.0;
+    double map_illumination_hard = 0.0;
+    double map_viewpoint_easy = 0.0;
+    double map_viewpoint_hard = 0.0;
+    int num_scenes = 0;
+    int num_patches = 0;
+    double processing_time_ms = 0.0;
     std::map<std::string, std::string> metadata;
 };
 

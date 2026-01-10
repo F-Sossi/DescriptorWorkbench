@@ -1,8 +1,12 @@
 -- Database schema for descriptor research experiments
 -- This matches the schema defined in DatabaseManager.cpp
 --
--- SCHEMA VERSION: v3.3 (October 2025)
+-- SCHEMA VERSION: v3.4 (October 2025)
 -- MAJOR UPGRADE: Keypoint retrieval metrics (Bojanic et al. 2020, Eq. 5-6)
+--
+-- Migration notes (v3.4):
+-- - Added patch_benchmark_results table for HPatches patch benchmark runs
+-- - Stores mAP breakdowns and metadata for patch-based evaluation
 --
 -- Migration notes (v3.3):
 -- - Added keypoint_retrieval_ap and category variants to results table
@@ -97,6 +101,31 @@ CREATE TABLE IF NOT EXISTS results (
     FOREIGN KEY(experiment_id) REFERENCES experiments(id)
 );
 
+-- Patch benchmark results (HPatches pre-extracted patches)
+CREATE TABLE IF NOT EXISTS patch_benchmark_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    experiment_id INTEGER NOT NULL,
+    descriptor_name TEXT NOT NULL,
+    descriptor_dimension INTEGER DEFAULT 0,
+    map_overall REAL,
+    accuracy_overall REAL,
+    map_easy REAL,
+    map_hard REAL,
+    map_tough REAL,
+    map_illumination REAL,
+    map_viewpoint REAL,
+    map_illumination_easy REAL,
+    map_illumination_hard REAL,
+    map_viewpoint_easy REAL,
+    map_viewpoint_hard REAL,
+    num_scenes INTEGER,
+    num_patches INTEGER,
+    processing_time_ms REAL,
+    metadata TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(experiment_id) REFERENCES experiments(id)
+);
+
 -- Keypoint sets to manage different keypoint generation strategies
 CREATE TABLE IF NOT EXISTS keypoint_sets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -175,6 +204,7 @@ CREATE INDEX IF NOT EXISTS idx_keypoint_sets_generator ON keypoint_sets(generato
 CREATE INDEX IF NOT EXISTS idx_keypoint_sets_overlap ON keypoint_sets(overlap_filtering);
 CREATE INDEX IF NOT EXISTS idx_locked_keypoints_set ON locked_keypoints(keypoint_set_id);
 CREATE INDEX IF NOT EXISTS idx_locked_keypoints_scene ON locked_keypoints(keypoint_set_id, scene_name, image_name);
+CREATE INDEX IF NOT EXISTS idx_patch_benchmark_experiment ON patch_benchmark_results(experiment_id);
 
 -- Matches storage for research analysis
 CREATE TABLE IF NOT EXISTS matches (
