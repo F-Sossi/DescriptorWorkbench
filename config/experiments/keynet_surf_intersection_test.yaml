@@ -1,0 +1,66 @@
+# KeyNet-SURF Intersection Test
+#
+# Purpose: Test if KeyNet ∩ SURF intersection performs as well as
+# KeyNet ∩ SIFT intersection with CNN descriptors.
+#
+# Comparison targets:
+#   - sift_keynet_scale_matched_b + SOSNet: 93.7% mAP
+#   - sift_keynet_tol1px_b + HardNet: 90.7% mAP
+#
+# Run: ./experiment_runner ../config/experiments/keynet_surf_intersection_test.yaml
+
+experiment:
+  name: "keynet_surf_intersection_test"
+  description: "Test KeyNet-SURF intersection with CNN descriptors"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # All scenes
+
+keypoints:
+  source: "database"
+  keypoint_set_name: "independent"
+  use_locked_keypoints: true
+
+  alternative_keypoints:
+    - keypoint_set_name: "keynet_surf_tol2px_a"
+      description: "KeyNet keypoints at KeyNet-SURF intersection (63.6px avg scale)"
+
+descriptors:
+  # KeyNet keypoints (larger scale - good for CNN descriptors)
+  - name: "libtorch_hardnet__keynet_surf_tol2px_a__intersection"
+    type: "libtorch_hardnet"
+    device: "auto"
+    keypoint_set_name: "keynet_surf_tol2px_a"
+    pooling: "none"
+
+  - name: "libtorch_sosnet__keynet_surf_tol2px_a__intersection"
+    type: "libtorch_sosnet"
+    device: "auto"
+    keypoint_set_name: "keynet_surf_tol2px_a"
+    pooling: "none"
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+    ratio_test_threshold: 0.8
+
+  keypoint_verification:
+    enabled: false
+
+  keypoint_retrieval:
+    enabled: false
+
+performance:
+  parallel_scenes: true
+  num_threads: 4
+  batch_size: 512
+
+database:
+  connection: "sqlite:///experiments.db"
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false

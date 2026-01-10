@@ -15,8 +15,8 @@ namespace thesis_project::database {
 class DatabaseManager::Impl {
 public:
     sqlite3* db = nullptr;
-    bool enabled = false;
     DatabaseConfig config;
+    bool enabled = false;
 
     explicit Impl(const DatabaseConfig& cfg) : config(cfg), enabled(cfg.enabled) {
         if (!enabled) {
@@ -112,6 +112,32 @@ public:
                 total_pipeline_cpu_ms REAL,
                 total_pipeline_gpu_ms REAL,
                 metadata TEXT,                          -- Additional metrics and profiling data
+                FOREIGN KEY(experiment_id) REFERENCES experiments(id)
+            );
+        )";
+
+        const auto create_patch_benchmark_results_table = R"(
+            CREATE TABLE IF NOT EXISTS patch_benchmark_results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                experiment_id INTEGER NOT NULL,
+                descriptor_name TEXT NOT NULL,
+                descriptor_dimension INTEGER DEFAULT 0,
+                map_overall REAL,
+                accuracy_overall REAL,
+                map_easy REAL,
+                map_hard REAL,
+                map_tough REAL,
+                map_illumination REAL,
+                map_viewpoint REAL,
+                map_illumination_easy REAL,
+                map_illumination_hard REAL,
+                map_viewpoint_easy REAL,
+                map_viewpoint_hard REAL,
+                num_scenes INTEGER,
+                num_patches INTEGER,
+                processing_time_ms REAL,
+                metadata TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(experiment_id) REFERENCES experiments(id)
             );
         )";
@@ -247,6 +273,10 @@ public:
             CREATE INDEX IF NOT EXISTS idx_kp_attr_locked_id ON keypoint_detector_attributes(locked_keypoint_id);
         )";
 
+        const auto create_patch_benchmark_indexes = R"(
+            CREATE INDEX IF NOT EXISTS idx_patch_benchmark_experiment ON patch_benchmark_results(experiment_id);
+        )";
+
         const auto create_descriptor_indexes = R"(
             CREATE INDEX IF NOT EXISTS idx_descriptors_experiment ON descriptors(experiment_id, processing_method);
             CREATE INDEX IF NOT EXISTS idx_descriptors_keypoint ON descriptors(scene_name, image_name, keypoint_x, keypoint_y);
@@ -277,6 +307,13 @@ public:
         int rc2 = sqlite3_exec(db, create_results_table, nullptr, nullptr, &error_msg);
         if (rc2 != SQLITE_OK) {
             std::cerr << "Failed to create results table: " << error_msg << std::endl;
+            sqlite3_free(error_msg);
+            return false;
+        }
+
+        int rc2b = sqlite3_exec(db, create_patch_benchmark_results_table, nullptr, nullptr, &error_msg);
+        if (rc2b != SQLITE_OK) {
+            std::cerr << "Failed to create patch_benchmark_results table: " << error_msg << std::endl;
             sqlite3_free(error_msg);
             return false;
         }
@@ -372,6 +409,13 @@ public:
             return false;
         }
 
+        int rc6b = sqlite3_exec(db, create_patch_benchmark_indexes, nullptr, nullptr, &error_msg);
+        if (rc6b != SQLITE_OK) {
+            std::cerr << "Failed to create patch benchmark indexes: " << error_msg << std::endl;
+            sqlite3_free(error_msg);
+            return false;
+        }
+
         int rc7 = sqlite3_exec(db, create_descriptor_indexes, nullptr, nullptr, &error_msg);
         if (rc7 != SQLITE_OK) {
             std::cerr << "Failed to create descriptor indexes: " << error_msg << std::endl;
@@ -422,8 +466,8 @@ public:
 // DatabaseManager implementation
 DatabaseManager::DatabaseManager(const DatabaseConfig& config)
     : impl_(std::make_unique<Impl>(config)) {
-    if (impl_->enabled) {
-        initializeTables();
+    if (impl_->enabled && !initializeTables()) {
+        std::cerr << "DatabaseManager: Failed to initialize tables" << std::endl;
     }
 }
 
@@ -666,6 +710,75 @@ bool DatabaseManager::recordExperiment(const ExperimentResults& results) const {
     return success;
 }
 
+bool DatabaseManager::recordPatchBenchmarkResults(const PatchBenchmarkResults& results) const {
+    if (!isEnabled()) return true;
+    if (results.experiment_id < 0) {
+        std::cerr << "Invalid experiment id for patch benchmark results" << std::endl;
+        return false;
+    }
+
+    const auto sql = R"(
+        INSERT INTO patch_benchmark_results (
+            experiment_id, descriptor_name, descriptor_dimension,
+            map_overall, accuracy_overall,
+            map_easy, map_hard, map_tough,
+            map_illumination, map_viewpoint,
+            map_illumination_easy, map_illumination_hard,
+            map_viewpoint_easy, map_viewpoint_hard,
+            num_scenes, num_patches,
+            processing_time_ms,
+            metadata
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    )";
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare patch benchmark insert: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    std::stringstream metadata_ss;
+    for (const auto& [key, value] : results.metadata) {
+        metadata_ss << key << "=" << value << ";";
+    }
+    const std::string metadata_str = metadata_ss.str();
+
+    sqlite3_bind_int(stmt, 1, results.experiment_id);
+    sqlite3_bind_text(stmt, 2, results.descriptor_name.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 3, results.descriptor_dimension);
+    sqlite3_bind_double(stmt, 4, results.map_overall);
+    sqlite3_bind_double(stmt, 5, results.accuracy_overall);
+    sqlite3_bind_double(stmt, 6, results.map_easy);
+    sqlite3_bind_double(stmt, 7, results.map_hard);
+    sqlite3_bind_double(stmt, 8, results.map_tough);
+    sqlite3_bind_double(stmt, 9, results.map_illumination);
+    sqlite3_bind_double(stmt, 10, results.map_viewpoint);
+    sqlite3_bind_double(stmt, 11, results.map_illumination_easy);
+    sqlite3_bind_double(stmt, 12, results.map_illumination_hard);
+    sqlite3_bind_double(stmt, 13, results.map_viewpoint_easy);
+    sqlite3_bind_double(stmt, 14, results.map_viewpoint_hard);
+    sqlite3_bind_int(stmt, 15, results.num_scenes);
+    sqlite3_bind_int(stmt, 16, results.num_patches);
+    sqlite3_bind_double(stmt, 17, results.processing_time_ms);
+    sqlite3_bind_text(stmt, 18, metadata_str.c_str(), -1, SQLITE_STATIC);
+
+    rc = sqlite3_step(stmt);
+    const bool success = (rc == SQLITE_DONE);
+
+    if (!success) {
+        std::cerr << "Failed to insert patch benchmark results: "
+                  << sqlite3_errmsg(impl_->db) << std::endl;
+    } else {
+        std::cout << "Recorded patch benchmark results (mAP: "
+                  << results.map_overall << ")" << std::endl;
+    }
+
+    sqlite3_finalize(stmt);
+    return success;
+}
+
 std::vector<ExperimentResults> DatabaseManager::getRecentResults(int limit) const {
     std::vector<ExperimentResults> results;
     if (!isEnabled()) return results;
@@ -806,7 +919,7 @@ bool DatabaseManager::storeLockedKeypoints(const std::string& scene_name, const 
         return false;
     }
 
-    int stored_count = 0;
+    size_t stored_count = 0;
     bool success = true;
 
     // Batch insert all keypoints within single transaction
@@ -980,7 +1093,7 @@ bool DatabaseManager::storeDescriptors(int experiment_id,
                                       const std::string& pooling_applied) const {
     if (!impl_->enabled || !impl_->db) return !impl_->enabled;
 
-    if (keypoints.size() != descriptors.rows) {
+    if (keypoints.size() != static_cast<size_t>(descriptors.rows)) {
         std::cerr << "Error: Keypoints count (" << keypoints.size() 
                   << ") does not match descriptor rows (" << descriptors.rows << ")" << std::endl;
         return false;
@@ -1163,6 +1276,58 @@ std::vector<std::string> DatabaseManager::getAvailableProcessingMethods() const 
 
     sqlite3_finalize(stmt);
     return methods;
+}
+
+bool DatabaseManager::deleteDescriptorsForExperiment(int experiment_id) const {
+    if (!impl_->enabled || !impl_->db) return !impl_->enabled;
+
+    const char* sql = "DELETE FROM descriptors WHERE experiment_id = ?;";
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare descriptor delete statement: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    sqlite3_bind_int(stmt, 1, experiment_id);
+    rc = sqlite3_step(stmt);
+    const bool success = (rc == SQLITE_DONE);
+    if (!success) {
+        std::cerr << "Failed to delete descriptors for experiment " << experiment_id << ": "
+                  << sqlite3_errmsg(impl_->db) << std::endl;
+    } else {
+        const int deleted = sqlite3_changes(impl_->db);
+        std::cout << "Deleted " << deleted << " descriptors for experiment " << experiment_id << std::endl;
+    }
+
+    sqlite3_finalize(stmt);
+    return success;
+}
+
+bool DatabaseManager::deleteMatchesForExperiment(int experiment_id) const {
+    if (!impl_->enabled || !impl_->db) return !impl_->enabled;
+
+    const char* sql = "DELETE FROM matches WHERE experiment_id = ?;";
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(impl_->db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare match delete statement: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    sqlite3_bind_int(stmt, 1, experiment_id);
+    rc = sqlite3_step(stmt);
+    const bool success = (rc == SQLITE_DONE);
+    if (!success) {
+        std::cerr << "Failed to delete matches for experiment " << experiment_id << ": "
+                  << sqlite3_errmsg(impl_->db) << std::endl;
+    } else {
+        const int deleted = sqlite3_changes(impl_->db);
+        std::cout << "Deleted " << deleted << " matches for experiment " << experiment_id << std::endl;
+    }
+
+    sqlite3_finalize(stmt);
+    return success;
 }
 
 int DatabaseManager::createKeypointSet(const std::string& name,

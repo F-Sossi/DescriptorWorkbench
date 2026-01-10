@@ -1,0 +1,552 @@
+# HoNC (Histogram of Normalized Colors) Comprehensive Evaluation
+#
+# Purpose: Establish HoNC baselines and test fusion with SIFT-family descriptors
+# HoNC is a 128D color descriptor that normalizes RGB values to reduce
+# illumination sensitivity: r' = R/(R+G+B), g' = G/(R+G+B)
+#
+# Research Questions:
+# 1. How does HoNC perform on different keypoint sets?
+# 2. Does DSP pooling (DSPHONC_V2) improve performance?
+# 3. Which fusion strategy works best (HoNC+SIFT, HoNC+RGBSIFT, HoNC+DSPSIFT)?
+# 4. Does DSPHONC fusion outperform standard HoNC fusion?
+#
+# Expected Runtime: ~8-12 hours for all configurations
+# Run command: ./experiment_runner ../config/experiments/honc_evaluation.yaml
+
+experiment:
+  name: "honc_comprehensive_evaluation"
+  description: "HoNC baselines and fusion with SIFT-family descriptors"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # All 116 scenes
+
+keypoints:
+  source: "database"
+  keypoint_set_name: "independent"
+  use_locked_keypoints: true
+
+  alternative_keypoints:
+    - keypoint_set_name: "sift_8000"
+      description: "Full SIFT keypoints (2.5M, avg 4.45px) - uncontrolled"
+
+    - keypoint_set_name: "sift_scale_matched_6px"
+      description: "SIFT top 25% by size (645K, avg 10.03px) - scale-controlled"
+
+    - keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+      description: "SIFT-SURF intersection (scale-matched)"
+
+descriptors:
+  # ===================================================================
+  # SECTION 1: HoNC BASELINES
+  # Purpose: Establish baseline HoNC performance on different keypoint sets
+  # ===================================================================
+
+  # HoNC on unfiltered keypoints
+  - name: "honc__sift_8000__baseline"
+    type: "honc"
+    keypoint_set_name: "sift_8000"
+    pooling: "none"
+    use_color: true
+
+  # HoNC on scale-controlled keypoints - CRITICAL
+  - name: "honc__sift_scale_matched_6px__scale_controlled"
+    type: "honc"
+    keypoint_set_name: "sift_scale_matched_6px"
+    pooling: "none"
+    use_color: true
+
+  # HoNC on intersection set
+  - name: "honc__sift_surf_intersection__intersection"
+    type: "honc"
+    keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+    pooling: "none"
+    use_color: true
+
+  # ===================================================================
+  # SECTION 2: DSPHONC_V2 BASELINES (DSP Pooling)
+  # Purpose: Test if multi-scale pooling improves HoNC
+  # ===================================================================
+
+  # DSPHONC_V2 on unfiltered keypoints
+  - name: "dsphonc_v2__sift_8000__dsp"
+    type: "dsphonc_v2"
+    keypoint_set_name: "sift_8000"
+    pooling: "none"
+    use_color: true
+
+  # DSPHONC_V2 on scale-controlled keypoints - CRITICAL
+  - name: "dsphonc_v2__sift_scale_matched_6px__scale_controlled"
+    type: "dsphonc_v2"
+    keypoint_set_name: "sift_scale_matched_6px"
+    pooling: "none"
+    use_color: true
+
+  # DSPHONC_V2 on intersection set
+  - name: "dsphonc_v2__sift_surf_intersection__intersection"
+    type: "dsphonc_v2"
+    keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+    pooling: "none"
+    use_color: true
+
+  # ===================================================================
+  # SECTION 3: HoNC + SIFT FUSION
+  # Purpose: Test fusion of color (HoNC) with grayscale (SIFT)
+  # ===================================================================
+
+  # HoNC + SIFT Average (128D)
+  - name: "fusion_honc+sift__sift_8000__average"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "honc"
+        use_color: true
+      - descriptor: "sift"
+    aggregation: "average"
+
+  # HoNC + SIFT Concatenate (256D)
+  - name: "fusion_honc+sift__sift_8000__concatenate"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "honc"
+        use_color: true
+      - descriptor: "sift"
+    aggregation: "concatenate"
+
+  # HoNC + SIFT Max (128D)
+  - name: "fusion_honc+sift__sift_8000__max"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "honc"
+        use_color: true
+      - descriptor: "sift"
+    aggregation: "max"
+
+  # Scale-controlled versions
+  - name: "fusion_honc+sift__sift_scale_matched_6px__average"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "honc"
+        use_color: true
+      - descriptor: "sift"
+    aggregation: "average"
+
+  - name: "fusion_honc+sift__sift_scale_matched_6px__concatenate"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "honc"
+        use_color: true
+      - descriptor: "sift"
+    aggregation: "concatenate"
+
+  - name: "fusion_honc+sift__sift_scale_matched_6px__max"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "honc"
+        use_color: true
+      - descriptor: "sift"
+    aggregation: "max"
+
+  # ===================================================================
+  # SECTION 4: HoNC + RGBSIFT FUSION
+  # Purpose: Test fusion of two color descriptors
+  # ===================================================================
+
+  # HoNC + RGBSIFT_CHANNEL_AVG Average (128D)
+  - name: "fusion_honc+rgbsift__sift_8000__average"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "honc"
+        use_color: true
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+    aggregation: "average"
+
+  # HoNC + RGBSIFT_CHANNEL_AVG Concatenate (256D)
+  - name: "fusion_honc+rgbsift__sift_8000__concatenate"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "honc"
+        use_color: true
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+    aggregation: "concatenate"
+
+  # HoNC + RGBSIFT_CHANNEL_AVG Max (128D)
+  - name: "fusion_honc+rgbsift__sift_8000__max"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "honc"
+        use_color: true
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+    aggregation: "max"
+
+  # Scale-controlled versions
+  - name: "fusion_honc+rgbsift__sift_scale_matched_6px__average"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "honc"
+        use_color: true
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+    aggregation: "average"
+
+  - name: "fusion_honc+rgbsift__sift_scale_matched_6px__concatenate"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "honc"
+        use_color: true
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+    aggregation: "concatenate"
+
+  - name: "fusion_honc+rgbsift__sift_scale_matched_6px__max"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "honc"
+        use_color: true
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+    aggregation: "max"
+
+  # ===================================================================
+  # SECTION 5: HoNC + DSPSIFT FUSION
+  # Purpose: Test fusion of HoNC with DSP-enhanced SIFT
+  # ===================================================================
+
+  # HoNC + DSPSIFT_V2 Average (128D)
+  - name: "fusion_honc+dspsift__sift_8000__average"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "honc"
+        use_color: true
+      - descriptor: "dspsift_v2"
+    aggregation: "average"
+
+  # HoNC + DSPSIFT_V2 Concatenate (256D)
+  - name: "fusion_honc+dspsift__sift_8000__concatenate"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "honc"
+        use_color: true
+      - descriptor: "dspsift_v2"
+    aggregation: "concatenate"
+
+  # HoNC + DSPSIFT_V2 Max (128D)
+  - name: "fusion_honc+dspsift__sift_8000__max"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "honc"
+        use_color: true
+      - descriptor: "dspsift_v2"
+    aggregation: "max"
+
+  # Scale-controlled versions
+  - name: "fusion_honc+dspsift__sift_scale_matched_6px__average"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "honc"
+        use_color: true
+      - descriptor: "dspsift_v2"
+    aggregation: "average"
+
+  - name: "fusion_honc+dspsift__sift_scale_matched_6px__concatenate"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "honc"
+        use_color: true
+      - descriptor: "dspsift_v2"
+    aggregation: "concatenate"
+
+  - name: "fusion_honc+dspsift__sift_scale_matched_6px__max"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "honc"
+        use_color: true
+      - descriptor: "dspsift_v2"
+    aggregation: "max"
+
+  # ===================================================================
+  # SECTION 6: DSPHONC_V2 + SIFT FUSION
+  # Purpose: Test fusion of DSP-enhanced HoNC with SIFT
+  # ===================================================================
+
+  # DSPHONC_V2 + SIFT Average (128D)
+  - name: "fusion_dsphonc+sift__sift_8000__average"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "dsphonc_v2"
+        use_color: true
+      - descriptor: "sift"
+    aggregation: "average"
+
+  # DSPHONC_V2 + SIFT Concatenate (256D)
+  - name: "fusion_dsphonc+sift__sift_8000__concatenate"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "dsphonc_v2"
+        use_color: true
+      - descriptor: "sift"
+    aggregation: "concatenate"
+
+  # DSPHONC_V2 + SIFT Max (128D)
+  - name: "fusion_dsphonc+sift__sift_8000__max"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "dsphonc_v2"
+        use_color: true
+      - descriptor: "sift"
+    aggregation: "max"
+
+  # Scale-controlled versions
+  - name: "fusion_dsphonc+sift__sift_scale_matched_6px__average"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "dsphonc_v2"
+        use_color: true
+      - descriptor: "sift"
+    aggregation: "average"
+
+  - name: "fusion_dsphonc+sift__sift_scale_matched_6px__concatenate"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "dsphonc_v2"
+        use_color: true
+      - descriptor: "sift"
+    aggregation: "concatenate"
+
+  - name: "fusion_dsphonc+sift__sift_scale_matched_6px__max"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "dsphonc_v2"
+        use_color: true
+      - descriptor: "sift"
+    aggregation: "max"
+
+  # ===================================================================
+  # SECTION 7: DSPHONC_V2 + RGBSIFT FUSION
+  # Purpose: Test fusion of DSP-enhanced HoNC with color SIFT
+  # ===================================================================
+
+  # DSPHONC_V2 + RGBSIFT_CHANNEL_AVG Average (128D)
+  - name: "fusion_dsphonc+rgbsift__sift_8000__average"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "dsphonc_v2"
+        use_color: true
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+    aggregation: "average"
+
+  # DSPHONC_V2 + RGBSIFT_CHANNEL_AVG Concatenate (256D)
+  - name: "fusion_dsphonc+rgbsift__sift_8000__concatenate"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "dsphonc_v2"
+        use_color: true
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+    aggregation: "concatenate"
+
+  # DSPHONC_V2 + RGBSIFT_CHANNEL_AVG Max (128D)
+  - name: "fusion_dsphonc+rgbsift__sift_8000__max"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "dsphonc_v2"
+        use_color: true
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+    aggregation: "max"
+
+  # Scale-controlled versions
+  - name: "fusion_dsphonc+rgbsift__sift_scale_matched_6px__average"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "dsphonc_v2"
+        use_color: true
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+    aggregation: "average"
+
+  - name: "fusion_dsphonc+rgbsift__sift_scale_matched_6px__concatenate"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "dsphonc_v2"
+        use_color: true
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+    aggregation: "concatenate"
+
+  - name: "fusion_dsphonc+rgbsift__sift_scale_matched_6px__max"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "dsphonc_v2"
+        use_color: true
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+    aggregation: "max"
+
+  # ===================================================================
+  # SECTION 8: DSPHONC_V2 + DSPSIFT_V2 FUSION
+  # Purpose: Test fusion of both DSP-enhanced descriptors
+  # ===================================================================
+
+  # DSPHONC_V2 + DSPSIFT_V2 Average (128D)
+  - name: "fusion_dsphonc+dspsift__sift_8000__average"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "dsphonc_v2"
+        use_color: true
+      - descriptor: "dspsift_v2"
+    aggregation: "average"
+
+  # DSPHONC_V2 + DSPSIFT_V2 Concatenate (256D)
+  - name: "fusion_dsphonc+dspsift__sift_8000__concatenate"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "dsphonc_v2"
+        use_color: true
+      - descriptor: "dspsift_v2"
+    aggregation: "concatenate"
+
+  # DSPHONC_V2 + DSPSIFT_V2 Max (128D)
+  - name: "fusion_dsphonc+dspsift__sift_8000__max"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "dsphonc_v2"
+        use_color: true
+      - descriptor: "dspsift_v2"
+    aggregation: "max"
+
+  # Scale-controlled versions
+  - name: "fusion_dsphonc+dspsift__sift_scale_matched_6px__average"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "dsphonc_v2"
+        use_color: true
+      - descriptor: "dspsift_v2"
+    aggregation: "average"
+
+  - name: "fusion_dsphonc+dspsift__sift_scale_matched_6px__concatenate"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "dsphonc_v2"
+        use_color: true
+      - descriptor: "dspsift_v2"
+    aggregation: "concatenate"
+
+  - name: "fusion_dsphonc+dspsift__sift_scale_matched_6px__max"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "dsphonc_v2"
+        use_color: true
+      - descriptor: "dspsift_v2"
+    aggregation: "max"
+
+evaluation:
+  matching:
+    method: "ratio_test"
+    norm: "l2"
+    cross_check: true
+    ratio_threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+  keypoint_verification:
+    enabled: false
+
+  keypoint_retrieval:
+    enabled: false
+
+performance:
+  parallel_scenes: true
+  num_threads: 0  # Auto-detect
+  batch_size: 512
+
+database:
+  connection: "sqlite:///experiments.db"
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+# ===================================================================
+# EXPECTED OUTCOMES
+# ===================================================================
+#
+# HoNC Baselines (6 configs):
+# - HoNC on sift_8000, sift_scale_matched_6px, intersection
+# - DSPHONC_V2 on sift_8000, sift_scale_matched_6px, intersection
+#
+# Fusion Tests (36 configs, 6 fusion pairs x 3 methods x 2 keypoint sets):
+#
+# | Fusion Pair           | Dim  | Methods           |
+# |-----------------------|------|-------------------|
+# | HoNC + SIFT           | 128D | avg, concat, max  |
+# | HoNC + RGBSIFT        | 128D | avg, concat, max  |
+# | HoNC + DSPSIFT        | 128D | avg, concat, max  |
+# | DSPHONC + SIFT        | 128D | avg, concat, max  |
+# | DSPHONC + RGBSIFT     | 128D | avg, concat, max  |
+# | DSPHONC + DSPSIFT     | 128D | avg, concat, max  |
+#
+# Key Comparisons:
+#
+# 1. HoNC baseline vs SIFT baseline (~42.6% mAP)
+#    → Does color normalization help?
+#
+# 2. Scale effect on HoNC:
+#    honc__sift_scale_matched_6px vs honc__sift_8000
+#    → Does scale filtering improve HoNC like SIFT (+50%)?
+#
+# 3. DSP effect on HoNC:
+#    dsphonc_v2__* vs honc__*
+#    → Does multi-scale pooling help color histograms?
+#
+# 4. Best fusion strategy:
+#    Compare all fusion methods to find optimal combination
+#    → Which aggregation works best for HoNC fusion?
+#
+# 5. DSP fusion benefit:
+#    fusion_dsphonc+dspsift vs fusion_honc+sift
+#    → Does DSP on both components improve fusion?
+#
+# ===================================================================

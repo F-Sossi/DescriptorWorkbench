@@ -1,13 +1,14 @@
 
-//
-//**********************************************************************************************\
-//Implementation of SIFT is based on the code from http://blogs.oregonstate.edu/hess/code/SIFT/
-//Below is the original copyright.
-//
-////    Copyright (c) 2006-2010, Rob Hess <hess@eecs.oregonstate.edu>
-////    All rights reserved.
-//
-//\**********************************************************************************************/
+/*
+**********************************************************************************************
+Implementation of SIFT is based on the code from http://blogs.oregonstate.edu/hess/code/SIFT/
+Below is the original copyright.
+
+    Copyright (c) 2006-2010, Rob Hess <hess@eecs.oregonstate.edu>
+    All rights reserved.
+
+**********************************************************************************************
+*/
 
 #include "DSPSIFT.h"
 using namespace cv;
@@ -342,5 +343,4 @@ void DSPSIFT::compute(const Mat& image, vector<KeyPoint>& keypoints, Mat& descri
 {
 	(*this)(image, Mat(), keypoints, descriptors, numScales, linePoint1, linePoint2, true);
 }
-
 

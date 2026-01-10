@@ -1,0 +1,325 @@
+# DSP Color Fusion Evaluation: DSPSIFT_V2 + DSPRGBSIFT_V2 Comprehensive Study
+#
+# This experiment tests DSP-pooled versions of SIFT and RGBSIFT with proper
+# 4-way channel averaging that treats RGB channels as separate equal contributors.
+#
+# Key Innovation: 4-Way Equal Channel Averaging
+# =============================================
+# RGBSIFT (384D) = R(128D) + G(128D) + B(128D)
+# When combining with SIFT, we should average 4 equal components:
+#   Average = 0.25*SIFT_gray + 0.25*R + 0.25*G + 0.25*B
+#
+# This is achieved using:
+#   SIFT (weight=0.25) + RGBSIFT_CHANNEL_AVG (weight=0.75)
+# Because RGBSIFT_CHANNEL_AVG = (R+G+B)/3, so:
+#   0.25*SIFT + 0.75*(R+G+B)/3 = 0.25*SIFT + 0.25*R + 0.25*G + 0.25*B
+#
+# Research Questions:
+# 1. Do DSP versions outperform non-pooled versions?
+# 2. Does 4-way equal weighting outperform 50/50 averaging?
+# 3. Which fusion strategy works best with DSP?
+# 4. Does color help DSP descriptors more than non-pooled?
+#
+# Expected Runtime: ~15-18 hours for all 18+ descriptor configurations
+# Database: Results stored in experiments.db with full metrics
+
+experiment:
+  name: "fusion_dspsift+rgbsift_sift8000_scale6px_keynet_intersections"
+  description: "DSP-SIFT and DSP-RGBSIFT fusion with 4-way equal channel averaging"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # Empty = all 116 scenes (696 images)
+
+keypoints:
+  source: "database"
+  keypoint_set_name: "independent"  # Explicit assignment mode
+  use_locked_keypoints: true
+
+  alternative_keypoints:
+    # ===== MAIN KEYPOINT SETS =====
+    - keypoint_set_name: "sift_8000"
+      description: "Full SIFT keypoints (2.5M keypoints, avg 4.45px) - uncontrolled scale"
+
+    - keypoint_set_name: "sift_scale_matched_6px"
+      description: "SIFT top 25% by size (645K keypoints, avg 10.03px) - scale-controlled"
+
+    # ===== INTERSECTION SETS =====
+    - keypoint_set_name: "keynet_sift_8k_b"
+      description: "SIFT positions from SIFT-KeyNet intersection (565K, avg 3.51px)"
+
+descriptors:
+  # ===================================================================
+  # PHASE 1: DSP BASELINES - Uncontrolled Scale
+  # Purpose: Establish DSP baseline performance on full keypoint set
+  # ===================================================================
+
+  - name: "dspsift_v2__sift_8000__baseline"
+    type: "dspsift_v2"
+    keypoint_set_name: "sift_8000"
+    pooling: "none"  # DSP is built-in
+    # Expected: UNKNOWN - need to measure vs non-DSP SIFT
+
+  - name: "dsprgbsift_v2__sift_8000__full"
+    type: "dsprgbsift_v2"
+    keypoint_set_name: "sift_8000"
+    pooling: "none"
+    use_color: true
+    # Expected: UNKNOWN - test if DSP+color helps
+
+  # ===================================================================
+  # PHASE 2: DSP SCALE-CONTROLLED BASELINES
+  # Purpose: Test if scale filtering helps DSP descriptors
+  # ===================================================================
+
+  - name: "dspsift_v2__sift_scale_matched_6px__scale_controlled"
+    type: "dspsift_v2"
+    keypoint_set_name: "sift_scale_matched_6px"
+    pooling: "none"
+    # CRITICAL: Compare to non-DSP SIFT scale-controlled (63.9% MAP)
+
+  - name: "dsprgbsift_v2__sift_scale_matched_6px__scale_controlled"
+    type: "dsprgbsift_v2"
+    keypoint_set_name: "sift_scale_matched_6px"
+    pooling: "none"
+    use_color: true
+    # CRITICAL: Test if scale control helps DSP color descriptors
+
+  # ===================================================================
+  # PHASE 3: 4-WAY EQUAL CHANNEL AVERAGING (Main Innovation)
+  # Purpose: Treat RGB channels as separate equal contributors
+  # Each of 4 components (SIFT_gray, R, G, B) weighted 0.25
+  # ===================================================================
+
+  - name: "fusion_dspsift+dsprgbsift__sift_8000__4way_equal_128d"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "dspsift_v2"
+        weight: 0.25  # Grayscale channel
+      - descriptor: "dsprgbsift_v2"
+        use_color: true
+        weight: 0.75  # RGB channels (distributed as 0.25 each via channel_wise)
+    aggregation: "channel_wise"
+    output_dimension: "128"  # Collapse to grayscale after fusion
+    # NOTE: channel_wise aggregation fuses DSPSIFT_V2 (128D) with each RGB channel
+    # separately, then collapses to 128D. With weights 0.25/0.75, each channel
+    # contributes equally: 0.25*gray + 0.25*R + 0.25*G + 0.25*B
+
+  - name: "fusion_dspsift+dsprgbsift__sift_scale_matched_6px__4way_equal_128d"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "dspsift_v2"
+        weight: 0.25
+      - descriptor: "dsprgbsift_v2"
+        use_color: true
+        weight: 0.75
+    aggregation: "channel_wise"
+    output_dimension: "128"
+    # CRITICAL: Compare to phase2_dspsift_v2_scale_controlled
+
+  # ===================================================================
+  # PHASE 4: COMPARISON - Traditional 50/50 Averaging
+  # Purpose: Compare 4-way equal (0.25 each) vs traditional 50/50
+  # ===================================================================
+
+  - name: "fusion_dspsift+dsprgbsift__sift_8000__traditional_5050_128d"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "dspsift_v2"
+        weight: 0.5  # Grayscale gets 50%
+      - descriptor: "dsprgbsift_v2"
+        use_color: true
+        weight: 0.5  # All RGB channels combined get 50%
+    aggregation: "channel_wise"
+    output_dimension: "128"
+    # This gives grayscale more weight than individual color channels
+
+  - name: "fusion_dspsift+dsprgbsift__sift_scale_matched_6px__traditional_5050_128d"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "dspsift_v2"
+        weight: 0.5
+      - descriptor: "dsprgbsift_v2"
+        use_color: true
+        weight: 0.5
+    aggregation: "channel_wise"
+    output_dimension: "128"
+
+  # ===================================================================
+  # PHASE 5: ALTERNATIVE FUSION STRATEGIES WITH DSP
+  # Purpose: Test concatenation and channel-wise fusion with DSP
+  # ===================================================================
+
+  # Concatenation: DSPSIFT (128D) + DSPRGBSIFT (384D) = 512D
+  - name: "fusion_dspsift+dsprgbsift__sift_8000__concatenate_512d"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "dspsift_v2"
+      - descriptor: "dsprgbsift_v2"
+        use_color: true
+    aggregation: "concatenate"
+
+  - name: "fusion_dspsift+dsprgbsift__sift_scale_matched_6px__concatenate_512d"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "dspsift_v2"
+      - descriptor: "dsprgbsift_v2"
+        use_color: true
+    aggregation: "concatenate"
+
+  # Channel-wise with 384D output (preserve RGB)
+  - name: "fusion_dspsift+dsprgbsift__sift_8000__channelwise_384d"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "dspsift_v2"
+        weight: 0.5
+      - descriptor: "dsprgbsift_v2"
+        use_color: true
+        weight: 0.5
+    aggregation: "channel_wise"
+    output_dimension: "384"  # Preserve full RGB information
+
+  # ===================================================================
+  # PHASE 6: NON-DSP COMPARISON WITH 4-WAY AVERAGING
+  # Purpose: Compare DSP vs non-DSP with same 4-way averaging strategy
+  # ===================================================================
+
+  - name: "fusion_sift+rgbsift_channel_avg__sift_8000__4way_equal"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "sift"
+        weight: 0.25
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+        weight: 0.75
+    aggregation: "weighted_avg"
+    # Direct comparison: Does DSP help 4-way averaging?
+
+  - name: "fusion_sift+rgbsift_channel_avg__sift_scale_matched_6px__4way_equal"
+    type: "composite"
+    keypoint_set_name: "sift_scale_matched_6px"
+    components:
+      - descriptor: "sift"
+        weight: 0.25
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+        weight: 0.75
+    aggregation: "weighted_avg"
+
+  # Traditional 50/50 for comparison
+  - name: "fusion_sift+rgbsift_channel_avg__sift_8000__traditional_5050"
+    type: "composite"
+    keypoint_set_name: "sift_8000"
+    components:
+      - descriptor: "sift"
+        weight: 0.5
+      - descriptor: "rgbsift_channel_avg"
+        use_color: true
+        weight: 0.5
+    aggregation: "weighted_avg"
+
+  # ===================================================================
+  # PHASE 7: INTERSECTION SETS WITH DSP
+  # Purpose: Test DSP on detector-agreement keypoints
+  # ===================================================================
+
+  - name: "dspsift_v2__keynet_sift_8k_b__intersection_baseline"
+    type: "dspsift_v2"
+    keypoint_set_name: "keynet_sift_8k_b"
+    pooling: "none"
+    # Compare to known SIFT intersection result (55.2% MAP)
+
+  - name: "fusion_dspsift+dsprgbsift__keynet_sift_8k_b__4way_equal_128d"
+    type: "composite"
+    keypoint_set_name: "keynet_sift_8k_b"
+    components:
+      - descriptor: "dspsift_v2"
+        weight: 0.25
+      - descriptor: "dsprgbsift_v2"
+        use_color: true
+        weight: 0.75
+    aggregation: "channel_wise"
+    output_dimension: "128"
+    # Test if 4-way channel-wise averaging helps on intersection keypoints
+
+evaluation:
+  matching:
+    method: "ratio_test"
+    norm: "l2"
+    cross_check: true
+    ratio_threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+  keypoint_verification:
+    enabled: false
+
+  keypoint_retrieval:
+    enabled: false
+
+performance:
+  parallel_scenes: true
+  num_threads: 0  # Auto-detect CPU cores
+  batch_size: 512
+
+database:
+  connection: "sqlite:///experiments.db"
+  save_descriptors: false  # Reduce storage
+  save_matches: false      # Reduce storage
+  save_visualizations: false
+
+# ===================================================================
+# EXPECTED OUTCOMES AND INTERPRETATION
+# ===================================================================
+#
+# Key Comparisons:
+#
+# 1. DSP vs Non-DSP Baselines:
+#    phase1_dspsift_v2_baseline vs phase1_sift_baseline (from color_fusion)
+#    → Does DSP pooling improve performance?
+#
+# 2. 4-Way Equal vs Traditional 50/50 Averaging:
+#    phase3_dsp_4way_equal_average vs phase4_dsp_traditional_5050_average
+#    → Is treating RGB channels separately better?
+#
+# 3. DSP Fusion vs Non-DSP Fusion:
+#    phase3_dsp_4way_equal_average_scaled vs phase6_nondsp_4way_equal_scaled
+#    → Does DSP help fusion?
+#
+# 4. Scale Effect with DSP:
+#    phase2_dspsift_v2_scale_controlled vs phase1_dspsift_v2_baseline
+#    → Does scale filtering help DSP descriptors?
+#
+# 5. Best Overall Strategy:
+#    Compare all phase3-7 results to find best DSP fusion configuration
+#
+# Success Criteria:
+#
+# 4-way equal averaging is better if:
+#    phase3_dsp_4way_equal > phase4_dsp_traditional_5050
+#
+# DSP helps fusion if:
+#    phase3_dsp_4way_equal_scaled > phase6_nondsp_4way_equal_scaled
+#
+# DSP improves performance if:
+#    phase1_dspsift_v2_baseline > phase1_sift_baseline (42.6% MAP)
+#
+# Effect Decomposition:
+#   DSP Effect = phase1_dspsift - phase1_sift (from color_fusion)
+#   4-Way Effect = phase3_4way - phase4_5050
+#   Scale Effect (DSP) = phase2_dsp_scaled - phase1_dsp
+#   Fusion Effect (DSP) = phase3_4way_scaled - MAX(phase2_dsp_scaled, phase2_rgbdsp_scaled)
+#
+# ===================================================================

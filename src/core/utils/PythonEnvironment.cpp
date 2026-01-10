@@ -307,7 +307,14 @@ std::string PythonEnvironment::executeCommand(const std::string& command) {
     std::string result;
 
     // Open pipe to command
-    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(command.c_str(), "r"), pclose);
+    struct PcloseDeleter {
+        void operator()(FILE* file) const {
+            if (file != nullptr) {
+                pclose(file);
+            }
+        }
+    };
+    std::unique_ptr<FILE, PcloseDeleter> pipe(popen(command.c_str(), "r"));
     if (!pipe) {
         return "";
     }
@@ -329,4 +336,3 @@ std::optional<std::string> PythonEnvironment::getEnvVar(const std::string& name)
 }
 
 } // namespace thesis_project::utils
-

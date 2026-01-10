@@ -181,8 +181,30 @@ docker-compose -f docker-compose.dev.yml up -d
 docker-compose -f docker-compose.dev.yml exec descriptor-dev bash
 
 # Inside container
-cd /workspace/build
+cd /workspace
+mkdir -p build-docker && cd build-docker
 cmake .. -DUSE_SYSTEM_PACKAGES=ON && make -j$(nproc)
+```
+Note: HPatches is only required when you run experiments. You can download it
+on the host at any time with `./scripts/download_hpatches.sh`, and it will be
+visible in the container via the mounted `./data` directory.
+
+#### First Run in Docker (End-to-End)
+
+```bash
+# On host
+export UID=$(id -u)
+export GID=$(id -g)
+docker-compose -f docker-compose.dev.yml build
+docker-compose -f docker-compose.dev.yml up -d
+docker-compose -f docker-compose.dev.yml exec descriptor-dev bash
+
+# Inside container
+cd /workspace
+mkdir -p build-docker && cd build-docker
+cmake .. -DUSE_SYSTEM_PACKAGES=ON -DUSE_CONAN=OFF
+make -j$(nproc)
+./experiment_runner ../config/experiments/sift_baseline.yaml
 ```
 
 #### Platform-Specific Docker Setup

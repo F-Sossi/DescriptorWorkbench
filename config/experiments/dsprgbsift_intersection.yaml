@@ -1,0 +1,60 @@
+# DSPRGBSIFT_V2 on SIFT-SURF Intersection
+#
+# Purpose: Fill gap - test best scale-filtered descriptor on best keypoint set
+# Expected: ~76-78% mAP (currently RGBSIFT achieves 75.03% on same keypoints)
+#
+# Run: ./experiment_runner ../config/experiments/dsprgbsift_intersection.yaml
+
+experiment:
+  name: "dsprgbsift_v2_intersection_evaluation"
+  description: "DSPRGBSIFT_V2 on SIFT-SURF scale-matched intersection keypoints"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # All 116 scenes
+
+keypoints:
+  source: "database"
+  keypoint_set_name: "independent"
+  use_locked_keypoints: true
+
+  alternative_keypoints:
+    - keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+      description: "SIFT-SURF intersection (173K keypoints, avg 13.29px scale)"
+
+descriptors:
+  - name: "dsprgbsift_v2__sift_surf_scale_matched_intersection_a__intersection"
+    type: "dsprgbsift_v2"
+    keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+    pooling: "none"
+    use_color: true
+
+evaluation:
+  matching:
+    method: "ratio_test"
+    norm: "l2"
+    cross_check: true
+    ratio_threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+  keypoint_verification:
+    enabled: false
+
+  keypoint_retrieval:
+    enabled: false
+
+performance:
+  parallel_scenes: true
+  num_threads: 0
+  batch_size: 512
+
+database:
+  connection: "sqlite:///experiments.db"
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false

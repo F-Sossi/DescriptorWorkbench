@@ -1,0 +1,133 @@
+experiment:
+  name: "fusion_sift+surf_ext_intersections_3px_and_scale6px"
+  description: "SIFT + SURF-EXT (128D) composites across SIFT/SURF intersections (3px and scale-matched 6px) without baselines"
+  version: "1.0"
+  author: "automation"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # All scenes
+
+keypoints:
+  source: "database"
+  keypoint_set_name: "independent"  # Explicit mode
+  use_locked_keypoints: true
+
+  alternative_keypoints:
+    - keypoint_set_name: "sift_surf_8k_a"   # SIFT side, 3px tol, 645k pairs
+      description: "Intersection (SIFT positions, tol=3px)"
+    - keypoint_set_name: "sift_surf_8k_b"   # SURF side, 3px tol, 645k pairs
+      description: "Intersection (SURF positions, tol=3px)"
+    - keypoint_set_name: "sift_surf_scale_matched_intersection_a"  # SIFT side, 6px tol, 173k pairs
+      description: "Scale-controlled intersection (SIFT positions, tol=6px)"
+    - keypoint_set_name: "sift_surf_scale_matched_intersection_b"  # SURF side, 6px tol, 173k pairs
+      description: "Scale-controlled intersection (SURF positions, tol=6px)"
+
+descriptors:
+  # Fusion on 3px intersection (128D-safe weighted_avg + concat)
+  - name: "fusion_sift+surf_ext__sift_surf_8k_a+b__weighted_avg"
+    type: "composite"
+    components:
+      - descriptor: "sift"
+        keypoint_set_name: "sift_surf_8k_a"
+        pooling: "none"
+        normalize_after_pooling: true
+        norm_type: 2
+        rooting_stage: "none"
+        use_color: false
+        weight: 0.5
+      - descriptor: "surf"
+        keypoint_set_name: "sift_surf_8k_b"
+        pooling: "none"
+        normalize_after_pooling: true
+        extended: true
+        use_color: false
+        weight: 0.5
+    aggregation: "weighted_avg"
+
+  - name: "fusion_sift+surf_ext__sift_surf_8k_a+b__concatenate"
+    type: "composite"
+    components:
+      - descriptor: "sift"
+        keypoint_set_name: "sift_surf_8k_a"
+        pooling: "none"
+        normalize_after_pooling: true
+        norm_type: 2
+        rooting_stage: "none"
+        use_color: false
+      - descriptor: "surf"
+        keypoint_set_name: "sift_surf_8k_b"
+        pooling: "none"
+        normalize_after_pooling: true
+        extended: true
+        use_color: false
+    aggregation: "concatenate"
+
+  # Fusion on 6px scale-controlled intersection (128D-safe weighted_avg + concat)
+  - name: "fusion_sift+surf_ext__sift_surf_scale_matched_intersection_a+b__weighted_avg"
+    type: "composite"
+    components:
+      - descriptor: "sift"
+        keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+        pooling: "none"
+        normalize_after_pooling: true
+        norm_type: 2
+        rooting_stage: "none"
+        use_color: false
+        weight: 0.5
+      - descriptor: "surf"
+        keypoint_set_name: "sift_surf_scale_matched_intersection_b"
+        pooling: "none"
+        normalize_after_pooling: true
+        extended: true
+        use_color: false
+        weight: 0.5
+    aggregation: "weighted_avg"
+
+  - name: "fusion_sift+surf_ext__sift_surf_scale_matched_intersection_a+b__concatenate"
+    type: "composite"
+    components:
+      - descriptor: "sift"
+        keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+        pooling: "none"
+        normalize_after_pooling: true
+        norm_type: 2
+        rooting_stage: "none"
+        use_color: false
+      - descriptor: "surf"
+        keypoint_set_name: "sift_surf_scale_matched_intersection_b"
+        pooling: "none"
+        normalize_after_pooling: true
+        extended: true
+        use_color: false
+    aggregation: "concatenate"
+
+evaluation:
+  matching:
+    method: "ratio_test"
+    ratio_threshold: 0.8
+    norm: "l2"
+    cross_check: true
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+  keypoint_verification:
+    enabled: false
+
+  keypoint_retrieval:
+    enabled: false
+
+performance:
+  parallel_scenes: true
+  num_threads: 0  # Auto-detect CPU cores
+  batch_size: 512
+
+database:
+  connection: "sqlite:///experiments.db"
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false

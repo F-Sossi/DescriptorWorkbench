@@ -26,17 +26,8 @@ fi
 mkdir -p "$LOG_DIR"
 
 CONFIGS=(
-    "config/experiments/color_fusion_sift_rgbsift_comprehensive.yaml"
-    "config/experiments/dsp_color_fusion_comprehensive.yaml"
-    "config/experiments/dspsift_surf_composite_suite_extended.yaml"
-    "config/experiments/dspsift_surf_composite_suite.yaml"
-    "config/experiments/extract_descriptors_for_analysis.yaml"
-    "config/experiments/fair_fusion_sift_hardnet_comprehensive.yaml"
-    "config/experiments/fusion_dspsift_hardnet_scale_matched.yaml"
-    "config/experiments/fusion_rootsift_hardnet_scale_matched.yaml"
-    "config/experiments/sift_surf_composite_suite_extended.yaml"
-    "config/experiments/sift_surf_composite_suite.yaml"
-    "config/experiments/surf_extended_rgbsift_fusion_comprehensive.yaml"
+"config/experiments/dsprgbsift_intersection.yaml"
+"config/experiments/scale_vs_intersection_study.yaml"
 )
 
 failures=()

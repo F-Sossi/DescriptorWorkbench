@@ -4,10 +4,35 @@ project(descriptor_compare)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Set CUDA architectures early (before any find_package calls that might use CUDA)
-# RTX 4090 has compute capability 8.9
+# Keep FindBoost available for distros that don't ship BoostConfig.cmake.
+if(POLICY CMP0167)
+    cmake_policy(SET CMP0167 OLD)
+endif()
+
+# Set CUDA architectures early (before any find_package calls that might use CUDA).
+# Allow users to override via CMAKE_CUDA_ARCHITECTURES for portability.
 if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
     set(CMAKE_CUDA_ARCHITECTURES "89")
+endif()
+if(NOT DEFINED TORCH_CUDA_ARCH_LIST)
+    # Mirror CMAKE_CUDA_ARCHITECTURES for LibTorch, converting "89" -> "8.9".
+    set(_torch_arch_list "")
+    foreach(_arch IN LISTS CMAKE_CUDA_ARCHITECTURES)
+        if(_arch MATCHES "^[0-9]+$")
+            string(LENGTH "${_arch}" _arch_len)
+            if(_arch_len EQUAL 2)
+                string(SUBSTRING "${_arch}" 0 1 _arch_major)
+                string(SUBSTRING "${_arch}" 1 1 _arch_minor)
+                set(_arch "${_arch_major}.${_arch_minor}")
+            elseif(_arch_len EQUAL 3)
+                string(SUBSTRING "${_arch}" 0 2 _arch_major)
+                string(SUBSTRING "${_arch}" 2 1 _arch_minor)
+                set(_arch "${_arch_major}.${_arch_minor}")
+            endif()
+        endif()
+        list(APPEND _torch_arch_list "${_arch}")
+    endforeach()
+    set(TORCH_CUDA_ARCH_LIST "${_torch_arch_list}")
 endif()
 
 # Set CUDA compiler path if not already set
@@ -97,7 +122,10 @@ else()
 endif()
 
 # Boost
-find_package(Boost CONFIG REQUIRED COMPONENTS system filesystem)
+# Use module mode on Arch/Manjaro where Boost CMake config packages aren't shipped.
+set(Boost_NO_BOOST_CMAKE ON)
+set(Boost_NO_WARN_NEW_VERSIONS ON)
+find_package(Boost REQUIRED COMPONENTS filesystem)
 message(STATUS "Boost found: ${Boost_VERSION}")
 
 # TBB
@@ -155,7 +183,13 @@ if(BUILD_LIBTORCH)
     # Set LibTorch root path for AUR installation
     set(CMAKE_PREFIX_PATH "/opt/libtorch;${CMAKE_PREFIX_PATH}")
 
+    # LibTorch warns when CMAKE_CUDA_ARCHITECTURES is set; it uses TORCH_CUDA_ARCH_LIST instead.
+    set(_saved_cuda_arch "${CMAKE_CUDA_ARCHITECTURES}")
+    unset(CMAKE_CUDA_ARCHITECTURES)
     find_package(Torch QUIET)
+    if(DEFINED _saved_cuda_arch)
+        set(CMAKE_CUDA_ARCHITECTURES "${_saved_cuda_arch}")
+    endif()
     if(Torch_FOUND)
         message(STATUS "LibTorch found - enabling CNN descriptors")
         message(STATUS "LibTorch version: ${TORCH_VERSION}")
@@ -173,7 +207,7 @@ endif()
 
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR})
-include_directories(${CMAKE_SOURCE_DIR}/include)
+include_directories(${CMAKE_SOURCE_DIR}/src/include)
 include_directories(${CMAKE_SOURCE_DIR}/src)
 
 if(USE_CONAN)
@@ -233,7 +267,7 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/src/core/database/DatabaseManager.cpp")
     )
 
     target_include_directories(thesis_database PUBLIC
-        include
+            src/include
         ${SQLite3_INCLUDE_DIRS}
     )
 
@@ -258,13 +292,7 @@ endif()
 
 # PATH DEFINITIONS (kept for compatibility with other targets)
 set(DATA_PATH "${CMAKE_CURRENT_SOURCE_DIR}/data/")
-set(RESULTS_PATH "${CMAKE_CURRENT_SOURCE_DIR}/results/")
-set(KEYPOINTS_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reference_keypoints/")
 set(DATABASE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/experiments.db")
-
-# Create necessary directories
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/results)
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/reference_keypoints)
 
 # ================================
 # COMPREHENSIVE TESTING SYSTEM (CLEAN)
@@ -284,6 +312,8 @@ function(create_test_if_exists test_source test_name)
             if(TARGET thesis_database)
                 target_link_libraries(${test_name} thesis_database)
             endif()
+            target_link_libraries(${test_name} ${OpenCV_LIBRARIES})
+            target_include_directories(${test_name} PRIVATE ${OpenCV_INCLUDE_DIRS} src src/include)
             if(${test_name} MATCHES "integration" AND NOT ${test_name} MATCHES "simple")
                 target_link_libraries(${test_name} keypoints)
                 target_include_directories(${test_name} PRIVATE descriptor_compare keypoints)
@@ -293,8 +323,8 @@ elseif(${test_name} MATCHES "interface|headers")
             target_include_directories(${test_name} PRIVATE keypoints descriptor_compare)
         elseif(${test_name} MATCHES "experiment_runner_cli")
             target_sources(${test_name} PRIVATE
-                cli/experiment_runner/cli_args.cpp
-                cli/experiment_runner/helpers.cpp
+                    src/cli/experiment_runner/cli_args.cpp
+                    src/cli/experiment_runner/helpers.cpp
             )
             target_include_directories(${test_name} PRIVATE
                 ${CMAKE_SOURCE_DIR}
@@ -309,7 +339,7 @@ elseif(${test_name} MATCHES "interface|headers")
         add_test(NAME ${test_name} COMMAND ${test_name})
 
         # Set test labels
-        if(${test_name} MATCHES "database")
+        if(${test_name} MATCHES "src/database")
             set_tests_properties(${test_name} PROPERTIES LABELS "database;stage5" TIMEOUT 60)
         elseif(${test_name} MATCHES "interface|headers")
             set_tests_properties(${test_name} PROPERTIES LABELS "interface;stage3" TIMEOUT 60)
@@ -346,6 +376,8 @@ function(create_gtest_if_exists test_source test_name)
             if(TARGET thesis_database)
                 target_link_libraries(${test_name} thesis_database)
             endif()
+            target_link_libraries(${test_name} ${OpenCV_LIBRARIES})
+            target_include_directories(${test_name} PRIVATE ${OpenCV_INCLUDE_DIRS} src src/include)
             if(${test_name} MATCHES "integration" AND NOT ${test_name} MATCHES "simple")
                 target_link_libraries(${test_name} keypoints)
                 target_include_directories(${test_name} PRIVATE descriptor_compare keypoints)
@@ -422,7 +454,7 @@ function(create_gtest_if_exists test_source test_name)
         add_test(NAME ${test_name} COMMAND ${test_name})
         
         # Set test labels with gtest suffix and proper working directory
-        if(${test_name} MATCHES "database")
+        if(${test_name} MATCHES "src/database")
             set_tests_properties(${test_name} PROPERTIES LABELS "database;stage5;gtest" TIMEOUT 60)
         elseif(${test_name} MATCHES "interface|headers")
             set_tests_properties(${test_name} PROPERTIES LABELS "interface;stage3;gtest" TIMEOUT 60)
@@ -470,7 +502,7 @@ if(TARGET test_experiment_helpers_gtest)
         src/core/matching/BruteForceMatching.cpp
         src/core/metrics/TrueAveragePrecision.cpp)
     target_link_libraries(test_experiment_helpers_gtest ${OpenCV_LIBRARIES})
-    target_include_directories(test_experiment_helpers_gtest PRIVATE src include ${OpenCV_INCLUDE_DIRS})
+    target_include_directories(test_experiment_helpers_gtest PRIVATE src src/include ${OpenCV_INCLUDE_DIRS})
 endif()
 
 # Google Test matching factory tests
@@ -483,7 +515,7 @@ if(TARGET test_matching_factory_gtest)
         src/core/matching/MatchingFactory.cpp
     )
     target_link_libraries(test_matching_factory_gtest ${OpenCV_LIBRARIES} keypoints)
-    target_include_directories(test_matching_factory_gtest PRIVATE src include descriptor_compare keypoints ${OpenCV_INCLUDE_DIRS})
+    target_include_directories(test_matching_factory_gtest PRIVATE src src/include descriptor_compare keypoints ${OpenCV_INCLUDE_DIRS})
 endif()
 
 # Google Test SNN ratio test matching tests (Core matching algorithm validation)
@@ -497,7 +529,7 @@ if(TARGET test_snn_ratio_test_gtest)
         src/core/processing/processor_utils.cpp
     )
     target_link_libraries(test_snn_ratio_test_gtest ${OpenCV_LIBRARIES})
-    target_include_directories(test_snn_ratio_test_gtest PRIVATE src include ${OpenCV_INCLUDE_DIRS})
+    target_include_directories(test_snn_ratio_test_gtest PRIVATE src src/include ${OpenCV_INCLUDE_DIRS})
 endif()
 
 # Google Test descriptor factory tests
@@ -518,7 +550,7 @@ if(TARGET test_descriptor_factory_gtest)
         src/core/descriptor/extractors/wrappers/ORBWrapper.cpp
         src/core/descriptor/extractors/wrappers/SURFWrapper.cpp)
     target_link_libraries(test_descriptor_factory_gtest keypoints ${OpenCV_LIBRARIES})
-    target_include_directories(test_descriptor_factory_gtest PRIVATE src include keypoints descriptor_compare ${OpenCV_INCLUDE_DIRS})
+    target_include_directories(test_descriptor_factory_gtest PRIVATE src src/include keypoints descriptor_compare ${OpenCV_INCLUDE_DIRS})
 endif()
 
 # Google Test DSP color wrapper smoke tests
@@ -529,7 +561,7 @@ if(TARGET test_dsp_color_wrappers_gtest)
         src/core/descriptor/extractors/wrappers/DSPHoWHWrapperV2.cpp
         src/core/descriptor/extractors/wrappers/DSPHoNCWrapperV2.cpp)
     target_link_libraries(test_dsp_color_wrappers_gtest keypoints ${OpenCV_LIBRARIES})
-    target_include_directories(test_dsp_color_wrappers_gtest PRIVATE src include keypoints descriptor_compare ${OpenCV_INCLUDE_DIRS})
+    target_include_directories(test_dsp_color_wrappers_gtest PRIVATE src src/include keypoints descriptor_compare ${OpenCV_INCLUDE_DIRS})
 endif()
 
 create_gtest_if_exists("tests/unit/descriptors/test_composite_thread_safety_gtest.cpp" "test_composite_thread_safety_gtest")
@@ -550,14 +582,14 @@ if(TARGET test_composite_thread_safety_gtest)
         src/core/descriptor/extractors/wrappers/ORBWrapper.cpp
         src/core/descriptor/extractors/wrappers/SURFWrapper.cpp)
     target_link_libraries(test_composite_thread_safety_gtest ${OpenCV_LIBRARIES} keypoints thesis_database)
-    target_include_directories(test_composite_thread_safety_gtest PRIVATE src include keypoints descriptor_compare ${OpenCV_INCLUDE_DIRS})
+    target_include_directories(test_composite_thread_safety_gtest PRIVATE src src/include keypoints descriptor_compare ${OpenCV_INCLUDE_DIRS})
 endif()
 
 # Google Test DSP SIFT Wrapper V2 (pyramid reuse validation tests)
 create_gtest_if_exists("tests/unit/descriptors/test_dsp_sift_wrapper_v2_gtest.cpp" "test_dsp_sift_wrapper_v2_gtest")
 if(TARGET test_dsp_sift_wrapper_v2_gtest)
     target_link_libraries(test_dsp_sift_wrapper_v2_gtest keypoints ${OpenCV_LIBRARIES})
-    target_include_directories(test_dsp_sift_wrapper_v2_gtest PRIVATE src include keypoints descriptor_compare ${OpenCV_INCLUDE_DIRS})
+    target_include_directories(test_dsp_sift_wrapper_v2_gtest PRIVATE src src/include keypoints descriptor_compare ${OpenCV_INCLUDE_DIRS})
 endif()
 
 # Google Test keypoint generator tests (Interface upgrade completion)
@@ -573,7 +605,7 @@ if(TARGET test_keypoint_generators_gtest)
         src/core/keypoints/generators/KeynetDetector.cpp
         src/core/utils/PythonEnvironment.cpp)
     target_link_libraries(test_keypoint_generators_gtest ${OpenCV_LIBRARIES})
-    target_include_directories(test_keypoint_generators_gtest PRIVATE src include ${OpenCV_INCLUDE_DIRS})
+    target_include_directories(test_keypoint_generators_gtest PRIVATE src src/include ${OpenCV_INCLUDE_DIRS})
 endif()
 
 ## Removed: Stage 7 integration and bridge tests (legacy)
@@ -598,13 +630,13 @@ if(TARGET test_python_environment_gtest)
     target_sources(test_python_environment_gtest PRIVATE
         src/core/utils/PythonEnvironment.cpp
     )
-    target_include_directories(test_python_environment_gtest PRIVATE src include ${CMAKE_SOURCE_DIR})
+    target_include_directories(test_python_environment_gtest PRIVATE src src/include ${CMAKE_SOURCE_DIR})
 endif()
 
 if(TARGET test_experiment_runner_cli_gtest)
     target_sources(test_experiment_runner_cli_gtest PRIVATE
-        cli/experiment_runner/cli_args.cpp
-        cli/experiment_runner/helpers.cpp
+            src/cli/experiment_runner/cli_args.cpp
+            src/cli/experiment_runner/helpers.cpp
         src/core/experiment/ExperimentHelpers.cpp
         src/core/metrics/TrueAveragePrecision.cpp
     )
@@ -619,8 +651,8 @@ endif()
 
 if(TARGET test_experiment_runner_processing_gtest)
     target_sources(test_experiment_runner_processing_gtest PRIVATE
-        cli/experiment_runner/processing.cpp
-        cli/experiment_runner/helpers.cpp
+            src/cli/experiment_runner/processing.cpp
+            src/cli/experiment_runner/helpers.cpp
         src/core/experiment/ExperimentHelpers.cpp
         src/core/pooling/NoPooling.cpp
         src/core/pooling/DomainSizePooling.cpp
@@ -660,7 +692,6 @@ if(TARGET test_experiment_runner_processing_gtest)
         ${OpenCV_LIBRARIES}
         keypoints
         thesis_database
-        Boost::system
         Boost::filesystem
     )
 endif()
@@ -672,7 +703,7 @@ add_custom_target(run_all_tests
 )
 
 add_custom_target(run_database_tests
-    COMMAND ${CMAKE_CTEST_COMMAND} -L database --output-on-failure --verbose
+    COMMAND ${CMAKE_CTEST_COMMAND} -L src/database --output-on-failure --verbose
     COMMENT "Running database tests only"
 )
 
@@ -733,8 +764,8 @@ if(BUILD_ANALYSIS)
     message(STATUS "Building Stage 6 analysis integration")
 
     # Check if analysis runner exists
-    if(EXISTS "${CMAKE_SOURCE_DIR}/cli/analysis_runner.cpp")
-        add_executable(analysis_runner cli/analysis_runner.cpp)
+    if(EXISTS "${CMAKE_SOURCE_DIR}/src/cli/analysis_runner.cpp")
+        add_executable(analysis_runner src/cli/analysis_runner.cpp)
         target_compile_features(analysis_runner PRIVATE cxx_std_17)
 
         # No special libraries needed for basic analysis runner
@@ -780,16 +811,16 @@ if(BUILD_EXPERIMENT_CLI)
     message(STATUS "Building CLI experiment runner")
 
     # Check if experiment runner exists
-    if(EXISTS "${CMAKE_SOURCE_DIR}/cli/experiment_runner.cpp")
+    if(EXISTS "${CMAKE_SOURCE_DIR}/src/cli/experiment_runner.cpp")
         add_executable(experiment_runner
-                       cli/experiment_runner.cpp
-                       cli/experiment_runner/helpers.cpp
-                       cli/experiment_runner/bootstrap.cpp
-                       cli/experiment_runner/cli_args.cpp
-                       cli/experiment_runner/keypoint_resolution.cpp
-                       cli/experiment_runner/descriptor_run.cpp
-                       cli/experiment_runner/processing.cpp
-                       cli/experiment_runner/result_recording.cpp
+                src/cli/experiment_runner.cpp
+                src/cli/experiment_runner/helpers.cpp
+                src/cli/experiment_runner/bootstrap.cpp
+                src/cli/experiment_runner/cli_args.cpp
+                src/cli/experiment_runner/keypoint_resolution.cpp
+                src/cli/experiment_runner/descriptor_run.cpp
+                src/cli/experiment_runner/processing.cpp
+                src/cli/experiment_runner/result_recording.cpp
                        src/core/config/YAMLConfigLoader.cpp
                        src/core/pooling/NoPooling.cpp
                        src/core/pooling/DomainSizePooling.cpp
@@ -857,7 +888,6 @@ if(BUILD_EXPERIMENT_CLI)
         # Link libraries
         target_link_libraries(experiment_runner
             keypoints
-            Boost::system
             Boost::filesystem
         )
 
@@ -911,16 +941,16 @@ if(BUILD_KEYPOINT_MANAGER)
     message(STATUS "Building keypoint manager CLI tool")
     
     # Check if keypoint manager exists
-    if(EXISTS "${CMAKE_SOURCE_DIR}/cli/keypoint_manager.cpp")
+    if(EXISTS "${CMAKE_SOURCE_DIR}/src/cli/keypoint_manager.cpp")
         add_executable(keypoint_manager
-                       cli/keypoint_manager.cpp
-                       cli/keypoint_manager/commands/list_commands.cpp
-                       cli/keypoint_manager/commands/import_export.cpp
-                       cli/keypoint_manager/commands/generation_basic.cpp
-                       cli/keypoint_manager/commands/generation_detector.cpp
-                       cli/keypoint_manager/commands/subset_commands.cpp
-                       cli/keypoint_manager/commands/intersection_commands.cpp
-                       cli/keypoint_manager/commands/non_overlapping.cpp
+                src/cli/keypoint_manager.cpp
+                src/cli/keypoint_manager/commands/list_commands.cpp
+                src/cli/keypoint_manager/commands/import_export.cpp
+                src/cli/keypoint_manager/commands/generation_basic.cpp
+                src/cli/keypoint_manager/commands/generation_detector.cpp
+                src/cli/keypoint_manager/commands/subset_commands.cpp
+                src/cli/keypoint_manager/commands/intersection_commands.cpp
+                src/cli/keypoint_manager/commands/non_overlapping.cpp
                        src/core/keypoints/locked_in_keypoints.cpp
                        src/core/keypoints/KeypointGeneratorFactory.cpp
                        src/core/keypoints/KeypointAttributeAdapter.cpp
@@ -981,7 +1011,6 @@ if(BUILD_KEYPOINT_MANAGER)
         target_link_libraries(keypoint_manager
             keypoints
             thesis_database
-            Boost::system
             Boost::filesystem
         )
 
@@ -1011,6 +1040,103 @@ else()
     message(STATUS "Keypoint manager disabled (use -DBUILD_KEYPOINT_MANAGER=ON to enable)")
 endif()
 
+# Patch benchmark CLI tool (HPatches patch-based evaluation)
+option(BUILD_PATCH_BENCHMARK "Build patch benchmark CLI tool for HPatches evaluation" ON)
+
+if(BUILD_PATCH_BENCHMARK)
+    message(STATUS "Building patch benchmark CLI tool")
+
+    if(EXISTS "${CMAKE_SOURCE_DIR}/cli/patch_benchmark.cpp")
+        add_executable(patch_benchmark
+            cli/patch_benchmark.cpp
+            src/core/patches/PatchLoader.cpp
+            src/core/patches/PatchCNNExtractor.cpp
+            src/core/patches/PatchTraditionalExtractor.cpp
+            src/core/patches/PatchFusionExtractor.cpp
+            src/core/patches/PatchDescriptorFactory.cpp
+            src/core/benchmark/PatchMetrics.cpp
+            src/core/benchmark/HPatchesBenchmark.cpp
+            src/core/descriptor/factories/DescriptorFactory.cpp
+            src/core/database/DatabaseManager.cpp
+            src/core/descriptor/extractors/CompositeDescriptorExtractor.cpp
+            src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
+            src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
+            src/core/descriptor/extractors/wrappers/RGBSIFTChannelAverageWrapper.cpp
+            src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
+            src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
+            src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
+            src/core/descriptor/extractors/wrappers/DSPRGBSIFTWrapperV2.cpp
+            src/core/descriptor/extractors/wrappers/DSPHoWHWrapperV2.cpp
+            src/core/descriptor/extractors/wrappers/DSPHoNCWrapperV2.cpp
+            src/core/descriptor/extractors/wrappers/VGGWrapper.cpp
+            src/core/descriptor/extractors/wrappers/ORBWrapper.cpp
+            src/core/descriptor/extractors/wrappers/SURFWrapper.cpp
+        )
+
+        # LibTorch wrapper (if available)
+        if(BUILD_LIBTORCH_DESCRIPTORS)
+            target_sources(patch_benchmark PRIVATE
+                src/core/descriptor/extractors/wrappers/LibTorchWrapper.cpp
+                src/core/descriptor/extractors/wrappers/LibTorchFactory.cpp)
+            target_link_libraries(patch_benchmark ${TORCH_LIBRARIES})
+            target_compile_definitions(patch_benchmark PRIVATE BUILD_LIBTORCH_DESCRIPTORS=1)
+            message(STATUS "LibTorch wrapper added to patch_benchmark")
+        endif()
+
+        target_compile_features(patch_benchmark PRIVATE cxx_std_17)
+
+        # Include directories
+        target_include_directories(patch_benchmark PRIVATE
+            ${CMAKE_SOURCE_DIR}
+            ${CMAKE_SOURCE_DIR}/include
+            ${CMAKE_SOURCE_DIR}/src
+            ${CMAKE_SOURCE_DIR}/descriptor_compare
+        )
+
+        # Link libraries
+        target_link_libraries(patch_benchmark
+            keypoints
+            Boost::filesystem
+        )
+
+        # Add OpenCV dependencies
+        if(USE_CONAN)
+            target_link_libraries(patch_benchmark ${OpenCV_LIBS})
+            target_link_libraries(patch_benchmark ${SQLite3_LIBS})
+        else()
+            target_link_libraries(patch_benchmark ${OpenCV_LIBRARIES})
+            target_link_libraries(patch_benchmark ${SQLite3_LIBRARIES})
+        endif()
+
+        # YAML-cpp dependency for config loading
+        find_package(PkgConfig QUIET)
+        if(PkgConfig_FOUND)
+            pkg_check_modules(YAMLCPP yaml-cpp)
+        endif()
+        if(YAMLCPP_FOUND)
+            target_link_libraries(patch_benchmark ${YAMLCPP_LIBRARIES})
+            target_include_directories(patch_benchmark PRIVATE ${YAMLCPP_INCLUDE_DIRS})
+            message(STATUS "yaml-cpp found via pkg-config for patch_benchmark")
+        else()
+            target_link_libraries(patch_benchmark yaml-cpp)
+            message(STATUS "Using system yaml-cpp library for patch_benchmark")
+        endif()
+
+        # OpenMP for parallel scene processing (optional)
+        if(OpenMP_CXX_FOUND)
+            target_link_libraries(patch_benchmark OpenMP::OpenMP_CXX)
+            message(STATUS "OpenMP enabled for parallel patch processing")
+        endif()
+
+        message(STATUS "Patch benchmark CLI tool configured")
+
+    else()
+        message(WARNING "patch_benchmark.cpp not found - skipping patch benchmark CLI")
+    endif()
+else()
+    message(STATUS "Patch benchmark disabled (use -DBUILD_PATCH_BENCHMARK=ON to enable)")
+endif()
+
 # Stage 7 migration system removed: new pipeline is the default
 # YAML negative validation tests
 create_gtest_if_exists("tests/unit/config/test_yaml_validation_errors_gtest.cpp" "test_yaml_validation_errors_gtest")
@@ -1027,7 +1153,7 @@ if(TARGET test_yaml_validation_errors_gtest)
         target_link_libraries(test_yaml_validation_errors_gtest yaml-cpp)
     endif()
     target_link_libraries(test_yaml_validation_errors_gtest ${OpenCV_LIBRARIES})
-    target_include_directories(test_yaml_validation_errors_gtest PRIVATE src include ${OpenCV_INCLUDE_DIRS})
+    target_include_directories(test_yaml_validation_errors_gtest PRIVATE src src/include ${OpenCV_INCLUDE_DIRS})
 
 # YAML Schema v1 tests
 create_gtest_if_exists("tests/unit/config/test_yaml_schema_v1_gtest.cpp" "test_yaml_schema_v1_gtest")
@@ -1044,6 +1170,6 @@ if(TARGET test_yaml_schema_v1_gtest)
         target_link_libraries(test_yaml_schema_v1_gtest yaml-cpp)
     endif()
     target_link_libraries(test_yaml_schema_v1_gtest ${OpenCV_LIBRARIES})
-    target_include_directories(test_yaml_schema_v1_gtest PRIVATE src include ${OpenCV_INCLUDE_DIRS})
+    target_include_directories(test_yaml_schema_v1_gtest PRIVATE src src/include ${OpenCV_INCLUDE_DIRS})
 endif()
 endif()

@@ -741,6 +741,8 @@ namespace thesis_project::config {
         if (node["save_descriptors"]) database.save_descriptors = node["save_descriptors"].as<bool>();
         if (node["save_matches"]) database.save_matches = node["save_matches"].as<bool>();
         if (node["save_visualizations"]) database.save_visualizations = node["save_visualizations"].as<bool>();
+        if (node["ephemeral_descriptors"]) database.ephemeral_descriptors = node["ephemeral_descriptors"].as<bool>();
+        if (node["ephemeral_matches"]) database.ephemeral_matches = node["ephemeral_matches"].as<bool>();
     }
 
     void YAMLConfigLoader::parsePerformance(const YAML::Node& node, PerformanceParams& performance) {
@@ -906,6 +908,8 @@ namespace thesis_project::config {
         out << YAML::Key << "save_descriptors" << YAML::Value << config.database.save_descriptors;
         out << YAML::Key << "save_matches" << YAML::Value << config.database.save_matches;
         out << YAML::Key << "save_visualizations" << YAML::Value << config.database.save_visualizations;
+        out << YAML::Key << "ephemeral_descriptors" << YAML::Value << config.database.ephemeral_descriptors;
+        out << YAML::Key << "ephemeral_matches" << YAML::Value << config.database.ephemeral_matches;
         out << YAML::EndMap;
         
         out << YAML::EndMap;

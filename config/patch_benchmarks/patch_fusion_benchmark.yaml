@@ -1,0 +1,56 @@
+# HPatches Patch Fusion Benchmark Configuration
+#
+# This configuration evaluates descriptor fusion strategies on pre-extracted
+# HPatches patches, isolating the fusion effect from keypoint location quality.
+#
+# Run: ./patch_benchmark ../config/patch_benchmarks/patch_fusion_benchmark.yaml
+# Or:  ./patch_benchmark --patches ../hpatches-release --descriptor hardnet
+
+experiment:
+  name: "patch_fusion_benchmark"
+  description: "Compare descriptor fusion on pre-extracted HPatches patches"
+
+# HPatches patch dataset location
+patches:
+  path: "../hpatches-release/"
+  scenes: []  # Empty = all 116 scenes
+  difficulty:
+    easy: true    # ~0.85 overlap (low geometric noise)
+    hard: true    # ~0.72 overlap (high geometric noise)
+    tough: true   # Additional difficulty level
+
+# Descriptors to evaluate (baselines only)
+# This section is used by patch_benchmark when run with this YAML.
+descriptors:
+  # Single CNN descriptors
+  - name: "hardnet"
+    type: "libtorch_hardnet"
+    device: "auto"
+
+  - name: "sosnet"
+    type: "libtorch_sosnet"
+    device: "auto"
+
+#  - name: "l2net"
+#    type: "libtorch_l2net"
+#    device: "auto"
+
+  # Single traditional descriptors
+#  - name: "sift"
+#    type: "sift"
+
+  - name: "rgbsift"
+    type: "rgbsift"
+
+#  - name: "surf"
+#    type: "surf"
+
+# Performance settings
+performance:
+  num_threads: 4
+  verbose: true
+
+# Output settings
+output:
+  save_to_database: true  # Save results to SQLite (experiments + patch_benchmark_results)
+  print_results: true

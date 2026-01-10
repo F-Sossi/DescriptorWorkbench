@@ -152,20 +152,9 @@ TEST_F(DatabaseStandaloneTest, StatisticsRetrieval) {
     auto stats = db.getStatistics();
     EXPECT_FALSE(stats.empty()) << "Should retrieve some statistics";
     
-    // Verify statistics contain meaningful keys
-    bool has_experiment_count = false;
-    bool has_result_count = false;
-    
     for (const auto& [key, value] : stats) {
         EXPECT_FALSE(key.empty()) << "Statistic key should not be empty";
         EXPECT_GE(value, 0.0) << "Statistic value should be non-negative";
-        
-        if (key.find("experiment") != std::string::npos) {
-            has_experiment_count = true;
-        }
-        if (key.find("result") != std::string::npos) {
-            has_result_count = true;
-        }
     }
     
     // Note: We don't enforce these specific keys since they may vary by implementation

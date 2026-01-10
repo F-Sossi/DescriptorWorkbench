@@ -1,0 +1,230 @@
+# HardNet + SOSNet Fusion - CNN + CNN Fusion Test
+#
+# Tests whether two CNN descriptors (both zero-centered, learned representations)
+# can successfully fuse where SIFT-based + CNN fusion failed.
+#
+# Hypothesis: CNN descriptors have compatible distributions (both zero-centered)
+# and complementary learned features, enabling successful fusion.
+#
+# Expected Runtime: ~4-5 hours for all 5 SOSNet + fusion configurations
+
+experiment:
+  name: "fusion_hardnet+sosnet_keynet_scale6px_and_intersections"
+  description: "Test CNN+CNN fusion with HardNet and SOSNet to avoid SIFT incompatibility"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # All 116 scenes
+
+keypoints:
+  source: "database"
+  keypoint_set_name: "independent"  # Explicit assignment mode
+  use_locked_keypoints: true
+
+  alternative_keypoints:
+    # ===== PHASE 1: UNCONTROLLED BASELINES =====
+    - keypoint_set_name: "keynet_8000"
+      description: "Full KeyNet keypoints (uncontrolled scale)"
+
+    # ===== PHASE 2: SCALE-CONTROLLED BASELINES =====
+    - keypoint_set_name: "keynet_scale_matched_6px"
+      description: "KeyNet top 23% by size (645K keypoints, avg 92.39px) - scale-controlled"
+
+    # ===== PHASE 3: SPATIAL INTERSECTION SETS =====
+    - keypoint_set_name: "keynet_sift_8k_a"
+      description: "KeyNet positions from SIFT-KeyNet intersection (565K, avg 45.93px)"
+    - keypoint_set_name: "keynet_sift_8k_b"
+      description: "SIFT positions from SIFT-KeyNet intersection (565K, avg 3.51px)"
+
+    # ===== PHASE 5: SCALE-MATCHED INTERSECTION =====
+    - keypoint_set_name: "sift_keynet_scale_matched_intersection_b"
+      description: "KeyNet positions from scale-matched intersection (111K, avg 89.74px)"
+    - keypoint_set_name: "sift_keynet_scale_matched_intersection_a"
+      description: "SIFT positions from scale-matched intersection (111K, avg 7.64px)"
+
+descriptors:
+  # ===================================================================
+  # PHASE 2: SOSNet SCALE-CONTROLLED BASELINE
+  # Purpose: Establish SOSNet performance on large-scale keypoints
+  # Compare to: HardNet scale-controlled (78.9% mAP)
+  # ===================================================================
+
+  - name: "libtorch_sosnet__keynet_8000__baseline"
+    type: "libtorch_sosnet"
+    device: "auto"
+    keypoint_set_name: "keynet_8000"
+    pooling: "none"
+
+  - name: "libtorch_sosnet__keynet_scale_matched_6px__scale_controlled"
+    type: "libtorch_sosnet"
+    device: "auto"
+    keypoint_set_name: "keynet_scale_matched_6px"
+    pooling: "none"
+    # Expected: Test if SOSNet matches HardNet performance (~78-80%)
+
+  # ===================================================================
+  # PHASE 3: SOSNet SPATIAL INTERSECTION BASELINE
+  # Purpose: Test SOSNet on intersection keypoints
+  # Compare to: HardNet intersection (82.4% mAP - BEST SINGLE DESCRIPTOR)
+  # ===================================================================
+
+  - name: "libtorch_sosnet__keynet_sift_8k_a__intersection"
+    type: "libtorch_sosnet"
+    device: "auto"
+    keypoint_set_name: "keynet_sift_8k_a"
+    pooling: "none"
+    # Expected: Test if SOSNet benefits from spatial intersection like HardNet
+
+  - name: "libtorch_sosnet__keynet_sift_8k_b__intersection"
+    type: "libtorch_sosnet"
+    device: "auto"
+    keypoint_set_name: "keynet_sift_8k_b"
+    pooling: "none"
+
+  # ===================================================================
+  # PHASE 5: SOSNet SCALE-MATCHED INTERSECTION BASELINE
+  # Purpose: Establish SOSNet baseline for fusion comparison
+  # ===================================================================
+
+  - name: "libtorch_sosnet__sift_keynet_scale_matched_intersection_b__baseline"
+    type: "libtorch_sosnet"
+    device: "auto"
+    keypoint_set_name: "sift_keynet_scale_matched_intersection_b"
+    pooling: "none"
+    # Expected: SOSNet performance on same keypoints as fusion experiments
+
+  - name: "libtorch_sosnet__sift_keynet_scale_matched_intersection_a__baseline"
+    type: "libtorch_sosnet"
+    device: "auto"
+    keypoint_set_name: "sift_keynet_scale_matched_intersection_a"
+    pooling: "none"
+
+  # ===================================================================
+  # PHASE 4: CNN + CNN FUSION ON ORIGINAL SPATIAL INTERSECTION
+  # Purpose: Test fusion on uncontrolled intersection (565K keypoints)
+  # Compare to: SIFT+HardNet fusion (55.2% - FAILED, same as SIFT alone)
+  # ===================================================================
+
+  - name: "fusion_hardnet+sosnet__keynet_sift_8k_a__weighted_avg"
+    type: "composite"
+    components:
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "keynet_sift_8k_a"
+        weight: 0.5
+      - descriptor: "libtorch_sosnet"
+        device: "auto"
+        keypoint_set_name: "keynet_sift_8k_a"
+        weight: 0.5
+    aggregation: "weighted_avg"
+    # Test: Does CNN+CNN fusion work on original intersection?
+    # Compare to: SIFT+HardNet (55.2% - failed)
+
+  - name: "fusion_hardnet+sosnet__keynet_sift_8k_a__concatenate"
+    type: "composite"
+    components:
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "keynet_sift_8k_a"
+      - descriptor: "libtorch_sosnet"
+        device: "auto"
+        keypoint_set_name: "keynet_sift_8k_a"
+    aggregation: "concatenate"
+    # Test concatenation on original intersection
+
+  # ===================================================================
+  # PHASE 5: CNN + CNN FUSION ON SCALE-MATCHED INTERSECTION
+  # Purpose: CRITICAL TEST - Does CNN+CNN fusion work where SIFT+CNN failed?
+  # ===================================================================
+
+  - name: "fusion_hardnet+sosnet__sift_keynet_scale_matched_intersection_b__weighted_avg"
+    type: "composite"
+    components:
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "sift_keynet_scale_matched_intersection_b"
+        weight: 0.5
+      - descriptor: "libtorch_sosnet"
+        device: "auto"
+        keypoint_set_name: "sift_keynet_scale_matched_intersection_b"
+        weight: 0.5
+    aggregation: "weighted_avg"
+    # CRITICAL TEST: Both descriptors zero-centered, same keypoints
+    # Expected outcomes:
+    #   - If > 78.9%: SUCCESS! CNN fusion works, complementary features
+    #   - If ≈ 78%: Neutral, descriptors too similar
+    #   - If < 78%: FAILURE, averaging still degrades even with compatible distributions
+
+  - name: "fusion_hardnet+sosnet__sift_keynet_scale_matched_intersection_b__concatenate"
+    type: "composite"
+    components:
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "sift_keynet_scale_matched_intersection_b"
+      - descriptor: "libtorch_sosnet"
+        device: "auto"
+        keypoint_set_name: "sift_keynet_scale_matched_intersection_b"
+    aggregation: "concatenate"
+    # Test concatenation (256D) instead of averaging
+    # May preserve both descriptors' information better
+
+evaluation:
+  matching:
+    method: "brute_force"
+    norm: "l2"
+    cross_check: true
+    ratio_test_threshold: 0.8
+
+  keypoint_verification:
+    enabled: false
+
+  keypoint_retrieval:
+    enabled: false
+
+performance:
+  parallel_scenes: true
+  num_threads: 4
+  batch_size: 512
+
+database:
+  connection: "sqlite:///experiments.db"
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+# ===================================================================
+# EXPECTED OUTCOMES AND INTERPRETATION
+# ===================================================================
+#
+# Key Comparisons (Scale-Matched Intersection):
+#
+# 1. SOSNet vs HardNet baselines:
+#    - SOSNet scale-controlled vs HardNet scale-controlled (78.9%)
+#    - SOSNet intersection vs HardNet intersection (82.4% - BEST)
+#    - SOSNet scale-matched vs HardNet scale-matched
+#
+# 2. CNN+CNN fusion vs SIFT+CNN fusion:
+#    - HardNet+SOSNet fusion vs SIFT+HardNet fusion (72.5% - DEGRADED)
+#    - HardNet+SOSNet fusion vs RootSIFT+HardNet fusion (72.55% - DEGRADED)
+#
+# 3. Critical decision point:
+#    If HardNet+SOSNet > 78.9%:
+#      → CNN fusion works! SIFT incompatibility was the problem
+#      → Pursue multi-CNN fusion strategies
+#
+#    If HardNet+SOSNet ≈ 72-78%:
+#      → Averaging degrades even compatible descriptors
+#      → Try concatenation instead
+#
+#    If HardNet+SOSNet < 72%:
+#      → SOSNet and HardNet are redundant, not complementary
+#      → Single best CNN is optimal strategy
+#
+# Reference Baselines (from fair_fusion experiments):
+# - HardNet scale-controlled: 78.9% mAP
+# - HardNet intersection: 82.4% mAP (BEST OVERALL)
+# - SIFT + HardNet fusion: 72.5% mAP (degraded by 6.4%)
+# - DSPSIFT + HardNet fusion: 28.49% mAP (catastrophic)
+#
+# ===================================================================

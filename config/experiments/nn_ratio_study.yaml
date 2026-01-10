@@ -1,0 +1,85 @@
+# NN Ratio Analysis Study
+#
+# Purpose: Store descriptors to analyze NN1/NN2 ratios and understand
+# why intersection keypoints achieve higher mAP despite lower repeatability.
+#
+# Hypothesis: Intersection keypoints produce more distinctive descriptors
+# (larger NN1/NN2 gap) than pure scale or scale-only keypoints.
+#
+# Run: ./experiment_runner ../config/experiments/nn_ratio_study.yaml
+#
+# WARNING: This stores descriptors in the database. Storage estimate:
+#   ~128 bytes per descriptor × 173K keypoints × 6 images = ~130MB per set
+#   Total: ~400MB for all three sets
+
+experiment:
+  name: "nn_ratio_analysis"
+  description: "Store descriptors for NN ratio distinctiveness analysis"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # All scenes
+
+keypoints:
+  source: "database"
+  keypoint_set_name: "independent"
+  use_locked_keypoints: true
+
+  alternative_keypoints:
+    - keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+      description: "Sift Surf scal matched intersection"
+
+    - keypoint_set_name: "sift_top_scale_13px"
+      description: "Same scale"
+
+    - keypoint_set_name: "sift_scale_only_13px"
+      description: "Scale filtered"
+
+descriptors:
+  # Intersection set (173K keypoints, 13.29px avg) - BEST mAP
+  - name: "dspsift_v2__intersection__nn_study"
+    type: "dspsift_v2"
+    keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+    pooling: "none"
+
+  # Pure scale control (173K keypoints, 20.77px avg)
+  - name: "dspsift_v2__pure_scale__nn_study"
+    type: "dspsift_v2"
+    keypoint_set_name: "sift_top_scale_13px"
+    pooling: "none"
+
+  # Scale-matched control (400K keypoints, 13.18px avg)
+  - name: "dspsift_v2__scale_only__nn_study"
+    type: "dspsift_v2"
+    keypoint_set_name: "sift_scale_only_13px"
+    pooling: "none"
+
+evaluation:
+  matching:
+    method: "ratio_test"
+    norm: "l2"
+    cross_check: true
+    ratio_threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+  keypoint_verification:
+    enabled: false
+
+  keypoint_retrieval:
+    enabled: false
+
+performance:
+  parallel_scenes: true
+  num_threads: 0
+  batch_size: 512
+
+database:
+  connection: "sqlite:///experiments.db"
+  save_descriptors: true   # KEY: Enable descriptor storage
+  save_matches: false
+  save_visualizations: false

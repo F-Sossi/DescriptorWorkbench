@@ -1,0 +1,250 @@
+# RootSIFT + HardNet Fusion - Fair Comparison Methodology
+#
+# Tests whether RootSIFT (SIFT with Hellinger kernel normalization) provides
+# better fusion with HardNet compared to vanilla SIFT. RootSIFT applies:
+# - L1 normalization
+# - Element-wise square root (Hellinger kernel)
+# - L2 normalization
+#
+# This normalization improves SIFT discriminability and distance metrics for
+# histogram-based features, typically providing 5-10% relative improvement.
+#
+# Follows the same experimental design as fair_fusion_sift_hardnet_comprehensive.yaml:
+# - Phase 1: Uncontrolled baselines (full keypoint sets)
+# - Phase 2: Scale-controlled baselines (top-N by size)
+# - Phase 3: Spatial intersection baselines (individual descriptors)
+# - Phase 4: Fusion on original spatial intersection
+# - Phase 5: Fusion on scale-matched intersection
+#
+# Expected Runtime: ~6-8 hours for all 8 RootSIFT descriptor configurations
+
+experiment:
+  name: "fusion_rootsift+hardnet_sift_full_scale6px_keynet_intersections"
+  description: "RootSIFT + HardNet fusion with fair comparison methodology across both intersection types"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # All 116 scenes
+
+keypoints:
+  source: "database"
+  keypoint_set_name: "independent"  # Explicit assignment mode
+  use_locked_keypoints: true
+
+  alternative_keypoints:
+    # ===== PHASE 1: UNCONTROLLED BASELINES =====
+    - keypoint_set_name: "sift_8000"
+      description: "Full SIFT keypoints (2.5M keypoints, avg 4.45px) - uncontrolled scale"
+
+    # ===== PHASE 2: SCALE-CONTROLLED BASELINES =====
+    - keypoint_set_name: "sift_scale_matched_6px"
+      description: "SIFT top 25% by size (645K keypoints, avg 10.03px) - scale-controlled"
+
+    # ===== PHASE 3: SPATIAL INTERSECTION SETS (FROM FULL SETS) =====
+    - keypoint_set_name: "keynet_sift_8k_b"
+      description: "SIFT positions from SIFT-KeyNet intersection (565K, avg 3.51px)"
+
+    - keypoint_set_name: "keynet_sift_8k_a"
+      description: "KeyNet positions from SIFT-KeyNet intersection (565K, avg 45.93px)"
+
+    # ===== PHASE 5: SCALE-MATCHED INTERSECTION =====
+    - keypoint_set_name: "sift_keynet_scale_matched_intersection_a"
+      description: "SIFT positions from scale-matched intersection (111K, avg 7.64px)"
+
+    - keypoint_set_name: "sift_keynet_scale_matched_intersection_b"
+      description: "KeyNet positions from scale-matched intersection (111K, avg 89.74px)"
+
+descriptors:
+  # ===================================================================
+  # PHASE 1: UNCONTROLLED BASELINE
+  # Purpose: Establish RootSIFT performance on full keypoint set
+  # ===================================================================
+
+  - name: "rootsift__sift_8000__native"
+    type: "sift"
+    keypoint_set_name: "sift_8000"
+    pooling: "none"
+    rooting_stage: "after_pooling"      # Hellinger: L1 → sqrt → L2
+    normalize_after_pooling: true
+    norm_type: 2                        # L2 normalization (default)
+    use_color: false
+    # Expected: ~45-47% (5-10% relative improvement over SIFT 42.6%)
+    # Compare to phase1_sift_native: 42.6%
+
+  # ===================================================================
+  # PHASE 2: SCALE-CONTROLLED BASELINE
+  # Purpose: Test if scale control + RootSIFT provides compound benefit
+  # ===================================================================
+
+  - name: "rootsift__sift_scale_matched_6px__scale_controlled"
+    type: "sift"
+    keypoint_set_name: "sift_scale_matched_6px"
+    pooling: "none"
+    rooting_stage: "after_pooling"      # Hellinger: L1 → sqrt → L2
+    normalize_after_pooling: true
+    norm_type: 2
+    use_color: false
+    # Expected: ~67-70% (5-10% over SIFT 63.9%)
+    # Compare to phase2_sift_scale_controlled: 63.9%
+
+  # ===================================================================
+  # PHASE 3: SPATIAL INTERSECTION BASELINE
+  # Purpose: Test if spatial intersection helps RootSIFT
+  # ===================================================================
+
+  - name: "rootsift__keynet_sift_8k_b__intersection"
+    type: "sift"
+    keypoint_set_name: "keynet_sift_8k_b"
+    pooling: "none"
+    rooting_stage: "after_pooling"      # Hellinger: L1 → sqrt → L2
+    normalize_after_pooling: true
+    norm_type: 2
+    use_color: false
+    # Expected: ~58-61% (improvement over SIFT 55.2%)
+    # Compare to phase3_sift_on_intersection: 55.2%
+
+  # ===================================================================
+  # PHASE 4: FUSION ON ORIGINAL SPATIAL INTERSECTION
+  # Purpose: Test RootSIFT + HardNet fusion on uncontrolled intersection
+  # ===================================================================
+
+  - name: "fusion_rootsift+hardnet__keynet_sift_8k_a+b__weighted_avg"
+    type: "composite"
+    components:
+      - descriptor: "sift"
+        keypoint_set_name: "keynet_sift_8k_b"
+        pooling: "none"
+        rooting_stage: "after_pooling"  # Hellinger: L1 → sqrt → L2
+        normalize_after_pooling: true
+        norm_type: 2
+        use_color: false
+        weight: 0.5
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "keynet_sift_8k_a"
+        weight: 0.5
+    aggregation: "weighted_avg"
+    # Expected: Will RootSIFT avoid being dominated like SIFT was?
+    # Compare to phase4_fusion_intersection_avg (SIFT): 55.2% (FAILED)
+
+  - name: "fusion_rootsift+hardnet__keynet_sift_8k_a+b__concatenate"
+    type: "composite"
+    components:
+      - descriptor: "sift"
+        keypoint_set_name: "keynet_sift_8k_b"
+        pooling: "none"
+        rooting_stage: "after_pooling"  # Hellinger: L1 → sqrt → L2
+        normalize_after_pooling: true
+        norm_type: 2
+        use_color: false
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "keynet_sift_8k_a"
+    aggregation: "concatenate"
+    # Test concatenation on original intersection
+
+  # ===================================================================
+  # PHASE 5: FUSION ON SCALE-MATCHED INTERSECTION
+  # Purpose: CRITICAL - Test if RootSIFT fusion works with scale matching
+  # ===================================================================
+
+  - name: "fusion_rootsift+hardnet__sift_keynet_scale_matched_intersection_a+b__weighted_avg"
+    type: "composite"
+    components:
+      - descriptor: "sift"
+        keypoint_set_name: "sift_keynet_scale_matched_intersection_a"
+        pooling: "none"
+        rooting_stage: "after_pooling"  # Hellinger: L1 → sqrt → L2
+        normalize_after_pooling: true
+        norm_type: 2
+        use_color: false
+        weight: 0.5
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "sift_keynet_scale_matched_intersection_b"
+        weight: 0.5
+    aggregation: "weighted_avg"
+    # Expected: > 72.5% (SIFT fusion) if RootSIFT better partner
+    # Compare to phase5_fusion_scale_matched_avg (SIFT): 72.5%
+
+  - name: "fusion_rootsift+hardnet__sift_keynet_scale_matched_intersection_a+b__concatenate"
+    type: "composite"
+    components:
+      - descriptor: "sift"
+        keypoint_set_name: "sift_keynet_scale_matched_intersection_a"
+        pooling: "none"
+        rooting_stage: "after_pooling"  # Hellinger: L1 → sqrt → L2
+        normalize_after_pooling: true
+        norm_type: 2
+        use_color: false
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "sift_keynet_scale_matched_intersection_b"
+    aggregation: "concatenate"
+    # Test concatenation on scale-matched intersection
+
+evaluation:
+  matching:
+    method: "ratio_test"
+    norm: "l2"
+    cross_check: true
+    ratio_threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+  keypoint_verification:
+    enabled: false
+
+  keypoint_retrieval:
+    enabled: false
+
+performance:
+  parallel_scenes: true
+  num_threads: 0  # Auto-detect CPU cores
+  batch_size: 512
+
+database:
+  connection: "sqlite:///experiments.db"
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+# ===================================================================
+# EXPECTED OUTCOMES AND INTERPRETATION
+# ===================================================================
+#
+# Key Comparisons:
+#
+# 1. RootSIFT vs SIFT baselines:
+#    - Phase 1: RootSIFT native vs SIFT native (42.6%)
+#    - Phase 2: RootSIFT scale-controlled vs SIFT scale-controlled (63.9%)
+#    - Phase 3: RootSIFT intersection vs SIFT intersection (55.2%)
+#
+# 2. Fusion comparisons:
+#    - Phase 4: RootSIFT fusion (uncontrolled) vs SIFT fusion (55.2% - FAILED)
+#    - Phase 5: RootSIFT fusion (scale-matched) vs SIFT fusion (72.5%)
+#
+# 3. Critical test:
+#    - phase5_rootsift_fusion_scale_matched_avg vs HardNet alone (78.9%)
+#    - If > 78.9%: SUCCESS! RootSIFT complements HardNet
+#    - If 73-78%: Improvement over SIFT but still dominated
+#    - If ≈ 72-73%: Marginal improvement, normalization helps slightly
+#
+# Hypotheses:
+# H1: RootSIFT improves SIFT baseline by 5-10% across all phases
+# H2: RootSIFT's Hellinger normalization creates better distance metrics
+# H3: Improved normalization may reduce HardNet dominance in fusion
+# H4: Phase 4 will likely fail (small-scale dominance)
+# H5: Phase 5 is the critical test
+#
+# Comparison to DSPSIFT:
+# - DSPSIFT: Multi-scale pooling (structural improvement)
+# - RootSIFT: Better normalization (distributional improvement)
+# - Both test different aspects of improving SIFT for fusion
+#
+# See docs/StatusDocs/INTERSECTION_MAP_INVESTIGATION_RESULTS.md
+# ===================================================================

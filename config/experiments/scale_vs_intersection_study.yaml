@@ -1,0 +1,160 @@
+# Scale vs Intersection Controlled Study
+#
+# Purpose: Determine if intersection benefit comes from detector consensus or scale selection
+#
+# Hypothesis Test:
+#   H0: Intersection benefit is due to scale selection
+#   H1: Intersection benefit is due to detector consensus
+#
+# Controlled Comparisons:
+#   1. sift_scale_only_13px (400K, 13.18px) vs intersection (173K, 13.29px)
+#      - Same scale, different counts
+#      - If intersection wins: consensus + fewer keypoints matters
+#
+#   2. sift_top_scale_13px (173K, 20.77px) vs intersection (173K, 13.29px)
+#      - Same count, different scale
+#      - If 20.77px wins: pure scale selection is best
+#      - If 13.29px intersection wins: consensus > raw scale
+#
+# Run: ./experiment_runner ../config/experiments/scale_vs_intersection_study.yaml
+
+experiment:
+  name: "scale_vs_intersection_controlled_study"
+  description: "Isolate intersection effect from scale selection"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []
+
+keypoints:
+  source: "database"
+  keypoint_set_name: "independent"
+  use_locked_keypoints: true
+
+  alternative_keypoints:
+    # Control 1: Same scale (~13px), different selection method
+    - keypoint_set_name: "sift_scale_only_13px"
+      description: "Top 400K by size (13.18px avg) - scale only, no intersection"
+
+    - keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+      description: "SIFT-SURF intersection (13.29px avg) - detector consensus"
+
+    # Control 2: Same count (173K), different scale
+    - keypoint_set_name: "sift_top_scale_13px"
+      description: "Top 173K by size (20.77px avg) - pure scale selection"
+
+descriptors:
+  # ===================================================================
+  # CONTROL 1: Same scale (~13px), different selection
+  # ===================================================================
+
+  # Scale-only selection (400K keypoints, 13.18px)
+  - name: "dspsift_v2__sift_scale_only_13px__scale_only"
+    type: "dspsift_v2"
+    keypoint_set_name: "sift_scale_only_13px"
+    pooling: "none"
+
+  - name: "rgbsift__sift_scale_only_13px__scale_only"
+    type: "rgbsift"
+    keypoint_set_name: "sift_scale_only_13px"
+    pooling: "none"
+    use_color: true
+
+  - name: "dsprgbsift_v2__sift_scale_only_13px__scale_only"
+    type: "dsprgbsift_v2"
+    keypoint_set_name: "sift_scale_only_13px"
+    pooling: "none"
+    use_color: true
+
+  # Intersection selection (173K keypoints, 13.29px) - already have these results
+  # Including for completeness / re-validation
+  - name: "dspsift_v2__sift_surf_intersection__intersection"
+    type: "dspsift_v2"
+    keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+    pooling: "none"
+
+  - name: "rgbsift__sift_surf_intersection__intersection"
+    type: "rgbsift"
+    keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+    pooling: "none"
+    use_color: true
+
+  - name: "dsprgbsift_v2__sift_surf_intersection__intersection"
+    type: "dsprgbsift_v2"
+    keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+    pooling: "none"
+    use_color: true
+
+  # ===================================================================
+  # CONTROL 2: Same count (173K), different scale
+  # ===================================================================
+
+  # Pure scale selection (173K keypoints, 20.77px)
+  - name: "dspsift_v2__sift_top_scale_13px__pure_scale"
+    type: "dspsift_v2"
+    keypoint_set_name: "sift_top_scale_13px"
+    pooling: "none"
+
+  - name: "rgbsift__sift_top_scale_13px__pure_scale"
+    type: "rgbsift"
+    keypoint_set_name: "sift_top_scale_13px"
+    pooling: "none"
+    use_color: true
+
+  - name: "dsprgbsift_v2__sift_top_scale_13px__pure_scale"
+    type: "dsprgbsift_v2"
+    keypoint_set_name: "sift_top_scale_13px"
+    pooling: "none"
+    use_color: true
+
+evaluation:
+  matching:
+    method: "ratio_test"
+    norm: "l2"
+    cross_check: true
+    ratio_threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+  keypoint_verification:
+    enabled: false
+
+  keypoint_retrieval:
+    enabled: false
+
+performance:
+  parallel_scenes: true
+  num_threads: 0
+  batch_size: 512
+
+database:
+  connection: "sqlite:///experiments.db"
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false
+
+# ===================================================================
+# INTERPRETATION GUIDE
+# ===================================================================
+#
+# Expected baseline (from existing experiments):
+#   - DSPSIFT on intersection: 74.93% mAP
+#   - RGBSIFT on intersection: 75.03% mAP
+#
+# If sift_scale_only_13px (400K, 13.18px) ≈ intersection (173K, 13.29px):
+#   → Scale is the primary factor, intersection just correlates with scale
+#
+# If intersection >> sift_scale_only_13px despite same scale:
+#   → Detector consensus provides real benefit beyond scale
+#
+# If sift_top_scale_13px (173K, 20.77px) >> intersection (173K, 13.29px):
+#   → Pure scale selection is better than consensus at smaller scales
+#
+# If intersection ≈ sift_top_scale_13px despite 7.5px scale difference:
+#   → Detector consensus compensates for smaller scale
+#
+# ===================================================================

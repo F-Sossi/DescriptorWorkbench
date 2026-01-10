@@ -1,0 +1,245 @@
+# Fair Fusion Evaluation: SIFT + HardNet with Scale-Controlled Baselines
+#
+# This experiment implements the methodology from docs/StatusDocs/CLAUDE_INTERSECTION_PLAN.md
+# to isolate descriptor fusion effects from scale filtering confounds.
+#
+# Experimental Design:
+# - Phase 1: Uncontrolled baselines (full keypoint sets)
+# - Phase 2: Scale-controlled baselines (top-N by size)
+# - Phase 3: Intersection baselines (individual descriptors on intersection sets)
+# - Phase 4: Fusion on original intersection (current method - confounded)
+# - Phase 5: Fusion on scale-matched intersection (fair comparison)
+#
+# Expected Runtime: ~8-10 hours for all 10 descriptor configurations
+# Database: Results stored in experiments.db with full metrics
+
+experiment:
+  name: "fusion_sift+hardnet_sift_keynet_full_scale6px_intersections"
+  description: "Scale-controlled evaluation of SIFT+HardNet fusion to isolate fusion effects from scale filtering confounds"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # Empty = all 116 scenes (696 images)
+
+keypoints:
+  source: "database"
+  keypoint_set_name: "independent"  # Explicit assignment mode
+  use_locked_keypoints: true
+
+  alternative_keypoints:
+    # ===== PHASE 1: UNCONTROLLED BASELINES =====
+    - keypoint_set_name: "sift_8000"
+      description: "Full SIFT keypoints (2.5M keypoints, avg 4.45px) - uncontrolled scale"
+
+    - keypoint_set_name: "keynet_8000"
+      description: "Full KeyNet keypoints (2.8M keypoints, avg 49.83px) - uncontrolled scale"
+
+    # ===== PHASE 2: SCALE-CONTROLLED BASELINES =====
+    - keypoint_set_name: "sift_scale_matched_6px"
+      description: "SIFT top 25% by size (645K keypoints, avg 10.03px) - scale-controlled"
+
+    - keypoint_set_name: "keynet_scale_matched_6px"
+      description: "KeyNet top 23% by size (645K keypoints, avg 92.39px) - scale-controlled"
+
+    # ===== PHASE 3: INTERSECTION SETS (ORIGINAL - FROM FULL SETS) =====
+    - keypoint_set_name: "keynet_sift_8k_b"
+      description: "SIFT positions from SIFT-KeyNet intersection (565K, avg 3.51px)"
+
+    - keypoint_set_name: "keynet_sift_8k_a"
+      description: "KeyNet positions from SIFT-KeyNet intersection (565K, avg 45.93px)"
+
+    # ===== PHASE 5: SCALE-MATCHED INTERSECTION =====
+    - keypoint_set_name: "sift_keynet_scale_matched_intersection_a"
+      description: "SIFT positions from scale-matched intersection (111K, avg 7.64px)"
+
+    - keypoint_set_name: "sift_keynet_scale_matched_intersection_b"
+      description: "KeyNet positions from scale-matched intersection (111K, avg 89.74px)"
+
+descriptors:
+  # ===================================================================
+  # PHASE 1: UNCONTROLLED BASELINES (Full Keypoint Sets)
+  # Purpose: Establish naive baseline performance without scale control
+  # ===================================================================
+
+  - name: "sift__sift_8000__native"
+    type: "sift"
+    keypoint_set_name: "sift_8000"
+    pooling: "none"
+    # Expected: ~42.64% MAP (known from investigation)
+
+  - name: "libtorch_hardnet__keynet_8000__native"
+    type: "libtorch_hardnet"
+    device: "auto"
+    keypoint_set_name: "keynet_8000"
+    pooling: "none"
+    # Expected: UNKNOWN - need to measure
+
+  # ===================================================================
+  # PHASE 2: SCALE-CONTROLLED BASELINES (Top-N by Size)
+  # Purpose: Quantify scale filtering effect independently
+  # ===================================================================
+
+  - name: "sift__sift_scale_matched_6px__scale_controlled"
+    type: "sift"
+    keypoint_set_name: "sift_scale_matched_6px"
+    pooling: "none"
+    # Expected: ~63.86% MAP (known from sift_top_size_645k experiment)
+
+  - name: "libtorch_hardnet__keynet_scale_matched_6px__scale_controlled"
+    type: "libtorch_hardnet"
+    device: "auto"
+    keypoint_set_name: "keynet_scale_matched_6px"
+    pooling: "none"
+    # Expected: UNKNOWN - critical measurement for fair comparison
+
+  # ===================================================================
+  # PHASE 3: INTERSECTION BASELINES (Individual Descriptors)
+  # Purpose: Test if intersection provides benefits beyond pure scale filtering
+  # ===================================================================
+
+  - name: "sift__keynet_sift_8k_b__intersection"
+    type: "sift"
+    keypoint_set_name: "keynet_sift_8k_b"
+    pooling: "none"
+    # Expected: Should be close to phase2_sift_scale_controlled if intersection = scale filtering
+
+  - name: "libtorch_hardnet__keynet_sift_8k_a__intersection"
+    type: "libtorch_hardnet"
+    device: "auto"
+    keypoint_set_name: "keynet_sift_8k_a"
+    pooling: "none"
+
+  - name: "libtorch_hardnet__keynet_sift_8k_b__intersection"
+    type: "libtorch_hardnet"
+    device: "auto"
+    keypoint_set_name: "keynet_sift_8k_b"
+    pooling: "none"
+    # Expected: Test if intersection helps HardNet beyond scale control
+
+  # ===================================================================
+  # PHASE 4: FUSION ON ORIGINAL INTERSECTION (Current Method - CONFOUNDED)
+  # Purpose: Measure total improvement including scale bias
+  # ===================================================================
+
+  - name: "fusion_sift+hardnet__keynet_sift_8k_a+b__weighted_avg"
+    type: "composite"
+    components:
+      - descriptor: "sift"
+        keypoint_set_name: "keynet_sift_8k_b"
+        weight: 0.5
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "keynet_sift_8k_a"
+        weight: 0.5
+    aggregation: "weighted_avg"
+    # Expected: High MAP, but confounded by scale filtering effect
+
+  - name: "fusion_sift+hardnet__keynet_sift_8k_a+b__concatenate"
+    type: "composite"
+    components:
+      - descriptor: "sift"
+        keypoint_set_name: "keynet_sift_8k_b"
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "keynet_sift_8k_a"
+    aggregation: "concatenate"
+    # Expected: Test if concatenation outperforms averaging
+
+  # ===================================================================
+  # PHASE 5: FUSION ON SCALE-MATCHED INTERSECTION (Fair Comparison)
+  # Purpose: Isolate fusion effect with scale controlled
+  # THIS IS THE CRITICAL EXPERIMENT FOR VALID FUSION EVALUATION
+  # ===================================================================
+
+  - name: "fusion_sift+hardnet__sift_keynet_scale_matched_intersection_a+b__weighted_avg"
+    type: "composite"
+    components:
+      - descriptor: "sift"
+        keypoint_set_name: "sift_keynet_scale_matched_intersection_a"
+        weight: 0.5
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "sift_keynet_scale_matched_intersection_b"
+        weight: 0.5
+    aggregation: "weighted_avg"
+    # Expected: CRITICAL - comparison to phase2 max reveals true fusion benefit
+
+  - name: "fusion_sift+hardnet__sift_keynet_scale_matched_intersection_a+b__concatenate"
+    type: "composite"
+    components:
+      - descriptor: "sift"
+        keypoint_set_name: "sift_keynet_scale_matched_intersection_a"
+      - descriptor: "libtorch_hardnet"
+        device: "auto"
+        keypoint_set_name: "sift_keynet_scale_matched_intersection_b"
+    aggregation: "concatenate"
+    # Expected: Test if concatenation maintains benefit with scale control
+
+  # Additional HardNet baselines for symmetry
+  - name: "libtorch_hardnet__sift_keynet_scale_matched_intersection_a__baseline"
+    type: "libtorch_hardnet"
+    device: "auto"
+    keypoint_set_name: "sift_keynet_scale_matched_intersection_a"
+    pooling: "none"
+
+evaluation:
+  matching:
+    method: "ratio_test"
+    norm: "l2"
+    cross_check: true
+    ratio_threshold: 0.8
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+  keypoint_verification:
+    enabled: false
+
+  keypoint_retrieval:
+    enabled: false
+
+performance:
+  parallel_scenes: true
+  num_threads: 0  # Auto-detect CPU cores
+  batch_size: 5122
+
+database:
+  connection: "sqlite:///experiments.db"
+  save_descriptors: false  # Reduce storage (descriptors are large)
+  save_matches: false      # Reduce storage (matches are large)
+  save_visualizations: false  # Disable for batch experiments
+
+# ===================================================================
+# EXPECTED OUTCOMES AND INTERPRETATION
+# ===================================================================
+#
+# The key comparison is:
+#   phase5_fusion_scale_matched_avg
+#     vs
+#   MAX(phase2_sift_scale_controlled, phase2_hardnet_scale_controlled)
+#
+# If fusion MAP > best individual MAP (scale-controlled):
+#   ✅ Fusion provides benefit beyond scale filtering
+#   → Descriptor fusion is effective
+#
+# If fusion MAP ≈ best individual MAP (scale-controlled):
+#   ❌ Fusion provides minimal benefit
+#   → Scale filtering accounts for most improvement
+#   → Keypoint quality matters more than descriptor combination
+#
+# Additional Analysis:
+# - Compare phase4 vs phase5 to see how much scale bias affects fusion
+# - Compare phase3 vs phase2 to test if intersection > pure scale filtering
+# - Compare concatenate vs average aggregation strategies
+#
+# Effect Decomposition:
+#   Scale Effect = phase2_avg - phase1_avg
+#   Intersection Effect = phase3_avg - phase2_avg
+#   Fusion Effect = phase5_fusion - phase2_max
+#   Total Improvement = phase4_fusion - phase1_avg
+#
+# See docs/StatusDocs/CLAUDE_INTERSECTION_PLAN.md for full methodology
+# ===================================================================

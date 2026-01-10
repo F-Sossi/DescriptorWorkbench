@@ -1,0 +1,200 @@
+experiment:
+  name: "fusion_dspsift+surf_extended_surf8000_scale6px_sift-surf_intersections"
+  description: "DSP-SIFT (v2) + SURF-EXT (128D) composites across native, scale-filtered, and SIFT/SURF intersections"
+  version: "1.0"
+  author: "automation"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # All scenes
+
+keypoints:
+  source: "database"
+  keypoint_set_name: "independent"  # Explicit mode
+  use_locked_keypoints: true
+
+  alternative_keypoints:
+    - keypoint_set_name: "surf_8000"
+      description: "SURF 8k native detection"
+    - keypoint_set_name: "surf_scale_matched_6px"
+      description: "SURF scale-filtered (top-N by size)"
+    - keypoint_set_name: "sift_surf_8k_a"
+      description: "Intersection (SIFT positions, tol=3px)"
+    - keypoint_set_name: "sift_surf_8k_b"
+      description: "Intersection (SURF positions, tol=3px)"
+    - keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+      description: "Scale-controlled intersection (SIFT positions, tol=6px)"
+    - keypoint_set_name: "sift_surf_scale_matched_intersection_b"
+      description: "Scale-controlled intersection (SURF positions, tol=6px)"
+
+descriptors:
+  # --- SURF baselines (128D extended) ---
+  - name: "surf_ext__surf_8000__baseline"
+    type: "surf"
+    keypoint_set_name: "surf_8000"
+    pooling: "none"
+    normalize_after_pooling: true
+    extended: true
+    use_color: false
+
+  - name: "surf_ext__surf_scale_matched_6px__scale_filtered"
+    type: "surf"
+    keypoint_set_name: "surf_scale_matched_6px"
+    pooling: "none"
+    normalize_after_pooling: true
+    extended: true
+    use_color: false
+
+  - name: "surf_ext__sift_surf_8k_b__intersection"
+    type: "surf"
+    keypoint_set_name: "sift_surf_8k_b"
+    pooling: "none"
+    normalize_after_pooling: true
+    extended: true
+    use_color: false
+
+  - name: "surf_ext__sift_surf_scale_matched_intersection_b__scale_matched_intersection"
+    type: "surf"
+    keypoint_set_name: "sift_surf_scale_matched_intersection_b"
+    pooling: "none"
+    normalize_after_pooling: true
+    extended: true
+    use_color: false
+
+  # --- DSPSIFT baselines on paired SIFT sides (for comparison) ---
+  - name: "dspsift_v2__sift_surf_8k_a__intersection"
+    type: "dspsift_v2"
+    keypoint_set_name: "sift_surf_8k_a"
+    pooling: "none"
+    pooling_aggregation: "average"
+    scales: [0.85, 1.0, 1.3]
+    normalize_after_pooling: true
+    norm_type: 2
+    rooting_stage: "none"
+    use_color: false
+
+  - name: "dspsift_v2__sift_surf_scale_matched_intersection_a__scale_matched"
+    type: "dspsift_v2"
+    keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+    pooling: "none"
+    pooling_aggregation: "average"
+    scales: [0.85, 1.0, 1.3]
+    normalize_after_pooling: true
+    norm_type: 2
+    rooting_stage: "none"
+    use_color: false
+
+  # --- Fusion on intersections (128D-safe weighted_avg + concat) ---
+  - name: "fusion_dspsift+surf_ext__sift_surf_8k_a+b__weighted_avg"
+    type: "composite"
+    components:
+      - descriptor: "dspsift_v2"
+        keypoint_set_name: "sift_surf_8k_a"
+        pooling: "none"
+        pooling_aggregation: "average"
+        scales: [0.85, 1.0, 1.3]
+        normalize_after_pooling: true
+        norm_type: 2
+        rooting_stage: "none"
+        use_color: false
+        weight: 0.5
+      - descriptor: "surf"
+        keypoint_set_name: "sift_surf_8k_b"
+        pooling: "none"
+        normalize_after_pooling: true
+        extended: true
+        use_color: false
+        weight: 0.5
+    aggregation: "weighted_avg"
+
+  - name: "fusion_dspsift+surf_ext__sift_surf_8k_a+b__concatenate"
+    type: "composite"
+    components:
+      - descriptor: "dspsift_v2"
+        keypoint_set_name: "sift_surf_8k_a"
+        pooling: "none"
+        pooling_aggregation: "average"
+        scales: [0.85, 1.0, 1.3]
+        normalize_after_pooling: true
+        norm_type: 2
+        rooting_stage: "none"
+        use_color: false
+      - descriptor: "surf"
+        keypoint_set_name: "sift_surf_8k_b"
+        pooling: "none"
+        normalize_after_pooling: true
+        extended: true
+        use_color: false
+    aggregation: "concatenate"
+
+  - name: "fusion_dspsift+surf_ext__sift_surf_scale_matched_intersection_a+b__weighted_avg"
+    type: "composite"
+    components:
+      - descriptor: "dspsift_v2"
+        keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+        pooling: "none"
+        pooling_aggregation: "average"
+        scales: [0.85, 1.0, 1.3]
+        normalize_after_pooling: true
+        norm_type: 2
+        rooting_stage: "none"
+        use_color: false
+        weight: 0.5
+      - descriptor: "surf"
+        keypoint_set_name: "sift_surf_scale_matched_intersection_b"
+        pooling: "none"
+        normalize_after_pooling: true
+        extended: true
+        use_color: false
+        weight: 0.5
+    aggregation: "weighted_avg"
+
+  - name: "fusion_dspsift+surf_ext__sift_surf_scale_matched_intersection_a+b__concatenate"
+    type: "composite"
+    components:
+      - descriptor: "dspsift_v2"
+        keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+        pooling: "none"
+        pooling_aggregation: "average"
+        scales: [0.85, 1.0, 1.3]
+        normalize_after_pooling: true
+        norm_type: 2
+        rooting_stage: "none"
+        use_color: false
+      - descriptor: "surf"
+        keypoint_set_name: "sift_surf_scale_matched_intersection_b"
+        pooling: "none"
+        normalize_after_pooling: true
+        extended: true
+        use_color: false
+    aggregation: "concatenate"
+
+evaluation:
+  matching:
+    method: "ratio_test"
+    ratio_threshold: 0.8
+    norm: "l2"
+    cross_check: true
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+  keypoint_verification:
+    enabled: false
+
+  keypoint_retrieval:
+    enabled: false
+
+performance:
+  parallel_scenes: true
+  num_threads: 0  # Auto-detect CPU cores
+  batch_size: 512
+
+database:
+  connection: "sqlite:///experiments.db"
+  save_descriptors: false
+  save_matches: false
+  save_visualizations: false

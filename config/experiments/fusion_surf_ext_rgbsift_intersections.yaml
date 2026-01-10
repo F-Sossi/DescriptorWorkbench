@@ -1,0 +1,326 @@
+# SURF Extended + RGBSIFT Fusion Experiments
+#
+# Research Question: Does adding color information (RGBSIFT) to SURF Extended improve performance?
+#
+# Experimental Design:
+# - Baselines: SURF Extended and RGBSIFT on intersection sets
+# - Fusion Strategies:
+#   1. Weighted average (128D): SURF-EXT + RGBSIFT_CHANNEL_AVG
+#   2. Concatenation (256D): SURF-EXT + RGBSIFT_CHANNEL_AVG
+#   3. Concatenation (512D): SURF-EXT + RGBSIFT (full 384D)
+# - Tested on both intersection sets:
+#   - 3px tolerance (645k pairs)
+#   - 6px scale-matched (173k pairs)
+#
+# Expected Runtime: ~8-10 hours for all 14 descriptor configurations
+# Database: Results stored in experiments.db with full metrics
+
+experiment:
+  name: "fusion_surf_ext+rgbsift_on_sift-surf_intersections_3px_and_scale6px"
+  description: "SURF Extended (128D) + RGBSIFT fusion across SIFT/SURF intersections (3px and 6px scale-matched)"
+  version: "1.0"
+  author: "automation"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # All 116 scenes (696 images)
+
+keypoints:
+  source: "database"
+  keypoint_set_name: "independent"  # Explicit mode: every descriptor must specify keypoint set
+  use_locked_keypoints: true
+
+  alternative_keypoints:
+    # SIFT side of intersections (for RGBSIFT/SIFT descriptors)
+    - keypoint_set_name: "sift_surf_8k_a"
+      description: "Intersection (SIFT positions, tol=3px, 645k pairs)"
+
+    # SURF side of intersections (for SURF Extended descriptors)
+    - keypoint_set_name: "sift_surf_8k_b"
+      description: "Intersection (SURF positions, tol=3px, 645k pairs)"
+
+    # Scale-matched SIFT side (for RGBSIFT/SIFT descriptors)
+    - keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+      description: "Scale-controlled intersection (SIFT positions, tol=6px, 173k pairs)"
+
+    # Scale-matched SURF side (for SURF Extended descriptors)
+    - keypoint_set_name: "sift_surf_scale_matched_intersection_b"
+      description: "Scale-controlled intersection (SURF positions, tol=6px, 173k pairs)"
+
+descriptors:
+  # ===================================================================
+  # PHASE 1: BASELINES - Individual Descriptors on Intersection Sets
+  # Purpose: Establish baseline performance before fusion
+  # ===================================================================
+
+  # SURF Extended baselines (128D)
+  - name: "surf_ext__sift_surf_8k_b__intersection"
+    type: "surf"
+    keypoint_set_name: "sift_surf_8k_b"
+    pooling: "none"
+    normalize_after_pooling: true
+    extended: true
+    use_color: false
+
+  - name: "surf_ext__sift_surf_scale_matched_intersection_b__scale_matched_intersection"
+    type: "surf"
+    keypoint_set_name: "sift_surf_scale_matched_intersection_b"
+    pooling: "none"
+    normalize_after_pooling: true
+    extended: true
+    use_color: false
+
+  # RGBSIFT baselines (384D full RGB)
+  - name: "rgbsift__sift_surf_8k_a__baseline_384d"
+    type: "rgbsift"
+    keypoint_set_name: "sift_surf_8k_a"
+    pooling: "none"
+    normalize_after_pooling: true
+    use_color: true
+
+  - name: "rgbsift__sift_surf_scale_matched_intersection_a__baseline_384d"
+    type: "rgbsift"
+    keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+    pooling: "none"
+    normalize_after_pooling: true
+    use_color: true
+
+  # RGBSIFT_CHANNEL_AVG baselines (128D averaged RGB)
+  - name: "rgbsift_channel_avg__sift_surf_8k_a__baseline_128d"
+    type: "rgbsift_channel_avg"
+    keypoint_set_name: "sift_surf_8k_a"
+    pooling: "none"
+    normalize_after_pooling: true
+    use_color: true
+
+  - name: "rgbsift_channel_avg__sift_surf_scale_matched_intersection_a__baseline_128d"
+    type: "rgbsift_channel_avg"
+    keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+    pooling: "none"
+    normalize_after_pooling: true
+    use_color: true
+
+  # ===================================================================
+  # PHASE 2: FUSION - 3px Intersection (645k pairs)
+  # Purpose: Test if color+SURF fusion improves performance
+  # ===================================================================
+
+  # Strategy 1: Weighted Average (128D) - SURF-EXT + RGBSIFT_CHANNEL_AVG
+  # Equal 50/50 weighting
+  - name: "fusion_surf_ext+rgbsift_channel_avg__sift_surf_8k_a+b__weighted_avg"
+    type: "composite"
+    components:
+      - descriptor: "surf"
+        keypoint_set_name: "sift_surf_8k_b"
+        pooling: "none"
+        normalize_after_pooling: true
+        extended: true
+        use_color: false
+        weight: 0.5
+      - descriptor: "rgbsift_channel_avg"
+        keypoint_set_name: "sift_surf_8k_a"
+        pooling: "none"
+        normalize_after_pooling: true
+        use_color: true
+        weight: 0.5
+    aggregation: "weighted_avg"
+
+  # Strategy 2: Concatenation (256D) - SURF-EXT + RGBSIFT_CHANNEL_AVG
+  # Preserves both representations
+  - name: "fusion_surf_ext+rgbsift_channel_avg__sift_surf_8k_a+b__concatenate"
+    type: "composite"
+    components:
+      - descriptor: "surf"
+        keypoint_set_name: "sift_surf_8k_b"
+        pooling: "none"
+        normalize_after_pooling: true
+        extended: true
+        use_color: false
+      - descriptor: "rgbsift_channel_avg"
+        keypoint_set_name: "sift_surf_8k_a"
+        pooling: "none"
+        normalize_after_pooling: true
+        use_color: true
+    aggregation: "concatenate"
+
+  # Strategy 3: Concatenation (512D) - SURF-EXT + RGBSIFT (full 384D)
+  # High-dimensional fusion preserving all RGB channels
+  - name: "fusion_surf_ext+rgbsift__sift_surf_8k_a+b__concatenate_512d"
+    type: "composite"
+    components:
+      - descriptor: "surf"
+        keypoint_set_name: "sift_surf_8k_b"
+        pooling: "none"
+        normalize_after_pooling: true
+        extended: true
+        use_color: false
+      - descriptor: "rgbsift"
+        keypoint_set_name: "sift_surf_8k_a"
+        pooling: "none"
+        normalize_after_pooling: true
+        use_color: true
+    aggregation: "concatenate"
+
+  # Strategy 4: Max pooling (128D) - Element-wise max
+  # Takes strongest response across SURF-EXT and RGBSIFT_CHANNEL_AVG
+  - name: "fusion_surf_ext+rgbsift_channel_avg__sift_surf_8k_a+b__max_128d"
+    type: "composite"
+    components:
+      - descriptor: "surf"
+        keypoint_set_name: "sift_surf_8k_b"
+        pooling: "none"
+        normalize_after_pooling: true
+        extended: true
+        use_color: false
+      - descriptor: "rgbsift_channel_avg"
+        keypoint_set_name: "sift_surf_8k_a"
+        pooling: "none"
+        normalize_after_pooling: true
+        use_color: true
+    aggregation: "max"
+
+  # ===================================================================
+  # PHASE 3: FUSION - 6px Scale-Matched Intersection (173k pairs)
+  # Purpose: Test if scale control improves fusion performance
+  # ===================================================================
+
+  # Strategy 1: Weighted Average (128D) - Scale-matched
+  - name: "fusion_surf_ext+rgbsift_channel_avg__sift_surf_scale_matched_intersection_a+b__weighted_avg"
+    type: "composite"
+    components:
+      - descriptor: "surf"
+        keypoint_set_name: "sift_surf_scale_matched_intersection_b"
+        pooling: "none"
+        normalize_after_pooling: true
+        extended: true
+        use_color: false
+        weight: 0.5
+      - descriptor: "rgbsift_channel_avg"
+        keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+        pooling: "none"
+        normalize_after_pooling: true
+        use_color: true
+        weight: 0.5
+    aggregation: "weighted_avg"
+
+  # Strategy 2: Concatenation (256D) - Scale-matched
+  - name: "fusion_surf_ext+rgbsift_channel_avg__sift_surf_scale_matched_intersection_a+b__concatenate"
+    type: "composite"
+    components:
+      - descriptor: "surf"
+        keypoint_set_name: "sift_surf_scale_matched_intersection_b"
+        pooling: "none"
+        normalize_after_pooling: true
+        extended: true
+        use_color: false
+      - descriptor: "rgbsift_channel_avg"
+        keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+        pooling: "none"
+        normalize_after_pooling: true
+        use_color: true
+    aggregation: "concatenate"
+
+  # Strategy 3: Concatenation (512D) - Scale-matched
+  - name: "fusion_surf_ext+rgbsift__sift_surf_scale_matched_intersection_a+b__concatenate_512d"
+    type: "composite"
+    components:
+      - descriptor: "surf"
+        keypoint_set_name: "sift_surf_scale_matched_intersection_b"
+        pooling: "none"
+        normalize_after_pooling: true
+        extended: true
+        use_color: false
+      - descriptor: "rgbsift"
+        keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+        pooling: "none"
+        normalize_after_pooling: true
+        use_color: true
+    aggregation: "concatenate"
+
+  # Strategy 4: Max pooling (128D) - Scale-matched
+  - name: "fusion_surf_ext+rgbsift_channel_avg__sift_surf_scale_matched_intersection_a+b__max_128d"
+    type: "composite"
+    components:
+      - descriptor: "surf"
+        keypoint_set_name: "sift_surf_scale_matched_intersection_b"
+        pooling: "none"
+        normalize_after_pooling: true
+        extended: true
+        use_color: false
+      - descriptor: "rgbsift_channel_avg"
+        keypoint_set_name: "sift_surf_scale_matched_intersection_a"
+        pooling: "none"
+        normalize_after_pooling: true
+        use_color: true
+    aggregation: "max"
+
+evaluation:
+  matching:
+    method: "ratio_test"
+    ratio_threshold: 0.8
+    norm: "l2"
+    cross_check: true
+
+  validation:
+    method: "homography"
+    threshold: 0.05
+    min_matches: 10
+
+  keypoint_verification:
+    enabled: false
+
+  keypoint_retrieval:
+    enabled: false
+
+performance:
+  parallel_scenes: true
+  num_threads: 0  # Auto-detect CPU cores
+  batch_size: 512
+
+database:
+  connection: "sqlite:///experiments.db"
+  save_descriptors: false  # Reduce storage
+  save_matches: false      # Reduce storage
+  save_visualizations: false  # Disable for batch experiments
+
+# ===================================================================
+# EXPECTED OUTCOMES AND INTERPRETATION
+# ===================================================================
+#
+# Key Comparisons:
+#
+# 1. Individual Descriptors on Intersection Sets:
+#    surf_ext_baseline_* vs rgbsift_*_baseline_*
+#    → Does SURF Extended or RGBSIFT perform better on intersection keypoints?
+#
+# 2. Best Fusion Strategy (3px Intersection):
+#    MAX(surf_ext_rgbsift*_*_intersection) vs MAX(baseline_intersection)
+#    → Which fusion method (avg, concat 256D, concat 512D, max) works best?
+#
+# 3. Scale Control Effect on Fusion:
+#    *_scale_matched vs *_intersection
+#    → Does scale matching improve fusion performance?
+#
+# 4. Dimensionality Trade-off:
+#    surf_ext_rgbsift128_concat (256D) vs surf_ext_rgbsift384_concat (512D)
+#    → Is higher dimensionality better or does it hurt due to curse of dimensionality?
+#
+# Success Criteria:
+#
+# ✅ Fusion is beneficial if:
+#    - Any fusion descriptor > both individual baselines
+#    - Improvement is > 5% relative gain
+#
+# ❌ Fusion provides minimal benefit if:
+#    - Best fusion ≈ best individual baseline
+#    - Improvement is < 3% relative gain
+#
+# Hypotheses:
+# - H1: RGBSIFT_CHANNEL_AVG (128D) will perform better than full RGBSIFT (384D)
+#       due to reduced dimensionality and curse of dimensionality
+# - H2: Weighted average fusion will outperform concatenation due to normalized combination
+# - H3: Scale-matched intersection will improve all descriptors due to better keypoint quality
+# - H4: Max pooling may capture complementary strengths of SURF and color information
+#
+# ===================================================================
