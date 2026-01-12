@@ -7,7 +7,7 @@
 namespace thesis_project {
 namespace patches {
 
-PatchLoader::PatchSet PatchLoader::loadStackedPNG(const std::string& png_path) {
+PatchLoader::PatchSet PatchLoader::loadStackedPNG(const std::string& png_path, bool color) {
     PatchSet result;
 
     // Extract name from path (e.g., "e1" from "/path/to/scene/e1.png")
@@ -19,8 +19,8 @@ PatchLoader::PatchSet PatchLoader::loadStackedPNG(const std::string& png_path) {
         result.scene_name = p.parent_path().filename().string();
     }
 
-    // Load the stacked PNG as grayscale
-    cv::Mat stacked_img = cv::imread(png_path, cv::IMREAD_GRAYSCALE);
+    // Load the stacked PNG
+    cv::Mat stacked_img = cv::imread(png_path, color ? cv::IMREAD_COLOR : cv::IMREAD_GRAYSCALE);
     if (stacked_img.empty()) {
         throw std::runtime_error("Failed to load patch file: " + png_path);
     }
@@ -59,7 +59,7 @@ std::vector<cv::Mat> PatchLoader::extractPatches(const cv::Mat& stacked_img) {
     return patches;
 }
 
-PatchLoader::ScenePatches PatchLoader::loadScene(const std::string& scene_dir) {
+PatchLoader::ScenePatches PatchLoader::loadScene(const std::string& scene_dir, bool color) {
     ScenePatches scene;
 
     std::filesystem::path dir(scene_dir);
@@ -68,7 +68,7 @@ PatchLoader::ScenePatches PatchLoader::loadScene(const std::string& scene_dir) {
     // Load reference patches
     std::string ref_path = (dir / "ref.png").string();
     if (std::filesystem::exists(ref_path)) {
-        scene.ref = loadStackedPNG(ref_path);
+        scene.ref = loadStackedPNG(ref_path, color);
     } else {
         throw std::runtime_error("Reference patches not found: " + ref_path);
     }
@@ -78,7 +78,7 @@ PatchLoader::ScenePatches PatchLoader::loadScene(const std::string& scene_dir) {
         std::string key = "e" + std::to_string(i);
         std::string path = (dir / (key + ".png")).string();
         if (std::filesystem::exists(path)) {
-            scene.easy[key] = loadStackedPNG(path);
+            scene.easy[key] = loadStackedPNG(path, color);
         }
     }
 
@@ -87,7 +87,7 @@ PatchLoader::ScenePatches PatchLoader::loadScene(const std::string& scene_dir) {
         std::string key = "h" + std::to_string(i);
         std::string path = (dir / (key + ".png")).string();
         if (std::filesystem::exists(path)) {
-            scene.hard[key] = loadStackedPNG(path);
+            scene.hard[key] = loadStackedPNG(path, color);
         }
     }
 
@@ -96,7 +96,7 @@ PatchLoader::ScenePatches PatchLoader::loadScene(const std::string& scene_dir) {
         std::string key = "t" + std::to_string(i);
         std::string path = (dir / (key + ".png")).string();
         if (std::filesystem::exists(path)) {
-            scene.tough[key] = loadStackedPNG(path);
+            scene.tough[key] = loadStackedPNG(path, color);
         }
     }
 

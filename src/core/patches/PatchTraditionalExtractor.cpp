@@ -53,6 +53,8 @@ cv::Mat PatchTraditionalExtractor::extractFromPatches(
         cv::Mat input_patch = patch;
         if (force_color_ && patch.channels() == 1) {
             cv::cvtColor(patch, input_patch, cv::COLOR_GRAY2BGR);
+        } else if (!force_color_ && patch.channels() == 3) {
+            cv::cvtColor(patch, input_patch, cv::COLOR_BGR2GRAY);
         }
 
         // The base extractor expects an image - treat the patch as a small image

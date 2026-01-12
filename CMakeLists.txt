@@ -1137,6 +1137,42 @@ else()
     message(STATUS "Patch benchmark disabled (use -DBUILD_PATCH_BENCHMARK=ON to enable)")
 endif()
 
+# Patch dataset builder CLI tool (rebuild HPatches patch dataset)
+option(BUILD_PATCH_DATASET_BUILDER "Build patch dataset builder CLI tool" ON)
+
+if(BUILD_PATCH_DATASET_BUILDER)
+    message(STATUS "Building patch dataset builder CLI tool")
+
+    if(EXISTS "${CMAKE_SOURCE_DIR}/src/cli/patch_dataset_builder.cpp")
+        add_executable(patch_dataset_builder
+            src/cli/patch_dataset_builder.cpp
+            src/core/database/DatabaseManager.cpp
+        )
+
+        target_compile_features(patch_dataset_builder PRIVATE cxx_std_17)
+
+        target_include_directories(patch_dataset_builder PRIVATE
+            ${CMAKE_SOURCE_DIR}
+            ${CMAKE_SOURCE_DIR}/src
+            ${CMAKE_SOURCE_DIR}/src/include
+        )
+
+        if(USE_CONAN)
+            target_link_libraries(patch_dataset_builder ${OpenCV_LIBS})
+            target_link_libraries(patch_dataset_builder ${SQLite3_LIBS})
+        else()
+            target_link_libraries(patch_dataset_builder ${OpenCV_LIBRARIES})
+            target_link_libraries(patch_dataset_builder ${SQLite3_LIBRARIES})
+        endif()
+
+        message(STATUS "Patch dataset builder CLI tool configured")
+    else()
+        message(WARNING "patch_dataset_builder.cpp not found - skipping patch dataset builder CLI")
+    endif()
+else()
+    message(STATUS "Patch dataset builder disabled (use -DBUILD_PATCH_DATASET_BUILDER=ON to enable)")
+endif()
+
 # Stage 7 migration system removed: new pipeline is the default
 # YAML negative validation tests
 create_gtest_if_exists("tests/unit/config/test_yaml_validation_errors_gtest.cpp" "test_yaml_validation_errors_gtest")

@@ -89,7 +89,7 @@ HPatchesBenchmark::Results HPatchesBenchmark::run(
                 if (!enabled) continue;
 
                 try {
-                    auto result = evaluateScene(scene_dir, *local_extractor, params, difficulty);
+                    auto result = evaluateScene(scene_dir, *local_extractor, params, config, difficulty);
 
                     if (result.num_patches > 0) {
                         local_total_patches += result.num_patches;
@@ -200,7 +200,7 @@ HPatchesBenchmark::Results HPatchesBenchmark::run(
                 if (!enabled) continue;
 
                 try {
-                    auto result = evaluateScene(scene_dir, extractor, params, difficulty);
+            auto result = evaluateScene(scene_dir, extractor, params, config, difficulty);
 
                     if (result.num_patches > 0) {
                         total_patches += result.num_patches;
@@ -268,10 +268,11 @@ PatchMetrics::MatchResult HPatchesBenchmark::evaluateScene(
     const std::string& scene_dir,
     IPatchDescriptorExtractor& extractor,
     const DescriptorParams& params,
+    const Config& config,
     const std::string& difficulty) {
 
     // Load the scene
-    auto scene = PatchLoader::loadScene(scene_dir);
+    auto scene = PatchLoader::loadScene(scene_dir, config.color);
 
     // Get the appropriate patch sets based on difficulty
     const std::map<std::string, PatchLoader::PatchSet>* target_sets = nullptr;
@@ -373,4 +374,3 @@ std::string HPatchesBenchmark::formatResults(const Results& results) {
 }
 
 } // namespace thesis_project::benchmark
-

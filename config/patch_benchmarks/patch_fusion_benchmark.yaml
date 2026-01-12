@@ -12,8 +12,9 @@ experiment:
 
 # HPatches patch dataset location
 patches:
-  path: "../hpatches-release/"
+  path: "../hpatches-release-rebuilt-color/"
   scenes: []  # Empty = all 116 scenes
+  color: true
   difficulty:
     easy: true    # ~0.85 overlap (low geometric noise)
     hard: true    # ~0.72 overlap (high geometric noise)
@@ -26,28 +27,41 @@ descriptors:
   - name: "hardnet"
     type: "libtorch_hardnet"
     device: "auto"
+    use_color: false
 
   - name: "sosnet"
     type: "libtorch_sosnet"
     device: "auto"
+    use_color: false
 
-#  - name: "l2net"
-#    type: "libtorch_l2net"
-#    device: "auto"
-
-  # Single traditional descriptors
-#  - name: "sift"
-#    type: "sift"
+   # Single traditional descriptors
+  - name: "sift"
+    type: "sift"
+    use_color: false
 
   - name: "rgbsift"
     type: "rgbsift"
+    use_color: true
 
-#  - name: "surf"
-#    type: "surf"
+  - name: "rgbsift_channel_avg"
+    type: "rgbsift_channel_avg"
+    use_color: true
+
+  - name: "honc"
+    type: "honc"
+    use_color: true
+
+  - name: "dspsift_v2"
+    type: "dspsift_v2"
+    use_color: false
+
+  - name: "surf"
+    type: "surf"
+    use_color: false
 
 # Performance settings
 performance:
-  num_threads: 4
+  num_threads: 12
   verbose: true
 
 # Output settings

@@ -36,6 +36,7 @@ public:
         bool include_tough = true;         ///< Include tough patches (t1-t5)
         bool verbose = true;               ///< Print progress
         bool print_results = true;         ///< Print results summary
+        bool color = false;                ///< Load color patches (3-channel)
         int num_threads = 4;               ///< Parallel processing threads
     };
 
@@ -102,6 +103,7 @@ public:
         const std::string& scene_dir,
         patches::IPatchDescriptorExtractor& extractor,
         const DescriptorParams& params,
+        const Config& config,
         const std::string& difficulty);
 
     /**

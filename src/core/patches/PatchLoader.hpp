@@ -55,16 +55,18 @@ public:
     /**
      * @brief Load all patches from a stacked PNG file
      * @param png_path Path to the stacked PNG file
+     * @param color If true, load as color (3-channel BGR)
      * @return PatchSet containing individual 65x65 patches
      */
-    static PatchSet loadStackedPNG(const std::string& png_path);
+    static PatchSet loadStackedPNG(const std::string& png_path, bool color = false);
 
     /**
      * @brief Load a complete scene (ref + easy + hard + tough)
      * @param scene_dir Path to the scene directory
+     * @param color If true, load patches as color
      * @return ScenePatches containing all patch sets for the scene
      */
-    static ScenePatches loadScene(const std::string& scene_dir);
+    static ScenePatches loadScene(const std::string& scene_dir, bool color = false);
 
     /**
      * @brief Resize a 65x65 patch for CNN input

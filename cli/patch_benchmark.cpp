@@ -42,6 +42,7 @@ struct Args {
     bool hard = true;
     bool tough = true;
     bool verbose = true;
+    bool color = false;
     bool help = false;
     std::string config_file;
 };
@@ -53,6 +54,8 @@ struct DescriptorConfig {
     std::string method = "concatenate";
     std::vector<float> weights;
     std::string device = "auto";
+    bool use_color = false;
+    bool use_color_specified = false;
 
     bool isFusion() const {
         return !components.empty() || type == "composite" || type == "fusion";
@@ -110,6 +113,7 @@ void printUsage(const char* prog) {
     std::cout << "  --no-hard             Skip hard patches\n";
     std::cout << "  --no-tough            Skip tough patches\n";
     std::cout << "  --quiet               Suppress progress output\n";
+    std::cout << "  --color               Load color patches (3-channel)\n";
     std::cout << "  --config <file>       YAML config file (overrides other options)\n";
     std::cout << "  --help                Show this help message\n\n";
     std::cout << "Supported Descriptors:\n";
@@ -157,6 +161,8 @@ Args parseArgs(int argc, char* argv[]) {
             args.tough = false;
         } else if (arg == "--quiet") {
             args.verbose = false;
+        } else if (arg == "--color") {
+            args.color = true;
         } else if (arg == "--config" && i + 1 < argc) {
             args.config_file = argv[++i];
         } else if (arg[0] != '-' && args.config_file.empty()) {
@@ -222,6 +228,11 @@ DescriptorConfig parseDescriptorConfig(const YAML::Node& node) {
     }
     if (node["device"]) {
         desc.device = node["device"].as<std::string>();
+    }
+
+    if (node["use_color"]) {
+        desc.use_color = node["use_color"].as<bool>();
+        desc.use_color_specified = true;
     }
     if (node["weights"]) {
         if (!node["weights"].IsSequence()) {
@@ -289,6 +300,9 @@ BenchmarkConfig loadConfig(const std::string& path) {
             if (difficulty["easy"]) config.benchmark.include_easy = difficulty["easy"].as<bool>();
             if (difficulty["hard"]) config.benchmark.include_hard = difficulty["hard"].as<bool>();
             if (difficulty["tough"]) config.benchmark.include_tough = difficulty["tough"].as<bool>();
+        }
+        if (patches["color"]) {
+            config.benchmark.color = patches["color"].as<bool>();
         }
     }
 
@@ -389,7 +403,7 @@ int main(int argc, char* argv[]) {
                               << "\n";
                 }
 
-                std::unique_ptr<IPatchDescriptorExtractor> extractor;
+            std::unique_ptr<IPatchDescriptorExtractor> extractor;
                 if (desc_config.isFusion()) {
                     extractor = PatchDescriptorFactory::createFusion(
                         desc_config.components,
@@ -407,8 +421,13 @@ int main(int argc, char* argv[]) {
                 DescriptorParams params;
                 params.device = desc_config.device;
 
+                HPatchesBenchmark::Config run_config = config.benchmark;
+                if (desc_config.use_color_specified) {
+                    run_config.color = desc_config.use_color;
+                }
+
                 auto results = HPatchesBenchmark::run(
-                    config.benchmark,
+                    run_config,
                     *extractor,
                     params,
                     [&config](int current, int total, const std::string& scene) {
@@ -438,6 +457,7 @@ int main(int argc, char* argv[]) {
                     exp_config.parameters["difficulty_easy"] = config.benchmark.include_easy ? "true" : "false";
                     exp_config.parameters["difficulty_hard"] = config.benchmark.include_hard ? "true" : "false";
                     exp_config.parameters["difficulty_tough"] = config.benchmark.include_tough ? "true" : "false";
+                    exp_config.parameters["use_color"] = run_config.color ? "true" : "false";
                     if (!config.benchmark.scenes.empty()) {
                         exp_config.parameters["scenes"] = joinStrings(config.benchmark.scenes, ",");
                     }
@@ -479,6 +499,7 @@ int main(int argc, char* argv[]) {
                         patch_results.metadata["difficulty_easy"] = config.benchmark.include_easy ? "true" : "false";
                         patch_results.metadata["difficulty_hard"] = config.benchmark.include_hard ? "true" : "false";
                         patch_results.metadata["difficulty_tough"] = config.benchmark.include_tough ? "true" : "false";
+                        patch_results.metadata["use_color"] = run_config.color ? "true" : "false";
                         if (!config.benchmark.scenes.empty()) {
                             patch_results.metadata["scenes"] = joinStrings(config.benchmark.scenes, ",");
                         }
@@ -543,6 +564,7 @@ int main(int argc, char* argv[]) {
         config.include_tough = args.tough;
         config.verbose = args.verbose;
         config.print_results = args.verbose;
+        config.color = args.color;
 
         // Set up descriptor params
         DescriptorParams params;

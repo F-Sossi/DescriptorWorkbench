@@ -78,6 +78,16 @@ hpatches-release/*
 !hpatches-release/.gitkeep
 !hpatches-release/README.md
 
+!hpatches-release-rebuilt-bw/
+hpatches-release-rebuilt-bw/*
+!hpatches-release-rebuilt-bw/.gitkeep
+!hpatches-release-rebuilt-bw/README.md
+
+!hpatches-release-rebuilt-color/
+hpatches-release-rebuilt-color/*
+!hpatches-release-rebuilt-color/.gitkeep
+!hpatches-release-rebuilt-color/README.md
+
 # Results directory (experimental outputs)
 !results/
 results/*
