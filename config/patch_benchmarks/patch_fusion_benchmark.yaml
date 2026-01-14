@@ -24,40 +24,44 @@ patches:
 # This section is used by patch_benchmark when run with this YAML.
 descriptors:
   # Single CNN descriptors
-  - name: "hardnet"
-    type: "libtorch_hardnet"
-    device: "auto"
-    use_color: false
+#  - name: "hardnet"
+#    type: "libtorch_hardnet"
+#    device: "auto"
+#    use_color: false
+#
+#  - name: "sosnet"
+#    type: "libtorch_sosnet"
+#    device: "auto"
+#    use_color: false
+#
+#   # Single traditional descriptors
+#  - name: "sift"
+#    type: "sift"
+#    use_color: false
+#
+#  - name: "rgbsift"
+#    type: "rgbsift"
+#    use_color: true
+#
+#  - name: "rgbsift_channel_avg"
+#    type: "rgbsift_channel_avg"
+#    use_color: true
+#
+#  - name: "honc"
+#    type: "honc"
+#    use_color: true
 
-  - name: "sosnet"
-    type: "libtorch_sosnet"
-    device: "auto"
-    use_color: false
-
-   # Single traditional descriptors
-  - name: "sift"
-    type: "sift"
-    use_color: false
-
-  - name: "rgbsift"
-    type: "rgbsift"
-    use_color: true
-
-  - name: "rgbsift_channel_avg"
-    type: "rgbsift_channel_avg"
-    use_color: true
-
-  - name: "honc"
-    type: "honc"
-    use_color: true
-
-  - name: "dspsift_v2"
+  - name: "dspsift_v2_post_scale_ch"
     type: "dspsift_v2"
     use_color: false
+    pooling_aggregation: "max"
+    normalize_after_pooling: true
+    norm_type: "l2"
+    scales: [0.85, 1.075, 1.30]
 
-  - name: "surf"
-    type: "surf"
-    use_color: false
+#  - name: "surf"
+#    type: "surf"
+#    use_color: false
 
 # Performance settings
 performance:

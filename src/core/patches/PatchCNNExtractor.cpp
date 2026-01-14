@@ -3,8 +3,8 @@
 #include <iostream>
 #include <cstring>
 
-namespace thesis_project {
-namespace patches {
+
+namespace thesis_project::patches {
 
 #ifdef BUILD_LIBTORCH_DESCRIPTORS
 
@@ -253,5 +253,5 @@ std::unique_ptr<IPatchDescriptorExtractor> createPatchL2Net() {
 
 #endif // BUILD_LIBTORCH_DESCRIPTORS
 
-} // namespace patches
-} // namespace thesis_project
+} // namespace thesis_project::patches
+

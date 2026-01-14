@@ -106,7 +106,8 @@ std::unique_ptr<IPatchDescriptorExtractor> createPatchHoNC() {
 
 std::unique_ptr<IPatchDescriptorExtractor> createPatchDSPSIFT() {
     auto dspsift = DescriptorFactory::create(DescriptorType::DSPSIFT_V2);
-    return std::make_unique<PatchTraditionalExtractor>(std::move(dspsift), 41.0f, false, DescriptorType::DSPSIFT_V2);
+    // DSP expects the original keypoint scale; 65px patch comes from ~5x scale multiplier.
+    return std::make_unique<PatchTraditionalExtractor>(std::move(dspsift), 13.0f, false, DescriptorType::DSPSIFT_V2);
 }
 
 std::unique_ptr<IPatchDescriptorExtractor> createPatchSURF() {

@@ -56,6 +56,8 @@ struct DescriptorConfig {
     std::string device = "auto";
     bool use_color = false;
     bool use_color_specified = false;
+    bool scales_specified = false;
+    thesis_project::DescriptorParams params;
 
     bool isFusion() const {
         return !components.empty() || type == "composite" || type == "fusion";
@@ -228,11 +230,100 @@ DescriptorConfig parseDescriptorConfig(const YAML::Node& node) {
     }
     if (node["device"]) {
         desc.device = node["device"].as<std::string>();
+        desc.params.device = desc.device;
     }
 
     if (node["use_color"]) {
         desc.use_color = node["use_color"].as<bool>();
         desc.use_color_specified = true;
+        desc.params.use_color = desc.use_color;
+    }
+
+    if (node["scales"]) {
+        if (!node["scales"].IsSequence()) {
+            throw std::runtime_error("descriptor.scales must be a list");
+        }
+        desc.params.scales.clear();
+        for (const auto& scale_node : node["scales"]) {
+            desc.params.scales.push_back(scale_node.as<float>());
+        }
+        desc.scales_specified = true;
+    }
+
+    if (node["scale_weights"]) {
+        if (!node["scale_weights"].IsSequence()) {
+            throw std::runtime_error("descriptor.scale_weights must be a list");
+        }
+        desc.params.scale_weights.clear();
+        for (const auto& weight_node : node["scale_weights"]) {
+            desc.params.scale_weights.push_back(weight_node.as<float>());
+        }
+    }
+
+    if (node["scale_weighting"]) {
+        const std::string wt = toLowerCopy(node["scale_weighting"].as<std::string>());
+        if (wt == "gaussian") desc.params.scale_weighting = thesis_project::ScaleWeighting::GAUSSIAN;
+        else if (wt == "triangular") desc.params.scale_weighting = thesis_project::ScaleWeighting::TRIANGULAR;
+        else desc.params.scale_weighting = thesis_project::ScaleWeighting::UNIFORM;
+    }
+
+    if (node["scale_weight_sigma"]) {
+        desc.params.scale_weight_sigma = node["scale_weight_sigma"].as<float>();
+    }
+
+    if (node["pooling_aggregation"]) {
+        const std::string agg = toLowerCopy(node["pooling_aggregation"].as<std::string>());
+        if (agg == "max") desc.params.pooling_aggregation = thesis_project::PoolingAggregation::MAX;
+        else if (agg == "min") desc.params.pooling_aggregation = thesis_project::PoolingAggregation::MIN;
+        else if (agg == "concatenate") desc.params.pooling_aggregation = thesis_project::PoolingAggregation::CONCATENATE;
+        else if (agg == "weighted_avg") desc.params.pooling_aggregation = thesis_project::PoolingAggregation::WEIGHTED_AVG;
+        else desc.params.pooling_aggregation = thesis_project::PoolingAggregation::AVERAGE;
+    }
+
+    if (node["normalize_before_pooling"]) {
+        desc.params.normalize_before_pooling = node["normalize_before_pooling"].as<bool>();
+    }
+
+    if (node["normalize_after_pooling"]) {
+        desc.params.normalize_after_pooling = node["normalize_after_pooling"].as<bool>();
+    }
+
+    if (node["rooting_stage"]) {
+        const std::string stage = toLowerCopy(node["rooting_stage"].as<std::string>());
+        if (stage == "before_pooling") desc.params.rooting_stage = thesis_project::RootingStage::R_BEFORE_POOLING;
+        else if (stage == "after_pooling") desc.params.rooting_stage = thesis_project::RootingStage::R_AFTER_POOLING;
+        else desc.params.rooting_stage = thesis_project::RootingStage::R_NONE;
+    }
+
+    if (node["norm_type"]) {
+        const std::string norm_str = toLowerCopy(node["norm_type"].as<std::string>());
+        if (norm_str == "l1") desc.params.norm_type = cv::NORM_L1;
+        else desc.params.norm_type = cv::NORM_L2;
+    }
+
+    if (node["extended"]) {
+        desc.params.surf_extended = node["extended"].as<bool>();
+    }
+
+    if (node["dnn"]) {
+        const auto& dnn = node["dnn"];
+        if (dnn["model"]) desc.params.dnn_model_path = dnn["model"].as<std::string>();
+        if (dnn["input_size"]) desc.params.dnn_input_size = dnn["input_size"].as<int>();
+        if (dnn["support_multiplier"]) desc.params.dnn_support_multiplier = dnn["support_multiplier"].as<float>();
+        if (dnn["rotate_to_upright"]) desc.params.dnn_rotate_upright = dnn["rotate_to_upright"].as<bool>();
+        if (dnn["mean"]) desc.params.dnn_mean = dnn["mean"].as<float>();
+        if (dnn["std"]) desc.params.dnn_std = dnn["std"].as<float>();
+        if (dnn["per_patch_standardize"]) desc.params.dnn_per_patch_standardize = dnn["per_patch_standardize"].as<bool>();
+    }
+
+    if (node["vgg"]) {
+        const auto& vgg = node["vgg"];
+        if (vgg["desc_type"]) desc.params.vgg_desc_type = vgg["desc_type"].as<int>();
+        if (vgg["isigma"]) desc.params.vgg_isigma = vgg["isigma"].as<float>();
+        if (vgg["img_normalize"]) desc.params.vgg_img_normalize = vgg["img_normalize"].as<bool>();
+        if (vgg["use_scale_orientation"]) desc.params.vgg_use_scale_orientation = vgg["use_scale_orientation"].as<bool>();
+        if (vgg["scale_factor"]) desc.params.vgg_scale_factor = vgg["scale_factor"].as<float>();
+        if (vgg["dsc_normalize"]) desc.params.vgg_dsc_normalize = vgg["dsc_normalize"].as<bool>();
     }
     if (node["weights"]) {
         if (!node["weights"].IsSequence()) {
@@ -418,8 +509,14 @@ int main(int argc, char* argv[]) {
                     }
                 }
 
-                DescriptorParams params;
-                params.device = desc_config.device;
+                DescriptorParams params = desc_config.params;
+                if (!desc_config.device.empty()) {
+                    params.device = desc_config.device;
+                }
+                if (desc_config.type == "dspsift_v2" && !desc_config.scales_specified) {
+                    // Use DSP defaults (scales + pooling) instead of generic descriptor defaults.
+                    params.scales.clear();
+                }
 
                 HPatchesBenchmark::Config run_config = config.benchmark;
                 if (desc_config.use_color_specified) {

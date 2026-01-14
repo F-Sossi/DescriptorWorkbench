@@ -1048,7 +1048,7 @@ if(BUILD_PATCH_BENCHMARK)
 
     if(EXISTS "${CMAKE_SOURCE_DIR}/cli/patch_benchmark.cpp")
         add_executable(patch_benchmark
-            cli/patch_benchmark.cpp
+                src/cli/patch_benchmark.cpp
             src/core/patches/PatchLoader.cpp
             src/core/patches/PatchCNNExtractor.cpp
             src/core/patches/PatchTraditionalExtractor.cpp
