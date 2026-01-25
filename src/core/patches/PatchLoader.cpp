@@ -129,7 +129,7 @@ std::vector<cv::Mat> PatchLoader::resizeForCNN(const std::vector<cv::Mat>& patch
 
 int PatchLoader::countPatches(const std::string& png_path) {
     // Read only the header to get dimensions without loading full image
-    cv::Mat img = cv::imread(png_path, cv::IMREAD_GRAYSCALE);
+    const cv::Mat img = cv::imread(png_path, cv::IMREAD_GRAYSCALE);
     if (img.empty()) {
         return 0;
     }
@@ -145,9 +145,9 @@ std::vector<std::string> PatchLoader::listScenes(const std::string& dataset_path
 
     for (const auto& entry : std::filesystem::directory_iterator(dataset_path)) {
         if (entry.is_directory()) {
-            std::string name = entry.path().filename().string();
             // Only include i_* and v_* directories
-            if (name.size() > 2 && (name[0] == 'i' || name[0] == 'v') && name[1] == '_') {
+            if (std::string name = entry.path().filename().string();
+                name.size() > 2 && (name[0] == 'i' || name[0] == 'v') && name[1] == '_') {
                 scenes.push_back(entry.path().string());
             }
         }

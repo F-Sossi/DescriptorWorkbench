@@ -1,0 +1,44 @@
+# HPatches Patch Benchmark: SIFT full task check
+# Run: ./patch_benchmark ../config/patch_benchmarks/patch_sift_full.yaml
+
+experiment:
+  name: "patch_sift_full"
+  description: "SIFT baseline on rebuilt color patches with matching/verification/retrieval tasks"
+
+patches:
+  path: "../hpatches-release-rebuilt-color/"
+  scenes: []
+  color: true
+  difficulty:
+    easy: true
+    hard: true
+    tough: true
+
+tasks:
+  mode: "paper"
+  matching:
+    enabled: true
+  verification:
+    enabled: true
+    num_positives: 200000
+    num_negatives: 1000000
+    negative_source: "both"
+  retrieval:
+    enabled: true
+    num_queries: 10000
+    num_distractors: 20000
+  preload_descriptors: true
+  random_seed: 1337
+
+descriptors:
+  - name: "sift_full_check"
+    type: "sift"
+    use_color: false
+
+performance:
+  num_threads: 12
+  verbose: true
+
+output:
+  save_to_database: true
+  print_results: true

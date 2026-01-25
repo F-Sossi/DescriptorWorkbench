@@ -20,36 +20,87 @@ patches:
     hard: true    # ~0.72 overlap (high geometric noise)
     tough: true   # Additional difficulty level
 
+tasks:
+  mode: "paper"
+  matching:
+    enabled: true
+  verification:
+    enabled: true
+    num_positives: 200000
+    num_negatives: 1000000
+    negative_source: "both"
+  retrieval:
+    enabled: true
+    num_queries: 10000
+    num_distractors: 20000
+  preload_descriptors: true
+  random_seed: 1337
+
 # Descriptors to evaluate (baselines only)
 # This section is used by patch_benchmark when run with this YAML.
 descriptors:
+  # Fused descriptors
+  - name: "hardnet_sosnet_avg"
+    components: [ "libtorch_hardnet", "libtorch_sosnet" ]
+    aggregation: "average"
+    use_color: false
+
+  - name: "hardnet_sosnet_concat"
+    components: [ "libtorch_hardnet", "libtorch_sosnet" ]
+    aggregation: "concatenate"
+    use_color: false
+
+  - name: "sift_hardnet_concat"
+    components: [ "sift", "libtorch_hardnet" ]
+    aggregation: "concatenate"
+    use_color: false
+
+  - name: "rgbsift_hardnet_concat"
+    components: [ "rgbsift", "libtorch_hardnet" ]
+    aggregation: "concatenate"
+    use_color: true
+
+  - name: "rgbsift_sosnet_concat"
+    components: [ "rgbsift", "libtorch_sosnet" ]
+    aggregation: "concatenate"
+    use_color: true
+
+  - name: "honc_hardnet_concat"
+    components: [ "honc", "libtorch_hardnet" ]
+    aggregation: "concatenate"
+    use_color: true
+
+  - name: "honc_sosnet_concat"
+    components: [ "honc", "libtorch_sosnet" ]
+    aggregation: "concatenate"
+    use_color: true
   # Single CNN descriptors
-#  - name: "hardnet"
+#  - name: "hardnet_rebuild2"
 #    type: "libtorch_hardnet"
 #    device: "auto"
 #    use_color: false
-#
-#  - name: "sosnet"
+##
+#  - name: "sosnet_rebuild2"
 #    type: "libtorch_sosnet"
 #    device: "auto"
 #    use_color: false
-#
-#   # Single traditional descriptors
-#  - name: "sift"
+##
+##   # Single traditional descriptors
+#  - name: "sift_rebuild2"
 #    type: "sift"
 #    use_color: false
 #
-#  - name: "rgbsift"
-#    type: "rgbsift"
-#    use_color: true
-#
-#  - name: "rgbsift_channel_avg"
-#    type: "rgbsift_channel_avg"
-#    use_color: true
-#
-#  - name: "honc"
-#    type: "honc"
-#    use_color: true
+  - name: "rgbsift"
+    type: "rgbsift"
+    use_color: true
+
+  - name: "rgbsift_channel_avg"
+    type: "rgbsift_channel_avg"
+    use_color: true
+
+  - name: "honc"
+    type: "honc"
+    use_color: true
 
   - name: "dspsift_v2_post_scale_ch"
     type: "dspsift_v2"
@@ -59,9 +110,11 @@ descriptors:
     norm_type: "l2"
     scales: [0.85, 1.075, 1.30]
 
-#  - name: "surf"
+#  - name: "surf_rebuild2"
 #    type: "surf"
 #    use_color: false
+
+
 
 # Performance settings
 performance:

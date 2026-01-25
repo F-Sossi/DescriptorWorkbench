@@ -1,8 +1,12 @@
 -- Database schema for descriptor research experiments
 -- This matches the schema defined in DatabaseManager.cpp
 --
--- SCHEMA VERSION: v3.4 (October 2025)
+-- SCHEMA VERSION: v3.7 (January 2026)
 -- MAJOR UPGRADE: Keypoint retrieval metrics (Bojanic et al. 2020, Eq. 5-6)
+--
+-- Migration notes (v3.7):
+-- - Added patch_benchmark_descriptor_sets + patch_benchmark_descriptors tables
+-- - Stores descriptor matrices for patch benchmark caching/reuse
 --
 -- Migration notes (v3.4):
 -- - Added patch_benchmark_results table for HPatches patch benchmark runs
@@ -118,12 +122,117 @@ CREATE TABLE IF NOT EXISTS patch_benchmark_results (
     map_illumination_hard REAL,
     map_viewpoint_easy REAL,
     map_viewpoint_hard REAL,
+    verification_same_overall REAL,
+    verification_same_easy REAL,
+    verification_same_hard REAL,
+    verification_same_tough REAL,
+    verification_same_illumination REAL,
+    verification_same_viewpoint REAL,
+    verification_same_illumination_easy REAL,
+    verification_same_illumination_hard REAL,
+    verification_same_viewpoint_easy REAL,
+    verification_same_viewpoint_hard REAL,
+    verification_diff_overall REAL,
+    verification_diff_easy REAL,
+    verification_diff_hard REAL,
+    verification_diff_tough REAL,
+    verification_diff_illumination REAL,
+    verification_diff_viewpoint REAL,
+    verification_diff_illumination_easy REAL,
+    verification_diff_illumination_hard REAL,
+    verification_diff_viewpoint_easy REAL,
+    verification_diff_viewpoint_hard REAL,
+    retrieval_overall REAL,
+    retrieval_easy REAL,
+    retrieval_hard REAL,
+    retrieval_tough REAL,
+    retrieval_illumination REAL,
+    retrieval_viewpoint REAL,
+    retrieval_illumination_easy REAL,
+    retrieval_illumination_hard REAL,
+    retrieval_viewpoint_easy REAL,
+    retrieval_viewpoint_hard REAL,
+    verification_negatives_per_query INTEGER DEFAULT 0,
+    retrieval_negatives_per_query INTEGER DEFAULT 0,
+    verification_negative_source TEXT DEFAULT 'both',
+    retrieval_negative_source TEXT DEFAULT 'diff_seq',
     num_scenes INTEGER,
     num_patches INTEGER,
     processing_time_ms REAL,
     metadata TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(experiment_id) REFERENCES experiments(id)
+);
+
+-- Patch benchmark task sets (verification/retrieval task definitions)
+CREATE TABLE IF NOT EXISTS patch_benchmark_task_sets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    source TEXT,
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS patch_benchmark_descriptor_sets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    experiment_id INTEGER,
+    descriptor_name TEXT NOT NULL,
+    descriptor_dimension INTEGER DEFAULT 0,
+    patches_dir TEXT NOT NULL,
+    color INTEGER DEFAULT 0,
+    patch_keypoint_size REAL DEFAULT 0.0,
+    params_hash TEXT,
+    params_json TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(experiment_id) REFERENCES experiments(id)
+);
+
+CREATE TABLE IF NOT EXISTS patch_benchmark_descriptors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    descriptor_set_id INTEGER NOT NULL,
+    scene_name TEXT NOT NULL,
+    difficulty TEXT NOT NULL,
+    target_key TEXT NOT NULL,
+    rows INTEGER NOT NULL,
+    cols INTEGER NOT NULL,
+    cv_type INTEGER NOT NULL,
+    data BLOB NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(descriptor_set_id) REFERENCES patch_benchmark_descriptor_sets(id),
+    UNIQUE(descriptor_set_id, scene_name, difficulty, target_key)
+);
+
+CREATE TABLE IF NOT EXISTS patch_benchmark_verification_pairs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_set_id INTEGER NOT NULL,
+    split TEXT NOT NULL,      -- full, illum, view, a, b, c
+    neg_type TEXT NOT NULL,   -- pos, inter, intra
+    s1 TEXT NOT NULL,
+    t1 INTEGER NOT NULL,
+    idx1 INTEGER NOT NULL,
+    s2 TEXT NOT NULL,
+    t2 INTEGER NOT NULL,
+    idx2 INTEGER NOT NULL,
+    FOREIGN KEY(task_set_id) REFERENCES patch_benchmark_task_sets(id)
+);
+
+CREATE TABLE IF NOT EXISTS patch_benchmark_retrieval_queries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_set_id INTEGER NOT NULL,
+    split TEXT NOT NULL,
+    s TEXT NOT NULL,
+    idx INTEGER NOT NULL,
+    FOREIGN KEY(task_set_id) REFERENCES patch_benchmark_task_sets(id)
+);
+
+CREATE TABLE IF NOT EXISTS patch_benchmark_retrieval_distractors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_set_id INTEGER NOT NULL,
+    split TEXT NOT NULL,
+    s TEXT NOT NULL,
+    idx INTEGER NOT NULL,
+    FOREIGN KEY(task_set_id) REFERENCES patch_benchmark_task_sets(id)
 );
 
 -- Keypoint sets to manage different keypoint generation strategies
@@ -205,6 +314,12 @@ CREATE INDEX IF NOT EXISTS idx_keypoint_sets_overlap ON keypoint_sets(overlap_fi
 CREATE INDEX IF NOT EXISTS idx_locked_keypoints_set ON locked_keypoints(keypoint_set_id);
 CREATE INDEX IF NOT EXISTS idx_locked_keypoints_scene ON locked_keypoints(keypoint_set_id, scene_name, image_name);
 CREATE INDEX IF NOT EXISTS idx_patch_benchmark_experiment ON patch_benchmark_results(experiment_id);
+CREATE INDEX IF NOT EXISTS idx_patch_benchmark_task_sets_name ON patch_benchmark_task_sets(name);
+CREATE INDEX IF NOT EXISTS idx_patch_benchmark_descriptor_sets_name ON patch_benchmark_descriptor_sets(name);
+CREATE INDEX IF NOT EXISTS idx_patch_benchmark_descriptors_lookup ON patch_benchmark_descriptors(descriptor_set_id, scene_name, difficulty, target_key);
+CREATE INDEX IF NOT EXISTS idx_patch_benchmark_verif_pairs ON patch_benchmark_verification_pairs(task_set_id, split, neg_type);
+CREATE INDEX IF NOT EXISTS idx_patch_benchmark_retr_queries ON patch_benchmark_retrieval_queries(task_set_id, split);
+CREATE INDEX IF NOT EXISTS idx_patch_benchmark_retr_distractors ON patch_benchmark_retrieval_distractors(task_set_id, split);
 
 -- Matches storage for research analysis
 CREATE TABLE IF NOT EXISTS matches (

@@ -366,6 +366,9 @@ namespace thesis_project {
         DescriptorType secondary_descriptor = DescriptorType::SIFT;
         float stacking_weight = 0.5f;
 
+        // Patch benchmark override (synthetic keypoint size in pixels)
+        float patch_keypoint_size = 0.0f;
+
         // DNN patch descriptor params (optional)
         std::string dnn_model_path;   // ONNX model path
         int dnn_input_size = 32;      // square input (e.g., 32x32)

@@ -19,6 +19,8 @@ struct ExperimentConfig;
 struct DatabaseConfig;
 struct KeypointSetStats;
 struct PatchBenchmarkResults;
+struct PatchBenchmarkTaskPair;
+struct PatchBenchmarkTaskItem;
 
 /**
  * @brief Optional database manager for experiment tracking
@@ -66,6 +68,20 @@ public:
         bool isIntersection() const {
             return source_set_a_id >= 0 && source_set_b_id >= 0;
         }
+    };
+
+    struct PatchBenchmarkTaskPair {
+        std::string s1;
+        int t1 = 0;
+        int idx1 = 0;
+        std::string s2;
+        int t2 = 0;
+        int idx2 = 0;
+    };
+
+    struct PatchBenchmarkTaskItem {
+        std::string s;
+        int idx = 0;
     };
 
     /**
@@ -117,6 +133,94 @@ public:
      * @return true if successfully recorded (or disabled), false on error
      */
     bool recordPatchBenchmarkResults(const PatchBenchmarkResults& results) const;
+
+    /**
+     * @brief Create or find a patch benchmark task set id by name.
+     */
+    int upsertPatchBenchmarkTaskSet(const std::string& name,
+                                    const std::string& source,
+                                    const std::string& notes) const;
+
+    /**
+     * @brief Load patch benchmark task set id by name.
+     */
+    int getPatchBenchmarkTaskSetId(const std::string& name) const;
+
+    /**
+     * @brief Store verification pairs for a task set/split/neg type.
+     */
+    bool storePatchBenchmarkVerificationPairs(int task_set_id,
+                                              const std::string& split,
+                                              const std::string& neg_type,
+                                              const std::vector<PatchBenchmarkTaskPair>& pairs) const;
+
+    /**
+     * @brief Store retrieval queries for a task set/split.
+     */
+    bool storePatchBenchmarkRetrievalQueries(int task_set_id,
+                                             const std::string& split,
+                                             const std::vector<PatchBenchmarkTaskItem>& queries) const;
+
+    /**
+     * @brief Store retrieval distractors for a task set/split.
+     */
+    bool storePatchBenchmarkRetrievalDistractors(int task_set_id,
+                                                 const std::string& split,
+                                                 const std::vector<PatchBenchmarkTaskItem>& distractors) const;
+
+    /**
+     * @brief Load verification pairs for a task set/split/neg type.
+     */
+    std::vector<PatchBenchmarkTaskPair> loadPatchBenchmarkVerificationPairs(int task_set_id,
+                                                                            const std::string& split,
+                                                                            const std::string& neg_type) const;
+
+    /**
+     * @brief Load retrieval queries for a task set/split.
+     */
+    std::vector<PatchBenchmarkTaskItem> loadPatchBenchmarkRetrievalQueries(int task_set_id,
+                                                                           const std::string& split) const;
+
+    /**
+     * @brief Load retrieval distractors for a task set/split.
+     */
+    std::vector<PatchBenchmarkTaskItem> loadPatchBenchmarkRetrievalDistractors(int task_set_id,
+                                                                               const std::string& split) const;
+
+    /**
+     * @brief Create or update a descriptor cache set for patch benchmark descriptors.
+     */
+    int upsertPatchBenchmarkDescriptorSet(const std::string& name,
+                                          int experiment_id,
+                                          const std::string& descriptor_name,
+                                          int descriptor_dimension,
+                                          const std::string& patches_dir,
+                                          bool color,
+                                          float patch_keypoint_size,
+                                          const std::string& params_hash,
+                                          const std::string& params_json) const;
+
+    /**
+     * @brief Lookup descriptor cache set id by name.
+     */
+    int getPatchBenchmarkDescriptorSetId(const std::string& name) const;
+
+    /**
+     * @brief Store a descriptor matrix for a scene/difficulty/target.
+     */
+    bool storePatchBenchmarkDescriptor(int descriptor_set_id,
+                                       const std::string& scene_name,
+                                       const std::string& difficulty,
+                                       const std::string& target_key,
+                                       const cv::Mat& descriptors) const;
+
+    /**
+     * @brief Load a descriptor matrix for a scene/difficulty/target.
+     */
+    std::optional<cv::Mat> loadPatchBenchmarkDescriptor(int descriptor_set_id,
+                                                        const std::string& scene_name,
+                                                        const std::string& difficulty,
+                                                        const std::string& target_key) const;
 
     /**
      * @brief Record experiment configuration
@@ -631,6 +735,40 @@ struct PatchBenchmarkResults {
     double map_illumination_hard = 0.0;
     double map_viewpoint_easy = 0.0;
     double map_viewpoint_hard = 0.0;
+    double verification_same_overall = 0.0;
+    double verification_same_easy = 0.0;
+    double verification_same_hard = 0.0;
+    double verification_same_tough = 0.0;
+    double verification_same_illumination = 0.0;
+    double verification_same_viewpoint = 0.0;
+    double verification_same_illumination_easy = 0.0;
+    double verification_same_illumination_hard = 0.0;
+    double verification_same_viewpoint_easy = 0.0;
+    double verification_same_viewpoint_hard = 0.0;
+    double verification_diff_overall = 0.0;
+    double verification_diff_easy = 0.0;
+    double verification_diff_hard = 0.0;
+    double verification_diff_tough = 0.0;
+    double verification_diff_illumination = 0.0;
+    double verification_diff_viewpoint = 0.0;
+    double verification_diff_illumination_easy = 0.0;
+    double verification_diff_illumination_hard = 0.0;
+    double verification_diff_viewpoint_easy = 0.0;
+    double verification_diff_viewpoint_hard = 0.0;
+    double retrieval_overall = 0.0;
+    double retrieval_easy = 0.0;
+    double retrieval_hard = 0.0;
+    double retrieval_tough = 0.0;
+    double retrieval_illumination = 0.0;
+    double retrieval_viewpoint = 0.0;
+    double retrieval_illumination_easy = 0.0;
+    double retrieval_illumination_hard = 0.0;
+    double retrieval_viewpoint_easy = 0.0;
+    double retrieval_viewpoint_hard = 0.0;
+    int verification_negatives_per_query = 0;
+    int retrieval_negatives_per_query = 0;
+    std::string verification_negative_source;
+    std::string retrieval_negative_source;
     int num_scenes = 0;
     int num_patches = 0;
     double processing_time_ms = 0.0;

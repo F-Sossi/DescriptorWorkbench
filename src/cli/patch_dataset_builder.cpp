@@ -23,6 +23,7 @@
 #include <map>
 #include <optional>
 #include <random>
+#include <cstdint>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -33,6 +34,8 @@ namespace fs = std::filesystem;
 namespace {
 
 constexpr int kPatchSize = 65;
+constexpr float kMinKeypointScale = 1.6f;
+constexpr int kDefaultTargetPatches = 2000;
 
 struct Args {
     std::string images_dir = "../data";
@@ -43,7 +46,7 @@ struct Args {
     std::string set_harris;
     std::string set_hessian;
     std::string set_dog;
-    int target_patches = 2000;
+    int target_patches = kDefaultTargetPatches;
     float candidate_multiplier = 1.0f;
     float weight_harris = 0.2f;
     float weight_hessian = 0.4f;
@@ -291,19 +294,34 @@ float jitterValue(const std::map<std::string, std::vector<float>>& values,
     return it->second[idx];
 }
 
+float jitterSignedUnit(const std::string& key, int idx) {
+    const std::uint64_t key_hash = static_cast<std::uint64_t>(std::hash<std::string>{}(key));
+    std::uint64_t h = key_hash ^ (static_cast<std::uint64_t>(idx) + 0x517cc1b727220a95ULL);
+    h ^= (h >> 30);
+    h *= 0xbf58476d1ce4e5b9ULL;
+    h ^= (h >> 27);
+    h *= 0x94d049bb133111ebULL;
+    h ^= (h >> 31);
+    const double unit = static_cast<double>(h % 1000000ULL) / 1000000.0;
+    return static_cast<float>(unit * 2.0 - 1.0);
+}
+
 std::vector<cv::Point2f> jitteredSquareCorners(const cv::Point2f& center,
                                                float side_length,
                                                float base_angle_rad,
                                                float rot_jitter,
                                                float trans_jitter,
                                                float scale_jitter,
-                                               float anis_jitter) {
+                                               float anis_jitter,
+                                               float ty_unit) {
     const float angle = base_angle_rad + rot_jitter;
     const float safe_anis = std::max(1e-6f, anis_jitter);
     const float scaled_side = side_length * scale_jitter;
     const float half_x = 0.5f * scaled_side * safe_anis;
     const float half_y = 0.5f * scaled_side / safe_anis;
-    const float translate = trans_jitter * scaled_side * 0.1f;
+    const float translate = 0.0f;
+    const float trans_x = translate;
+    const float trans_y = translate * ty_unit;
 
     std::vector<cv::Point2f> corners = {
         {-half_x, -half_y},
@@ -315,8 +333,8 @@ std::vector<cv::Point2f> jitteredSquareCorners(const cv::Point2f& center,
     const float cos_a = std::cos(angle);
     const float sin_a = std::sin(angle);
     for (auto& pt : corners) {
-        const float x = pt.x + translate;
-        const float y = pt.y + translate;
+        const float x = pt.x + trans_x;
+        const float y = pt.y + trans_y;
         pt.x = center.x + (x * cos_a - y * sin_a);
         pt.y = center.y + (x * sin_a + y * cos_a);
     }
@@ -445,6 +463,18 @@ int main(int argc, char** argv) {
         const int hessian_limit = static_cast<int>(std::ceil(hessian_quota * mult));
         const int dog_limit = static_cast<int>(std::ceil(dog_quota * mult));
 
+        auto filterByScale = [](std::vector<cv::KeyPoint>& keypoints) {
+            keypoints.erase(
+                std::remove_if(
+                    keypoints.begin(),
+                    keypoints.end(),
+                    [](const cv::KeyPoint& kp) { return kp.size <= kMinKeypointScale; }),
+                keypoints.end());
+        };
+        filterByScale(harris_kps);
+        filterByScale(hessian_kps);
+        filterByScale(dog_kps);
+
         if (static_cast<int>(harris_kps.size()) > harris_limit) harris_kps.resize(harris_limit);
         if (static_cast<int>(hessian_kps.size()) > hessian_limit) hessian_kps.resize(hessian_limit);
         if (static_cast<int>(dog_kps.size()) > dog_limit) dog_kps.resize(dog_limit);
@@ -504,6 +534,7 @@ int main(int argc, char** argv) {
                     const float trans_jitter = jitterValue(meta.trjitter, key, idx, 0.0f);
                     const float scale_jitter = jitterValue(meta.scjitter, key, idx, 1.0f);
                     const float anis_jitter = jitterValue(meta.anisjitter, key, idx, 1.0f);
+                    const float ty_unit = jitterSignedUnit(key, idx);
                     const auto jittered_ref = jitteredSquareCorners(
                         candidate.keypoint.pt,
                         patch_side,
@@ -511,7 +542,8 @@ int main(int argc, char** argv) {
                         rot_jitter,
                         trans_jitter,
                         scale_jitter,
-                        anis_jitter);
+                        anis_jitter,
+                        ty_unit);
                     const auto proj = projectCorners(jittered_ref, homographies[img_idx]);
                     if (!cornersInside(proj, target_images[img_idx].size())) {
                         valid = false;
@@ -538,6 +570,7 @@ int main(int argc, char** argv) {
 
         auto clustered = clusterOverlapping(valid_candidates, args.overlap_threshold);
         if (static_cast<int>(clustered.size()) > target_total) {
+            std::shuffle(clustered.begin(), clustered.end(), rng);
             clustered.resize(target_total);
         }
 
@@ -646,6 +679,7 @@ int main(int argc, char** argv) {
                     const float angle_deg = final_kps[idx].keypoint.angle >= 0.0f ? final_kps[idx].keypoint.angle : 0.0f;
                     const float angle_rad = angle_deg * static_cast<float>(CV_PI / 180.0f);
                     const float patch_side = final_kps[idx].keypoint.size * args.scale_multiplier;
+                    const float ty_unit = jitterSignedUnit(key, idx);
                     const auto jittered_ref = jitteredSquareCorners(
                         final_kps[idx].keypoint.pt,
                         patch_side,
@@ -653,7 +687,8 @@ int main(int argc, char** argv) {
                         rot_jitter,
                         trans_jitter,
                         scale_jitter,
-                        anis_jitter);
+                        anis_jitter,
+                        ty_unit);
                     const auto projected = projectCorners(jittered_ref, homographies[img_idx]);
 
                     cv::Mat patch_color = extractPatch(target_images[img_idx], projected);

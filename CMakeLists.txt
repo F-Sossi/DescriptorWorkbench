@@ -1046,7 +1046,7 @@ option(BUILD_PATCH_BENCHMARK "Build patch benchmark CLI tool for HPatches evalua
 if(BUILD_PATCH_BENCHMARK)
     message(STATUS "Building patch benchmark CLI tool")
 
-    if(EXISTS "${CMAKE_SOURCE_DIR}/cli/patch_benchmark.cpp")
+    if(EXISTS "${CMAKE_SOURCE_DIR}/src/cli/patch_benchmark.cpp")
         add_executable(patch_benchmark
                 src/cli/patch_benchmark.cpp
             src/core/patches/PatchLoader.cpp
@@ -1131,7 +1131,7 @@ if(BUILD_PATCH_BENCHMARK)
         message(STATUS "Patch benchmark CLI tool configured")
 
     else()
-        message(WARNING "patch_benchmark.cpp not found - skipping patch benchmark CLI")
+        message(WARNING "src/cli/patch_benchmark.cpp not found - skipping patch benchmark CLI")
     endif()
 else()
     message(STATUS "Patch benchmark disabled (use -DBUILD_PATCH_BENCHMARK=ON to enable)")

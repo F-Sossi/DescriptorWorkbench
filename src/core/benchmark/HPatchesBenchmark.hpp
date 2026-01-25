@@ -12,6 +12,9 @@
 #include <functional>
 
 namespace thesis_project {
+namespace database {
+class DatabaseManager;
+}
 namespace benchmark {
 
 /**
@@ -25,6 +28,20 @@ namespace benchmark {
  */
 class HPatchesBenchmark {
 public:
+    struct VerificationTaskPair {
+        std::string s1;
+        int t1 = 0;
+        int idx1 = 0;
+        std::string s2;
+        int t2 = 0;
+        int idx2 = 0;
+    };
+
+    struct RetrievalTaskItem {
+        std::string s;
+        int idx = 0;
+    };
+
     /**
      * @brief Configuration for the benchmark run
      */
@@ -38,6 +55,36 @@ public:
         bool print_results = true;         ///< Print results summary
         bool color = false;                ///< Load color patches (3-channel)
         int num_threads = 4;               ///< Parallel processing threads
+        struct TaskConfig {
+            std::string mode = "query"; // "query" (per-query AP) or "paper" (Balntas 2017 protocol)
+            bool matching = true;
+            bool verification = true;
+            bool verification_same_seq = true;
+            bool verification_diff_seq = true;
+            bool retrieval = true;
+            int verification_negatives_per_query = 1000;
+            int retrieval_negatives_per_query = 1000;
+            int verification_num_positives = 200000;
+            int verification_num_negatives = 1000000;
+            int retrieval_num_queries = 10000;
+            int retrieval_num_distractors = 20000;
+            unsigned int random_seed = 1337;
+            bool preload_descriptors = false;
+            std::string preload_scope = "all"; // all or tasks
+            bool store_descriptors_to_db = false;
+            bool use_cached_descriptors = false;
+            std::string descriptor_cache_name;
+            int descriptor_cache_id = -1;
+            std::string task_source = "random"; // random, db, or csv
+            std::string task_set = "hpatches_v1.1";
+            std::string task_split = "full";
+            std::string tasks_dir;
+            std::vector<VerificationTaskPair> verification_pos_pairs;
+            std::vector<VerificationTaskPair> verification_neg_inter_pairs;
+            std::vector<VerificationTaskPair> verification_neg_intra_pairs;
+            std::vector<RetrievalTaskItem> retrieval_queries;
+            std::vector<RetrievalTaskItem> retrieval_distractors;
+        } tasks;
     };
 
     /**
@@ -66,6 +113,42 @@ public:
         float mAP_viewpoint_easy = 0.0f;
         float mAP_viewpoint_hard = 0.0f;
 
+        // Verification (SAMESEQ)
+        float verification_same_overall = 0.0f;
+        float verification_same_easy = 0.0f;
+        float verification_same_hard = 0.0f;
+        float verification_same_tough = 0.0f;
+        float verification_same_illumination = 0.0f;
+        float verification_same_viewpoint = 0.0f;
+        float verification_same_illumination_easy = 0.0f;
+        float verification_same_illumination_hard = 0.0f;
+        float verification_same_viewpoint_easy = 0.0f;
+        float verification_same_viewpoint_hard = 0.0f;
+
+        // Verification (DIFFSEQ)
+        float verification_diff_overall = 0.0f;
+        float verification_diff_easy = 0.0f;
+        float verification_diff_hard = 0.0f;
+        float verification_diff_tough = 0.0f;
+        float verification_diff_illumination = 0.0f;
+        float verification_diff_viewpoint = 0.0f;
+        float verification_diff_illumination_easy = 0.0f;
+        float verification_diff_illumination_hard = 0.0f;
+        float verification_diff_viewpoint_easy = 0.0f;
+        float verification_diff_viewpoint_hard = 0.0f;
+
+        // Retrieval (DIFFSEQ)
+        float retrieval_overall = 0.0f;
+        float retrieval_easy = 0.0f;
+        float retrieval_hard = 0.0f;
+        float retrieval_tough = 0.0f;
+        float retrieval_illumination = 0.0f;
+        float retrieval_viewpoint = 0.0f;
+        float retrieval_illumination_easy = 0.0f;
+        float retrieval_illumination_hard = 0.0f;
+        float retrieval_viewpoint_easy = 0.0f;
+        float retrieval_viewpoint_hard = 0.0f;
+
         // Statistics
         int num_scenes = 0;
         int num_patches = 0;
@@ -89,7 +172,8 @@ public:
         const Config& config,
         patches::IPatchDescriptorExtractor& extractor,
         const DescriptorParams& params,
-        ProgressCallback progress_callback = nullptr);
+        database::DatabaseManager* database_manager = nullptr,
+        const ProgressCallback& progress_callback = nullptr);
 
     /**
      * @brief Run the benchmark on a single scene
@@ -97,14 +181,26 @@ public:
      * @param extractor Descriptor extractor
      * @param params Descriptor parameters
      * @param difficulty "easy", "hard", or "tough"
+     * @param illumination_scenes Pool of illumination scenes for DIFFSEQ sampling
+     * @param viewpoint_scenes Pool of viewpoint scenes for DIFFSEQ sampling
      * @return Match result for this scene/difficulty
      */
-    static PatchMetrics::MatchResult evaluateScene(
+    struct SceneResults {
+        PatchMetrics::MatchResult matching;
+        PatchMetrics::MatchResult verification_same;
+        PatchMetrics::MatchResult verification_diff;
+        PatchMetrics::MatchResult retrieval;
+    };
+
+    static SceneResults evaluateScene(
         const std::string& scene_dir,
         patches::IPatchDescriptorExtractor& extractor,
         const DescriptorParams& params,
         const Config& config,
-        const std::string& difficulty);
+        const std::string& difficulty,
+        const std::vector<std::string>& illumination_scenes,
+        const std::vector<std::string>& viewpoint_scenes,
+        database::DatabaseManager* database_manager = nullptr);
 
     /**
      * @brief Print results to console

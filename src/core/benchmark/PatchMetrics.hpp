@@ -4,8 +4,8 @@
 #include <vector>
 #include <string>
 
-namespace thesis_project {
-namespace benchmark {
+
+namespace thesis_project::benchmark {
 
 /**
  * @brief Metrics computation for HPatches patch matching evaluation
@@ -44,7 +44,7 @@ public:
     /**
      * @brief Compute Average Precision for ranked retrieval
      *
-     * @param distances Vector of distances to all targets for each query
+     * @param ranked_results Vector of distances to all targets for each query
      * @param correct_idx Vector of correct target indices (usually just the query index)
      * @return Average Precision score
      */
@@ -93,5 +93,5 @@ private:
         const cv::Mat& targets);
 };
 
-} // namespace benchmark
-} // namespace thesis_project
+} // namespace thesis_project::benchmark
+

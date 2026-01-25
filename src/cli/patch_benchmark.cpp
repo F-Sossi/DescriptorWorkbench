@@ -212,11 +212,172 @@ std::string joinStrings(const std::vector<std::string>& values, const std::strin
     return oss.str();
 }
 
+std::string serializeParams(const std::map<std::string, std::string>& params) {
+    std::ostringstream oss;
+    for (const auto& [key, value] : params) {
+        oss << key << "=" << value << ";";
+    }
+    return oss.str();
+}
+
 std::string toLowerCopy(const std::string& input) {
     std::string value = input;
     std::transform(value.begin(), value.end(), value.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return value;
+}
+
+std::vector<std::string> splitCsvLine(const std::string& line) {
+    std::vector<std::string> parts;
+    std::string current;
+    for (char c : line) {
+        if (c == ',') {
+            parts.push_back(current);
+            current.clear();
+        } else {
+            current.push_back(c);
+        }
+    }
+    parts.push_back(current);
+    return parts;
+}
+
+std::vector<thesis_project::database::DatabaseManager::PatchBenchmarkTaskPair>
+loadVerificationPairsCsv(const std::string& path) {
+    std::vector<thesis_project::database::DatabaseManager::PatchBenchmarkTaskPair> pairs;
+    std::ifstream in(path);
+    if (!in) {
+        throw std::runtime_error("Failed to open verification tasks file: " + path);
+    }
+    std::string line;
+    bool first = true;
+    while (std::getline(in, line)) {
+        if (line.empty()) continue;
+        if (first) {
+            first = false;
+            continue;
+        }
+        auto cols = splitCsvLine(line);
+        if (cols.size() < 6) {
+            continue;
+        }
+        thesis_project::database::DatabaseManager::PatchBenchmarkTaskPair pair;
+        pair.s1 = cols[0];
+        pair.t1 = std::stoi(cols[1]);
+        pair.idx1 = std::stoi(cols[2]);
+        pair.s2 = cols[3];
+        pair.t2 = std::stoi(cols[4]);
+        pair.idx2 = std::stoi(cols[5]);
+        pairs.push_back(std::move(pair));
+    }
+    return pairs;
+}
+
+std::vector<thesis_project::database::DatabaseManager::PatchBenchmarkTaskItem>
+loadRetrievalItemsCsv(const std::string& path) {
+    std::vector<thesis_project::database::DatabaseManager::PatchBenchmarkTaskItem> items;
+    std::ifstream in(path);
+    if (!in) {
+        throw std::runtime_error("Failed to open retrieval tasks file: " + path);
+    }
+    std::string line;
+    bool first = true;
+    while (std::getline(in, line)) {
+        if (line.empty()) continue;
+        if (first) {
+            first = false;
+            continue;
+        }
+        auto cols = splitCsvLine(line);
+        if (cols.size() < 2) {
+            continue;
+        }
+        thesis_project::database::DatabaseManager::PatchBenchmarkTaskItem item;
+        item.s = cols[0];
+        item.idx = std::stoi(cols[1]);
+        items.push_back(std::move(item));
+    }
+    return items;
+}
+
+void importTasksToDatabase(thesis_project::database::DatabaseManager& db,
+                           const std::string& task_set_name,
+                           const std::string& tasks_dir,
+                           const std::string& notes) {
+    const int task_set_id = db.upsertPatchBenchmarkTaskSet(task_set_name, tasks_dir, notes);
+    if (task_set_id < 0) {
+        throw std::runtime_error("Failed to create or load task set: " + task_set_name);
+    }
+
+    const std::vector<std::string> splits = {"full", "illum", "view", "a", "b", "c"};
+    for (const auto& split : splits) {
+        const std::string pos_path = (std::filesystem::path(tasks_dir) / ("verif_pos_split-" + split + ".csv")).string();
+        if (std::filesystem::exists(pos_path)) {
+            db.storePatchBenchmarkVerificationPairs(task_set_id, split, "pos", loadVerificationPairsCsv(pos_path));
+        }
+        const std::string neg_inter = (std::filesystem::path(tasks_dir) / ("verif_neg_inter_split-" + split + ".csv")).string();
+        if (std::filesystem::exists(neg_inter)) {
+            db.storePatchBenchmarkVerificationPairs(task_set_id, split, "inter", loadVerificationPairsCsv(neg_inter));
+        }
+        const std::string neg_intra = (std::filesystem::path(tasks_dir) / ("verif_neg_intra_split-" + split + ".csv")).string();
+        if (std::filesystem::exists(neg_intra)) {
+            db.storePatchBenchmarkVerificationPairs(task_set_id, split, "intra", loadVerificationPairsCsv(neg_intra));
+        }
+        const std::string retr_queries = (std::filesystem::path(tasks_dir) / ("retr_queries_split-" + split + ".csv")).string();
+        if (std::filesystem::exists(retr_queries)) {
+            db.storePatchBenchmarkRetrievalQueries(task_set_id, split, loadRetrievalItemsCsv(retr_queries));
+        }
+        const std::string retr_distractors = (std::filesystem::path(tasks_dir) / ("retr_distractors_split-" + split + ".csv")).string();
+        if (std::filesystem::exists(retr_distractors)) {
+            db.storePatchBenchmarkRetrievalDistractors(task_set_id, split, loadRetrievalItemsCsv(retr_distractors));
+        }
+    }
+}
+
+void loadTasksFromDatabase(thesis_project::database::DatabaseManager& db,
+                           const std::string& task_set_name,
+                           const std::string& split,
+                           thesis_project::benchmark::HPatchesBenchmark::Config& config) {
+    const int task_set_id = db.getPatchBenchmarkTaskSetId(task_set_name);
+    if (task_set_id < 0) {
+        throw std::runtime_error("Task set not found in database: " + task_set_name);
+    }
+
+    const auto pos_pairs_db = db.loadPatchBenchmarkVerificationPairs(task_set_id, split, "pos");
+    const auto neg_inter_db = db.loadPatchBenchmarkVerificationPairs(task_set_id, split, "inter");
+    const auto neg_intra_db = db.loadPatchBenchmarkVerificationPairs(task_set_id, split, "intra");
+    const auto queries_db = db.loadPatchBenchmarkRetrievalQueries(task_set_id, split);
+    const auto distractors_db = db.loadPatchBenchmarkRetrievalDistractors(task_set_id, split);
+
+    config.tasks.verification_pos_pairs.clear();
+    config.tasks.verification_pos_pairs.reserve(pos_pairs_db.size());
+    for (const auto& p : pos_pairs_db) {
+        config.tasks.verification_pos_pairs.push_back({p.s1, p.t1, p.idx1, p.s2, p.t2, p.idx2});
+    }
+
+    config.tasks.verification_neg_inter_pairs.clear();
+    config.tasks.verification_neg_inter_pairs.reserve(neg_inter_db.size());
+    for (const auto& p : neg_inter_db) {
+        config.tasks.verification_neg_inter_pairs.push_back({p.s1, p.t1, p.idx1, p.s2, p.t2, p.idx2});
+    }
+
+    config.tasks.verification_neg_intra_pairs.clear();
+    config.tasks.verification_neg_intra_pairs.reserve(neg_intra_db.size());
+    for (const auto& p : neg_intra_db) {
+        config.tasks.verification_neg_intra_pairs.push_back({p.s1, p.t1, p.idx1, p.s2, p.t2, p.idx2});
+    }
+
+    config.tasks.retrieval_queries.clear();
+    config.tasks.retrieval_queries.reserve(queries_db.size());
+    for (const auto& q : queries_db) {
+        config.tasks.retrieval_queries.push_back({q.s, q.idx});
+    }
+
+    config.tasks.retrieval_distractors.clear();
+    config.tasks.retrieval_distractors.reserve(distractors_db.size());
+    for (const auto& d : distractors_db) {
+        config.tasks.retrieval_distractors.push_back({d.s, d.idx});
+    }
 }
 
 DescriptorConfig parseDescriptorConfig(const YAML::Node& node) {
@@ -299,6 +460,12 @@ DescriptorConfig parseDescriptorConfig(const YAML::Node& node) {
         const std::string norm_str = toLowerCopy(node["norm_type"].as<std::string>());
         if (norm_str == "l1") desc.params.norm_type = cv::NORM_L1;
         else desc.params.norm_type = cv::NORM_L2;
+    }
+
+    if (node["patch_keypoint_size"]) {
+        desc.params.patch_keypoint_size = node["patch_keypoint_size"].as<float>();
+    } else if (node["keypoint_size"]) {
+        desc.params.patch_keypoint_size = node["keypoint_size"].as<float>();
     }
 
     if (node["extended"]) {
@@ -417,6 +584,94 @@ BenchmarkConfig loadConfig(const std::string& path) {
         }
     }
 
+    if (root["tasks"]) {
+        const auto& tasks = root["tasks"];
+        auto parseEnabled = [](const YAML::Node& node, bool default_value) {
+            if (!node) return default_value;
+            if (node.IsScalar()) return node.as<bool>();
+            if (node["enabled"]) return node["enabled"].as<bool>();
+            return default_value;
+        };
+
+        if (tasks["mode"]) {
+            config.benchmark.tasks.mode = toLowerCopy(tasks["mode"].as<std::string>());
+        }
+        if (tasks["task_source"]) {
+            config.benchmark.tasks.task_source = toLowerCopy(tasks["task_source"].as<std::string>());
+        }
+        if (tasks["task_set"]) {
+            config.benchmark.tasks.task_set = tasks["task_set"].as<std::string>();
+        }
+        if (tasks["task_split"]) {
+            config.benchmark.tasks.task_split = toLowerCopy(tasks["task_split"].as<std::string>());
+        }
+        if (tasks["tasks_dir"]) {
+            config.benchmark.tasks.tasks_dir = tasks["tasks_dir"].as<std::string>();
+        }
+        if (tasks["matching"]) {
+            config.benchmark.tasks.matching = parseEnabled(tasks["matching"], config.benchmark.tasks.matching);
+        }
+        if (tasks["verification"]) {
+            const auto& ver = tasks["verification"];
+            config.benchmark.tasks.verification = parseEnabled(ver, config.benchmark.tasks.verification);
+            if (ver["negatives_per_query"]) {
+                config.benchmark.tasks.verification_negatives_per_query = ver["negatives_per_query"].as<int>();
+            }
+            if (ver["num_positives"]) {
+                config.benchmark.tasks.verification_num_positives = ver["num_positives"].as<int>();
+            }
+            if (ver["num_negatives"]) {
+                config.benchmark.tasks.verification_num_negatives = ver["num_negatives"].as<int>();
+            }
+            if (ver["negative_source"]) {
+                const std::string source = toLowerCopy(ver["negative_source"].as<std::string>());
+                if (source == "same_seq") {
+                    config.benchmark.tasks.verification_same_seq = true;
+                    config.benchmark.tasks.verification_diff_seq = false;
+                } else if (source == "diff_seq") {
+                    config.benchmark.tasks.verification_same_seq = false;
+                    config.benchmark.tasks.verification_diff_seq = true;
+                } else if (source == "both") {
+                    config.benchmark.tasks.verification_same_seq = true;
+                    config.benchmark.tasks.verification_diff_seq = true;
+                } else {
+                    throw std::runtime_error("tasks.verification.negative_source must be same_seq, diff_seq, or both");
+                }
+            }
+        }
+        if (tasks["retrieval"]) {
+            const auto& ret = tasks["retrieval"];
+            config.benchmark.tasks.retrieval = parseEnabled(ret, config.benchmark.tasks.retrieval);
+            if (ret["negatives_per_query"]) {
+                config.benchmark.tasks.retrieval_negatives_per_query = ret["negatives_per_query"].as<int>();
+            }
+            if (ret["num_queries"]) {
+                config.benchmark.tasks.retrieval_num_queries = ret["num_queries"].as<int>();
+            }
+            if (ret["num_distractors"]) {
+                config.benchmark.tasks.retrieval_num_distractors = ret["num_distractors"].as<int>();
+            }
+        }
+        if (tasks["preload_descriptors"]) {
+            config.benchmark.tasks.preload_descriptors = tasks["preload_descriptors"].as<bool>();
+        }
+        if (tasks["preload_scope"]) {
+            config.benchmark.tasks.preload_scope = tasks["preload_scope"].as<std::string>();
+        }
+        if (tasks["store_descriptors_to_db"]) {
+            config.benchmark.tasks.store_descriptors_to_db = tasks["store_descriptors_to_db"].as<bool>();
+        }
+        if (tasks["use_cached_descriptors"]) {
+            config.benchmark.tasks.use_cached_descriptors = tasks["use_cached_descriptors"].as<bool>();
+        }
+        if (tasks["descriptor_cache_name"]) {
+            config.benchmark.tasks.descriptor_cache_name = tasks["descriptor_cache_name"].as<std::string>();
+        }
+        if (tasks["random_seed"]) {
+            config.benchmark.tasks.random_seed = tasks["random_seed"].as<unsigned int>();
+        }
+    }
+
     if (root["descriptors"]) {
         if (!root["descriptors"].IsSequence()) {
             throw std::runtime_error("descriptors must be a list");
@@ -480,6 +735,55 @@ int main(int argc, char* argv[]) {
                     db.reset();
                 }
             }
+            if (!db && (config.benchmark.tasks.store_descriptors_to_db ||
+                        config.benchmark.tasks.use_cached_descriptors)) {
+                db = std::make_unique<DatabaseManager>("experiments.db", true);
+                if (!db->isEnabled()) {
+                    std::cerr << "Warning: Failed to connect to database for descriptor caching\n";
+                    db.reset();
+                }
+            }
+
+            std::unique_ptr<DatabaseManager> task_db;
+            DatabaseManager* task_db_ptr = db.get();
+            if (config.benchmark.tasks.task_source != "random") {
+                if (!task_db_ptr) {
+                    task_db = std::make_unique<DatabaseManager>("experiments.db", true);
+                    if (!task_db->isEnabled()) {
+                        throw std::runtime_error("Failed to connect to database for task import/load");
+                    }
+                    task_db_ptr = task_db.get();
+                }
+
+                const std::string source = toLowerCopy(config.benchmark.tasks.task_source);
+                const std::string split = config.benchmark.tasks.task_split.empty()
+                    ? "full"
+                    : config.benchmark.tasks.task_split;
+                if (source == "csv") {
+                    if (config.benchmark.tasks.tasks_dir.empty()) {
+                        throw std::runtime_error("tasks.tasks_dir must be set when task_source is csv");
+                    }
+                    importTasksToDatabase(*task_db_ptr,
+                                          config.benchmark.tasks.task_set,
+                                          config.benchmark.tasks.tasks_dir,
+                                          "imported from csv");
+                    loadTasksFromDatabase(*task_db_ptr, config.benchmark.tasks.task_set, split, config.benchmark);
+                } else if (source == "db") {
+                    loadTasksFromDatabase(*task_db_ptr, config.benchmark.tasks.task_set, split, config.benchmark);
+                } else if (source != "random") {
+                    throw std::runtime_error("tasks.task_source must be random, db, or csv");
+                }
+
+                if (config.benchmark.verbose) {
+                    std::cout << "[PatchBenchmark] Loaded task set '" << config.benchmark.tasks.task_set
+                              << "' split '" << split << "'\n"
+                              << "  verification_pos_pairs: " << config.benchmark.tasks.verification_pos_pairs.size() << "\n"
+                              << "  verification_neg_inter_pairs: " << config.benchmark.tasks.verification_neg_inter_pairs.size() << "\n"
+                              << "  verification_neg_intra_pairs: " << config.benchmark.tasks.verification_neg_intra_pairs.size() << "\n"
+                              << "  retrieval_queries: " << config.benchmark.tasks.retrieval_queries.size() << "\n"
+                              << "  retrieval_distractors: " << config.benchmark.tasks.retrieval_distractors.size() << "\n";
+                }
+            }
 
             std::vector<HPatchesBenchmark::Results> all_results;
             all_results.reserve(config.descriptors.size());
@@ -523,23 +827,9 @@ int main(int argc, char* argv[]) {
                     run_config.color = desc_config.use_color;
                 }
 
-                auto results = HPatchesBenchmark::run(
-                    run_config,
-                    *extractor,
-                    params,
-                    [&config](int current, int total, const std::string& scene) {
-                        if (config.benchmark.verbose) {
-                            std::cout << "\rProcessing scene " << current << "/" << total
-                                      << ": " << scene << std::flush;
-                        }
-                    });
-
-                if (config.benchmark.verbose) {
-                    std::cout << "\n";
-                }
-
+                int experiment_id = -1;
+                ExperimentConfig exp_config;
                 if (db) {
-                    ExperimentConfig exp_config;
                     exp_config.descriptor_type = desc_config.name.empty()
                         ? extractor->name()
                         : desc_config.name;
@@ -547,7 +837,7 @@ int main(int argc, char* argv[]) {
                     exp_config.pooling_strategy = "patch_benchmark";
                     exp_config.similarity_threshold = 0.0;
                     exp_config.max_features = 0;
-                    exp_config.descriptor_dimension = results.descriptor_dimension;
+                    exp_config.descriptor_dimension = extractor->descriptorSize();
                     exp_config.execution_device = desc_config.device;
                     exp_config.parameters["benchmark"] = "patch_benchmark";
                     exp_config.parameters["patches_dir"] = config.benchmark.patches_dir;
@@ -555,6 +845,39 @@ int main(int argc, char* argv[]) {
                     exp_config.parameters["difficulty_hard"] = config.benchmark.include_hard ? "true" : "false";
                     exp_config.parameters["difficulty_tough"] = config.benchmark.include_tough ? "true" : "false";
                     exp_config.parameters["use_color"] = run_config.color ? "true" : "false";
+                    exp_config.parameters["task_mode"] = config.benchmark.tasks.mode;
+                    exp_config.parameters["task_matching"] = config.benchmark.tasks.matching ? "true" : "false";
+                    exp_config.parameters["task_verification"] = config.benchmark.tasks.verification ? "true" : "false";
+                    exp_config.parameters["task_verification_same_seq"] = config.benchmark.tasks.verification_same_seq ? "true" : "false";
+                    exp_config.parameters["task_verification_diff_seq"] = config.benchmark.tasks.verification_diff_seq ? "true" : "false";
+                    exp_config.parameters["task_retrieval"] = config.benchmark.tasks.retrieval ? "true" : "false";
+                    exp_config.parameters["verification_negatives_per_query"] =
+                        std::to_string(config.benchmark.tasks.verification_negatives_per_query);
+                    exp_config.parameters["retrieval_negatives_per_query"] =
+                        std::to_string(config.benchmark.tasks.retrieval_negatives_per_query);
+                    exp_config.parameters["verification_num_positives"] =
+                        std::to_string(config.benchmark.tasks.verification_num_positives);
+                    exp_config.parameters["verification_num_negatives"] =
+                        std::to_string(config.benchmark.tasks.verification_num_negatives);
+                    exp_config.parameters["retrieval_num_queries"] =
+                        std::to_string(config.benchmark.tasks.retrieval_num_queries);
+                    exp_config.parameters["retrieval_num_distractors"] =
+                        std::to_string(config.benchmark.tasks.retrieval_num_distractors);
+                    exp_config.parameters["task_random_seed"] =
+                        std::to_string(config.benchmark.tasks.random_seed);
+                    exp_config.parameters["task_source"] = config.benchmark.tasks.task_source;
+                    exp_config.parameters["task_set"] = config.benchmark.tasks.task_set;
+                    exp_config.parameters["task_split"] = config.benchmark.tasks.task_split;
+                    exp_config.parameters["descriptor_cache_name"] = config.benchmark.tasks.descriptor_cache_name;
+                    exp_config.parameters["preload_descriptors"] =
+                        config.benchmark.tasks.preload_descriptors ? "true" : "false";
+                    exp_config.parameters["preload_scope"] = config.benchmark.tasks.preload_scope;
+                    exp_config.parameters["store_descriptors_to_db"] =
+                        config.benchmark.tasks.store_descriptors_to_db ? "true" : "false";
+                    exp_config.parameters["use_cached_descriptors"] =
+                        config.benchmark.tasks.use_cached_descriptors ? "true" : "false";
+                    exp_config.parameters["patch_keypoint_size"] =
+                        std::to_string(params.patch_keypoint_size);
                     if (!config.benchmark.scenes.empty()) {
                         exp_config.parameters["scenes"] = joinStrings(config.benchmark.scenes, ",");
                     }
@@ -572,51 +895,179 @@ int main(int argc, char* argv[]) {
                     }
                     exp_config.parameters["config_file"] = args.config_file;
 
-                    const int experiment_id = db->recordConfiguration(exp_config);
-                    if (experiment_id >= 0) {
-                        PatchBenchmarkResults patch_results;
-                        patch_results.experiment_id = experiment_id;
-                        patch_results.descriptor_name = results.descriptor_name;
-                        patch_results.descriptor_dimension = results.descriptor_dimension;
-                        patch_results.map_overall = results.mAP_overall;
-                        patch_results.accuracy_overall = results.accuracy_overall;
-                        patch_results.map_easy = results.mAP_easy;
-                        patch_results.map_hard = results.mAP_hard;
-                        patch_results.map_tough = results.mAP_tough;
-                        patch_results.map_illumination = results.mAP_illumination;
-                        patch_results.map_viewpoint = results.mAP_viewpoint;
-                        patch_results.map_illumination_easy = results.mAP_illumination_easy;
-                        patch_results.map_illumination_hard = results.mAP_illumination_hard;
-                        patch_results.map_viewpoint_easy = results.mAP_viewpoint_easy;
-                        patch_results.map_viewpoint_hard = results.mAP_viewpoint_hard;
-                        patch_results.num_scenes = results.num_scenes;
-                        patch_results.num_patches = results.num_patches;
-                        patch_results.processing_time_ms = results.processing_time_ms;
-                        patch_results.metadata["patches_dir"] = config.benchmark.patches_dir;
-                        patch_results.metadata["difficulty_easy"] = config.benchmark.include_easy ? "true" : "false";
-                        patch_results.metadata["difficulty_hard"] = config.benchmark.include_hard ? "true" : "false";
-                        patch_results.metadata["difficulty_tough"] = config.benchmark.include_tough ? "true" : "false";
-                        patch_results.metadata["use_color"] = run_config.color ? "true" : "false";
-                        if (!config.benchmark.scenes.empty()) {
-                            patch_results.metadata["scenes"] = joinStrings(config.benchmark.scenes, ",");
-                        }
-                        patch_results.metadata["descriptor_type"] = desc_config.type;
-                        patch_results.metadata["execution_device"] = desc_config.device;
-                        if (desc_config.isFusion()) {
-                            patch_results.metadata["fusion_method"] = desc_config.method;
-                            patch_results.metadata["components"] = joinStrings(desc_config.components, "+");
-                            if (!desc_config.weights.empty()) {
-                                std::vector<std::string> weight_strings;
-                                weight_strings.reserve(desc_config.weights.size());
-                                for (float weight : desc_config.weights) {
-                                    weight_strings.push_back(std::to_string(weight));
-                                }
-                                patch_results.metadata["weights"] = joinStrings(weight_strings, ",");
-                            }
-                        }
-                        patch_results.metadata["config_file"] = args.config_file;
-                        db->recordPatchBenchmarkResults(patch_results);
+                }
+
+                if (db && (run_config.tasks.store_descriptors_to_db || run_config.tasks.use_cached_descriptors)) {
+                    std::string cache_name = run_config.tasks.descriptor_cache_name;
+                    if (cache_name.empty()) {
+                        cache_name = (desc_config.name.empty() ? extractor->name() : desc_config.name)
+                                     + std::string(run_config.color ? "_color" : "_bw");
                     }
+                    run_config.tasks.descriptor_cache_name = cache_name;
+                    if (db) {
+                        exp_config.parameters["descriptor_cache_name"] = cache_name;
+                    }
+                }
+
+                if (db && config.save_to_database) {
+                    experiment_id = db->recordConfiguration(exp_config);
+                }
+
+                if (db && (run_config.tasks.store_descriptors_to_db || run_config.tasks.use_cached_descriptors)) {
+                    const std::string params_json = serializeParams(exp_config.parameters);
+                    const std::string params_hash = std::to_string(std::hash<std::string>{}(params_json));
+                    int cache_id = -1;
+                    if (run_config.tasks.store_descriptors_to_db) {
+                        cache_id = db->upsertPatchBenchmarkDescriptorSet(
+                            run_config.tasks.descriptor_cache_name,
+                            experiment_id,
+                            exp_config.descriptor_type,
+                            extractor->descriptorSize(),
+                            run_config.patches_dir,
+                            run_config.color,
+                            params.patch_keypoint_size,
+                            params_hash,
+                            params_json);
+                    } else {
+                        cache_id = db->getPatchBenchmarkDescriptorSetId(run_config.tasks.descriptor_cache_name);
+                    }
+                    if (cache_id < 0 && run_config.tasks.use_cached_descriptors && run_config.verbose) {
+                        std::cerr << "[PatchBenchmark] Warning: descriptor cache not found for '"
+                                  << run_config.tasks.descriptor_cache_name << "', falling back to extraction.\n";
+                    }
+                    run_config.tasks.descriptor_cache_id = cache_id;
+                }
+
+                auto results = HPatchesBenchmark::run(
+                    run_config,
+                    *extractor,
+                    params,
+                    db.get(),
+                    [&config](int current, int total, const std::string& scene) {
+                        if (config.benchmark.verbose) {
+                            std::cout << "\rProcessing scene " << current << "/" << total
+                                      << ": " << scene << std::flush;
+                        }
+                    });
+
+                if (config.benchmark.verbose) {
+                    std::cout << "\n";
+                }
+
+                if (db && config.save_to_database && experiment_id >= 0) {
+                    PatchBenchmarkResults patch_results;
+                    patch_results.experiment_id = experiment_id;
+                    patch_results.descriptor_name = results.descriptor_name;
+                    patch_results.descriptor_dimension = results.descriptor_dimension;
+                    patch_results.map_overall = results.mAP_overall;
+                    patch_results.accuracy_overall = results.accuracy_overall;
+                    patch_results.map_easy = results.mAP_easy;
+                    patch_results.map_hard = results.mAP_hard;
+                    patch_results.map_tough = results.mAP_tough;
+                    patch_results.map_illumination = results.mAP_illumination;
+                    patch_results.map_viewpoint = results.mAP_viewpoint;
+                    patch_results.map_illumination_easy = results.mAP_illumination_easy;
+                    patch_results.map_illumination_hard = results.mAP_illumination_hard;
+                    patch_results.map_viewpoint_easy = results.mAP_viewpoint_easy;
+                    patch_results.map_viewpoint_hard = results.mAP_viewpoint_hard;
+                    patch_results.verification_same_overall = results.verification_same_overall;
+                    patch_results.verification_same_easy = results.verification_same_easy;
+                    patch_results.verification_same_hard = results.verification_same_hard;
+                    patch_results.verification_same_tough = results.verification_same_tough;
+                    patch_results.verification_same_illumination = results.verification_same_illumination;
+                    patch_results.verification_same_viewpoint = results.verification_same_viewpoint;
+                    patch_results.verification_same_illumination_easy = results.verification_same_illumination_easy;
+                    patch_results.verification_same_illumination_hard = results.verification_same_illumination_hard;
+                    patch_results.verification_same_viewpoint_easy = results.verification_same_viewpoint_easy;
+                    patch_results.verification_same_viewpoint_hard = results.verification_same_viewpoint_hard;
+
+                    patch_results.verification_diff_overall = results.verification_diff_overall;
+                    patch_results.verification_diff_easy = results.verification_diff_easy;
+                    patch_results.verification_diff_hard = results.verification_diff_hard;
+                    patch_results.verification_diff_tough = results.verification_diff_tough;
+                    patch_results.verification_diff_illumination = results.verification_diff_illumination;
+                    patch_results.verification_diff_viewpoint = results.verification_diff_viewpoint;
+                    patch_results.verification_diff_illumination_easy = results.verification_diff_illumination_easy;
+                    patch_results.verification_diff_illumination_hard = results.verification_diff_illumination_hard;
+                    patch_results.verification_diff_viewpoint_easy = results.verification_diff_viewpoint_easy;
+                    patch_results.verification_diff_viewpoint_hard = results.verification_diff_viewpoint_hard;
+
+                    patch_results.retrieval_overall = results.retrieval_overall;
+                    patch_results.retrieval_easy = results.retrieval_easy;
+                    patch_results.retrieval_hard = results.retrieval_hard;
+                    patch_results.retrieval_tough = results.retrieval_tough;
+                    patch_results.retrieval_illumination = results.retrieval_illumination;
+                    patch_results.retrieval_viewpoint = results.retrieval_viewpoint;
+                    patch_results.retrieval_illumination_easy = results.retrieval_illumination_easy;
+                    patch_results.retrieval_illumination_hard = results.retrieval_illumination_hard;
+                    patch_results.retrieval_viewpoint_easy = results.retrieval_viewpoint_easy;
+                    patch_results.retrieval_viewpoint_hard = results.retrieval_viewpoint_hard;
+                    patch_results.verification_negatives_per_query = config.benchmark.tasks.verification_negatives_per_query;
+                    patch_results.retrieval_negatives_per_query = config.benchmark.tasks.retrieval_negatives_per_query;
+                    if (config.benchmark.tasks.verification_same_seq &&
+                        config.benchmark.tasks.verification_diff_seq) {
+                        patch_results.verification_negative_source = "both";
+                    } else if (config.benchmark.tasks.verification_diff_seq) {
+                        patch_results.verification_negative_source = "diff_seq";
+                    } else {
+                        patch_results.verification_negative_source = "same_seq";
+                    }
+                    patch_results.retrieval_negative_source = "diff_seq";
+                    patch_results.num_scenes = results.num_scenes;
+                    patch_results.num_patches = results.num_patches;
+                    patch_results.processing_time_ms = results.processing_time_ms;
+                    patch_results.metadata["patches_dir"] = config.benchmark.patches_dir;
+                    patch_results.metadata["difficulty_easy"] = config.benchmark.include_easy ? "true" : "false";
+                    patch_results.metadata["difficulty_hard"] = config.benchmark.include_hard ? "true" : "false";
+                    patch_results.metadata["difficulty_tough"] = config.benchmark.include_tough ? "true" : "false";
+                    patch_results.metadata["use_color"] = run_config.color ? "true" : "false";
+                    patch_results.metadata["task_mode"] = config.benchmark.tasks.mode;
+                    patch_results.metadata["task_matching"] = config.benchmark.tasks.matching ? "true" : "false";
+                    patch_results.metadata["task_verification"] = config.benchmark.tasks.verification ? "true" : "false";
+                    patch_results.metadata["task_verification_same_seq"] = config.benchmark.tasks.verification_same_seq ? "true" : "false";
+                    patch_results.metadata["task_verification_diff_seq"] = config.benchmark.tasks.verification_diff_seq ? "true" : "false";
+                    patch_results.metadata["task_retrieval"] = config.benchmark.tasks.retrieval ? "true" : "false";
+                    patch_results.metadata["verification_negatives_per_query"] =
+                        std::to_string(config.benchmark.tasks.verification_negatives_per_query);
+                    patch_results.metadata["retrieval_negatives_per_query"] =
+                        std::to_string(config.benchmark.tasks.retrieval_negatives_per_query);
+                    patch_results.metadata["verification_num_positives"] =
+                        std::to_string(config.benchmark.tasks.verification_num_positives);
+                    patch_results.metadata["verification_num_negatives"] =
+                        std::to_string(config.benchmark.tasks.verification_num_negatives);
+                    patch_results.metadata["retrieval_num_queries"] =
+                        std::to_string(config.benchmark.tasks.retrieval_num_queries);
+                    patch_results.metadata["retrieval_num_distractors"] =
+                        std::to_string(config.benchmark.tasks.retrieval_num_distractors);
+                    patch_results.metadata["task_random_seed"] =
+                        std::to_string(config.benchmark.tasks.random_seed);
+                    patch_results.metadata["task_source"] = config.benchmark.tasks.task_source;
+                    patch_results.metadata["task_set"] = config.benchmark.tasks.task_set;
+                    patch_results.metadata["task_split"] = config.benchmark.tasks.task_split;
+                    patch_results.metadata["descriptor_cache_name"] = run_config.tasks.descriptor_cache_name;
+                    patch_results.metadata["store_descriptors_to_db"] =
+                        run_config.tasks.store_descriptors_to_db ? "true" : "false";
+                    patch_results.metadata["use_cached_descriptors"] =
+                        run_config.tasks.use_cached_descriptors ? "true" : "false";
+                    if (!config.benchmark.scenes.empty()) {
+                        patch_results.metadata["scenes"] = joinStrings(config.benchmark.scenes, ",");
+                    }
+                    patch_results.metadata["descriptor_type"] = desc_config.type;
+                    patch_results.metadata["execution_device"] = desc_config.device;
+                    if (desc_config.isFusion()) {
+                        patch_results.metadata["fusion_method"] = desc_config.method;
+                        patch_results.metadata["components"] = joinStrings(desc_config.components, "+");
+                        if (!desc_config.weights.empty()) {
+                            std::vector<std::string> weight_strings;
+                            weight_strings.reserve(desc_config.weights.size());
+                            for (float weight : desc_config.weights) {
+                                weight_strings.push_back(std::to_string(weight));
+                            }
+                            patch_results.metadata["weights"] = joinStrings(weight_strings, ",");
+                        }
+                    }
+                    patch_results.metadata["config_file"] = args.config_file;
+                    db->recordPatchBenchmarkResults(patch_results);
                 }
 
                 all_results.push_back(results);
@@ -672,6 +1123,7 @@ int main(int argc, char* argv[]) {
             config,
             *extractor,
             params,
+            nullptr,
             [&args](int current, int total, const std::string& scene) {
                 if (args.verbose) {
                     std::cout << "\rProcessing scene " << current << "/" << total

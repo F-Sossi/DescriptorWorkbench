@@ -47,7 +47,10 @@ cv::Mat PatchTraditionalExtractor::extractFromPatches(
         const float center_x = static_cast<float>(patch.cols) / 2.0f;
         const float center_y = static_cast<float>(patch.rows) / 2.0f;
 
-        cv::KeyPoint kp(center_x, center_y, keypoint_size_, 0.0f);  // angle = 0 (upright)
+        const float kp_size = (params.patch_keypoint_size > 0.0f)
+            ? params.patch_keypoint_size
+            : keypoint_size_;
+        cv::KeyPoint kp(center_x, center_y, kp_size, 0.0f);  // angle = 0 (upright)
         std::vector<cv::KeyPoint> keypoints = {kp};
 
         cv::Mat input_patch = patch;
