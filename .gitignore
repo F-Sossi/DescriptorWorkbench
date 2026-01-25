@@ -179,3 +179,5 @@ perf.data*
 /archive/
 /UWThesis/
 /references/
+/config/patch_benchmarks/tasks/
+/analysis/output/
