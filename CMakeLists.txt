@@ -1055,7 +1055,13 @@ if(BUILD_PATCH_BENCHMARK)
             src/core/patches/PatchFusionExtractor.cpp
             src/core/patches/PatchDescriptorFactory.cpp
             src/core/benchmark/PatchMetrics.cpp
-            src/core/benchmark/HPatchesBenchmark.cpp
+            src/core/benchmark/PatchScope.cpp
+            src/core/benchmark/DescriptorBank.cpp
+            src/core/benchmark/PatchBenchmark.cpp
+            src/core/benchmark/metrics/APMetrics.cpp
+            src/core/benchmark/tasks/MatchingTask.cpp
+            src/core/benchmark/tasks/VerificationTask.cpp
+            src/core/benchmark/tasks/RetrievalTask.cpp
             src/core/descriptor/factories/DescriptorFactory.cpp
             src/core/database/DatabaseManager.cpp
             src/core/descriptor/extractors/CompositeDescriptorExtractor.cpp

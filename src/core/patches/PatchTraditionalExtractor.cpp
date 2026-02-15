@@ -109,8 +109,12 @@ std::unique_ptr<IPatchDescriptorExtractor> createPatchHoNC() {
 
 std::unique_ptr<IPatchDescriptorExtractor> createPatchDSPSIFT() {
     auto dspsift = DescriptorFactory::create(DescriptorType::DSPSIFT_V2);
-    // DSP expects the original keypoint scale; 65px patch comes from ~5x scale multiplier.
-    return std::make_unique<PatchTraditionalExtractor>(std::move(dspsift), 13.0f, false, DescriptorType::DSPSIFT_V2);
+    // NOTE: DSP (Domain Size Pooling) is designed for scale variation in full images.
+    // On pre-extracted 65x65 patches that are already scale-normalized, DSP multi-scale
+    // pooling doesn't provide meaningful benefit. Using keypoint_size=41.0 (same as SIFT)
+    // keeps extraction at octave 0 where the patch has full resolution.
+    // For proper DSP evaluation, use the full image experiment_runner pipeline.
+    return std::make_unique<PatchTraditionalExtractor>(std::move(dspsift), 41.0f, false, DescriptorType::DSPSIFT_V2);
 }
 
 std::unique_ptr<IPatchDescriptorExtractor> createPatchSURF() {
