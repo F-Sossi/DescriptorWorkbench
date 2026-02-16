@@ -1,8 +1,14 @@
 # DescriptorWorkbench YAML Configuration Guide
 
-This guide provides comprehensive documentation for configuring experiments in the DescriptorWorkbench project using YAML files.
+## Full Image Pipeline (`experiment_runner`)
 
-**🎉 Updated October 2025**: Complete documentation for Bojanic et al. (2020) evaluation metrics (keypoint verification + retrieval) and performance tuning options.
+This guide provides comprehensive documentation for configuring **full image experiments** using YAML files. These experiments evaluate descriptors on complete HPatches images with keypoint detection.
+
+**For patch-based evaluation** (pre-extracted 65x65 patches), see:
+- [README.md](README.md) - Overview of both pipelines
+- [Patch Benchmark Schema](#patch-benchmark-configuration) - Quick reference at end of this guide
+
+**Updated February 2026**: Complete documentation for Bojanic et al. (2020) evaluation metrics (keypoint verification + retrieval) and performance tuning options.
 
 ## Table of Contents
 
@@ -15,6 +21,7 @@ This guide provides comprehensive documentation for configuring experiments in t
 7. [Validation and Error Handling](#validation-and-error-handling)
 8. [Best Practices](#best-practices)
 9. [Troubleshooting](#troubleshooting)
+10. [Patch Benchmark Configuration](#patch-benchmark-configuration)
 
 ## Quick Start
 
@@ -858,3 +865,151 @@ This guide covers the complete YAML configuration system. For additional questio
 - Source code: `src/core/config/YAMLConfigLoader.cpp`
 - Validation tests: `tests/unit/config/`
 - Implementation docs: `docs/StatusDocs/METRICS_ENHANCEMENT_PLAN.md`
+
+---
+
+## Patch Benchmark Configuration
+
+The **patch pipeline** (`patch_benchmark`) uses a different YAML schema optimized for pre-extracted 65x65 HPatches patches. This isolates descriptor quality from keypoint detection.
+
+### When to Use Patch Pipeline
+
+- Evaluating descriptor fusion strategies
+- Comparing CNN vs traditional descriptors on identical patches
+- Faster iteration (no keypoint detection overhead)
+- Reproducing HPatches benchmark paper results
+
+### Quick Start
+
+```bash
+cd build
+./patch_benchmark ../config/patch_benchmarks/patch_sift_full.yaml
+```
+
+### Patch Benchmark Schema
+
+```yaml
+experiment:
+  name: "patch_benchmark_name"
+  description: "Human-readable description"
+
+patches:
+  path: "../hpatches-release-rebuilt-color/"  # Path to rebuilt color patches
+  scenes: []                    # Empty = all 116 scenes
+  color: true                   # Load as color (required for RGBSIFT, HoNC)
+  difficulty:
+    easy: true                  # Include easy pairs (~0.85 overlap)
+    hard: true                  # Include hard pairs (~0.72 overlap)
+    tough: true                 # Include tough pairs (if available)
+
+tasks:
+  mode: "paper"                 # Use paper-standard evaluation protocol
+  matching:
+    enabled: true               # Patch matching mAP
+  verification:
+    enabled: true               # Distractor-based verification
+    num_positives: 200000       # Positive pairs to sample
+    num_negatives: 1000000      # Negative pairs to sample
+    negative_source: "both"     # "intra" | "inter" | "both"
+  retrieval:
+    enabled: true               # Three-tier retrieval
+    num_queries: 10000          # Query patches
+    num_distractors: 20000      # Distractor patches
+  preload_descriptors: true     # Cache descriptors in memory
+  random_seed: 1337             # For reproducibility
+
+descriptors:
+  # Single descriptor
+  - name: "sift_baseline"
+    type: "sift"
+    use_color: false
+
+  # Fusion descriptor
+  - name: "sift_hardnet_avg"
+    components: ["sift", "libtorch_hardnet"]
+    aggregation: "average"      # "average" | "concatenate" | "weighted_avg" | "max" | "min"
+    use_color: false
+
+  # DSP descriptor with custom scales
+  - name: "dspsift_custom"
+    type: "dspsift_v2"
+    use_color: false
+    pooling_aggregation: "max"
+    normalize_after_pooling: true
+    norm_type: "l2"
+    scales: [0.85, 1.075, 1.30]
+
+performance:
+  num_threads: 12               # OpenMP thread count
+  verbose: true                 # Print progress
+
+output:
+  save_to_database: true        # Save to experiments.db
+  print_results: true           # Print summary to console
+```
+
+### Patch Descriptor Types
+
+| Type | Dimension | Color | Notes |
+|------|-----------|-------|-------|
+| `sift` | 128 | No | OpenCV SIFT on grayscale |
+| `rgbsift` | 384 | Yes | SIFT on R, G, B channels concatenated |
+| `rgbsift_channel_avg` | 128 | Yes | Average of per-channel SIFT |
+| `honc` | Variable | Yes | Histogram of Normalized Colors |
+| `dspsift_v2` | 128 | No | Domain-Size Pooled SIFT |
+| `surf` | 64/128 | No | SURF (use `extended: true` for 128D) |
+| `libtorch_hardnet` | 128 | No | HardNet CNN |
+| `libtorch_sosnet` | 128 | No | SOSNet CNN |
+
+### Fusion Configuration
+
+```yaml
+# Average fusion (requires same dimensions)
+- name: "hardnet_sosnet_avg"
+  components: ["libtorch_hardnet", "libtorch_sosnet"]
+  aggregation: "average"
+  use_color: false
+
+# Concatenation (any dimensions)
+- name: "sift_hardnet_concat"
+  components: ["sift", "libtorch_hardnet"]
+  aggregation: "concatenate"
+  use_color: false
+
+# Weighted average with custom weights
+- name: "weighted_fusion"
+  components: ["sift", "libtorch_hardnet"]
+  aggregation: "weighted_avg"
+  weights: [0.3, 0.7]
+  use_color: false
+```
+
+**L2 Normalization**: The patch pipeline applies L2 normalization before and after fusion to ensure equal contribution from descriptors with different magnitude ranges.
+
+### Patch Benchmark Results
+
+Results are stored in `patch_benchmark_results` table:
+
+```sql
+SELECT descriptor_name, matching_map, verification_ap, retrieval_ap
+FROM patch_benchmark_results
+ORDER BY matching_map DESC;
+```
+
+### Key Differences from Full Image Pipeline
+
+| Aspect | Full Image | Patch |
+|--------|------------|-------|
+| Config section | `dataset` + `keypoints` | `patches` |
+| Descriptor section | `type` field | `type` or `components` |
+| Tasks section | `evaluation` | `tasks` |
+| Color handling | Automatic | Explicit `use_color` |
+| Keypoints | Generated/locked | Fixed patch centers |
+
+### Example Configs
+
+See `config/patch_benchmarks/` for working examples:
+- `patch_sift_full.yaml` - SIFT baseline with all tasks
+- `patch_fusion_benchmark.yaml` - Descriptor fusion comparison
+- `patch_baselines_all.yaml` - All single descriptors
+- `baselines/*.yaml` - Individual baseline configs

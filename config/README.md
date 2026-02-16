@@ -1,225 +1,251 @@
-# Experiment Configuration Organization
+# DescriptorWorkbench Configuration Guide
 
-This directory contains organized experiment configurations for the DescriptorWorkbench framework. Each folder represents a specific keypoint set strategy for fair descriptor comparison.
+This directory contains configuration files for DescriptorWorkbench's two evaluation pipelines:
 
-## Folder Structure
+1. **Full Image Pipeline** (`experiment_runner`) - Evaluates descriptors on full HPatches images with keypoint detection
+2. **Patch Pipeline** (`patch_benchmark`) - Evaluates descriptors on pre-extracted 65x65 patches
+
+## Directory Structure
 
 ```
-experiments/
-├── Sift_Only/              # Experiments using pure SIFT keypoints
-├── Orb_Only/               # Experiments using pure ORB keypoints
-├── Surf_Only/              # Experiments using pure SURF keypoints
-├── Keynet_Only/            # Experiments using pure KeyNet keypoints
-├── Keynet_Sift_Compare/    # Non-overlapping keypoints for CNN vs traditional comparison
-├── Orb_Sift_Compare/       # Spatial intersection (5px) between ORB and SIFT
-├── Surf_Sift_Compare/      # Spatial intersection (5px) between SURF and SIFT
-└── _archive/               # Archived/deprecated experiment files
+config/
+├── README.md                      # This file
+├── YAML_CONFIGURATION_GUIDE.md    # Full image pipeline reference
+├── PATCH_BENCHMARK_GUIDE.md       # Patch pipeline reference
+├── defaults/                      # Reusable default configurations
+├── experiments/                   # Full image pipeline configs
+│   ├── *.yaml                     # Active experiment configs
+│   └── _archive/                  # Deprecated configs
+└── patch_benchmarks/              # Patch pipeline configs
+    ├── baselines/                 # Single descriptor baselines
+    └── *.yaml                     # Fusion and comparison configs
 ```
 
-## Required Keypoint Sets
+## Pipeline Comparison
 
-Before running experiments, generate the required keypoint sets using:
+| Feature | Full Image (`experiment_runner`) | Patch (`patch_benchmark`) |
+|---------|----------------------------------|---------------------------|
+| Input | Full HPatches images | Pre-extracted 65x65 patches |
+| Keypoint Source | Detected or locked keypoints | Fixed patch centers |
+| Measures | Detection + Description | Description only |
+| Use Case | End-to-end evaluation | Isolate descriptor quality |
+| Speed | Slower (includes detection) | Faster (patches pre-loaded) |
 
-```bash
-cd /path/to/DescriptorWorkbench
-./scripts/generate_all_keypoint_sets.sh
-```
+## Quick Start
 
-### Keypoint Set Definitions
-
-| Keypoint Set Name | Generator | Purpose | Special Properties |
-|-------------------|-----------|---------|-------------------|
-| `sift_keypoints` | SIFT | Pure SIFT detection | 8000 features, standard params |
-| `orb_keypoints` | ORB | Pure ORB detection | 8000 features, native keypoints |
-| `surf_keypoints` | SURF | Pure SURF detection | 8000 features, native keypoints |
-| `harris_keypoints` | Harris | Harris corner detection | Optional, for additional comparisons |
-| `sift_keynet_pairs` | SIFT | CNN vs traditional comparison | 5px spatial intersection with KeyNet |
-| `orb_sift_intersection` | ORB+SIFT | Cross-detector comparison | 5px spatial matching tolerance |
-| `surf_sift_intersection` | SURF+SIFT | Cross-detector comparison | 5px spatial matching tolerance |
-
-## Experiment Categories
-
-### 1. Detector-Specific Experiments (`*_Only` folders)
-
-These experiments test various descriptor modifications using keypoints from a **single detector**. This ensures the keypoint detection method doesn't influence descriptor performance comparisons.
-
-**Folders:**
-- `Sift_Only/` - All SIFT-family descriptors (SIFT, RGBSIFT, HoNC, VSIFT, DSPSIFT variants)
-- `Orb_Only/` - ORB descriptor using ORB keypoints
-- `Surf_Only/` - SURF descriptor using SURF keypoints
-
-**Use Case:** Compare descriptor modifications (pooling, normalization, rooting) on the same keypoint set.
-
-### 2. CNN vs Traditional Comparison (`Keynet_Sift_Compare/`)
-
-Uses **non-overlapping keypoints** (32px minimum distance) to ensure CNN descriptors don't have overlapping receptive fields, which improves CNN performance.
-
-**Contents:**
-- SIFT, RGBSIFT, HoNC descriptor experiments
-- HardNet, SOSNet, L2Net CNN baseline experiments
-- All using `sift_keynet_pairs` keypoint set
-
-**Use Case:** Fair comparison between CNN and traditional descriptors on the same keypoint locations.
-
-### 3. Cross-Detector Comparisons (`*_Sift_Compare` folders)
-
-Uses **spatial intersection** (5px tolerance) to find keypoints detected by **both detectors**. This tests descriptor robustness when multiple detectors agree on salient points.
-
-**Folders:**
-- `Orb_Sift_Compare/` - Keypoints detected by both ORB and SIFT (within 5px)
-- `Surf_Sift_Compare/` - Keypoints detected by both SURF and SIFT (within 5px)
-
-**Descriptor Coverage:** The `_Sift_Compare` YAMLs mirror the descriptor menus from their `_Only` counterparts so you can measure how intersection keypoints influence MAP without changing the descriptor parameters.
-
-**Use Case:** Compare descriptors on mutually-agreed salient points from different detectors.
-
-## Running Experiments
-
-### Run Experiments by Folder
+### Full Image Pipeline
 
 ```bash
 cd build
-
-# Run all SIFT-family experiments on pure SIFT keypoints
-./experiment_runner ../config/experiments/Sift_Only/sift_experiments.yaml
-./experiment_runner ../config/experiments/Sift_Only/rgbsift_experiments.yaml
-./experiment_runner ../config/experiments/Sift_Only/honc_experiments.yaml
-
-# Run CNN vs traditional comparison
-./experiment_runner ../config/experiments/Keynet_Sift_Compare/sift_experiments.yaml
-./experiment_runner ../config/experiments/Keynet_Sift_Compare/hardnet_baseline.yaml
-
-# Run cross-detector comparison
-./experiment_runner ../config/experiments/Orb_Sift_Compare/sift_experiments.yaml
-./experiment_runner ../config/experiments/Orb_Sift_Compare/orb_experiments.yaml
-./experiment_runner ../config/experiments/Surf_Sift_Compare/sift_experiments.yaml
-./experiment_runner ../config/experiments/Surf_Sift_Compare/surf_experiments.yaml
+./experiment_runner ../config/experiments/thesis_verification_retrieval.yaml
 ```
 
-### Batch Execution
-
-Create a bash script to run all experiments in a folder:
+### Patch Pipeline
 
 ```bash
-#!/bin/bash
-for yaml in ../config/experiments/Sift_Only/*.yaml; do
-    echo "Running: $yaml"
-    ./experiment_runner "$yaml"
-done
+cd build
+./patch_benchmark ../config/patch_benchmarks/patch_sift_full.yaml
 ```
 
-## Experiment Configuration Format
+## Full Image Pipeline (`experiments/`)
 
-All YAML files follow this structure:
+Evaluates descriptors on full HPatches images with keypoint detection, matching, and optional verification/retrieval tasks.
+
+### Folder Structure
+
+```
+experiments/
+├── thesis_*.yaml              # Thesis-ready full evaluations
+├── fusion_*.yaml              # Descriptor fusion experiments
+├── *_evaluation.yaml          # Single descriptor evaluations
+└── _archive/                  # Deprecated/old configs
+```
+
+### Configuration Schema
+
+See [YAML_CONFIGURATION_GUIDE.md](YAML_CONFIGURATION_GUIDE.md) for complete documentation.
 
 ```yaml
 experiment:
-  name: experiment_name
-  description: Human-readable description
-  version: '1.0'
+  name: "experiment_name"
+  description: "Human-readable description"
+
+dataset:
+  type: "hpatches"
+  path: "../data/"
+  scenes: []  # Empty = all scenes
 
 keypoints:
-  generator: sift|orb|surf|harris
-  keypoint_set_name: sift_keypoints  # Must match generated keypoint set
+  generator: "sift"
+  keypoint_set_name: "sift_keypoints"
   use_locked_keypoints: true
 
 descriptors:
-  - name: descriptor_variant_name
-    type: sift|rgbsift|honc|orb|surf|dspsift_v2
-    pooling: none|stacking
+  - name: "sift_baseline"
+    type: "sift"
+    pooling: "none"
     normalize_after_pooling: true
-    norm_type: 1|4  # L1 or L2
-    rooting_stage: none|before_pooling|after_pooling
 
 evaluation:
   matching:
-    method: brute_force
-    threshold: 0.8
-  image_retrieval:
-    enabled: false          # Defaults to false; opt in explicitly
-    scorer: total_matches   # Alternatives: correct_matches*, ratio_sum
-
+    method: "ratio_test"
+    ratio_threshold: 0.8
+  keypoint_verification:
+    enabled: true
+  keypoint_retrieval:
+    enabled: true
 ```
 
-### Image Retrieval MAP (Optional)
+### Keypoint Management
 
-Setting `evaluation.image_retrieval.enabled: true` triggers a dataset-wide image-level
-Mean Average Precision computation. Scorers:
+Generate and manage keypoint sets with `keypoint_manager`:
 
-- `total_matches` (default) – rank candidates by surviving match count.
-- `ratio_sum` – distance-weighted match votes (`∑ 1/(1+d)`).
-- `correct_matches` – only meaningful when using homography-projected keypoints (the
-  independent-detection path will report zero because correctness cannot be assessed).
-
-When enabled the runner caches every query/candidate match list in memory so each query
-image (typically `1.ppm` per scene) can be ranked against every other image in the dataset.
-Results are written to `results.image_retrieval_map`; when the toggle is off the column is
-set to `-1` for downstream filtering. Expect extra runtime/memory due to cross-scene
-matching.
-```
-
-## Keypoint Set Generation Status
-
-### ✅ Implemented CLI Support
-- `sift_keypoints` - `./keypoint_manager generate-detector ../data sift sift_keypoints`
-- `orb_keypoints` - `./keypoint_manager generate-detector ../data orb orb_keypoints`
-- `surf_keypoints` - `./keypoint_manager generate-detector ../data surf surf_keypoints`
-- `harris_keypoints` - `./keypoint_manager generate-detector ../data harris harris_keypoints`
-- `keynet_keypoints` - `./keypoint_manager generate-kornia-keynet ../data keynet_keypoints 8000 auto --overwrite`
-- `sift_keynet_pairs` - `./keypoint_manager build-intersection --source-a sift_keypoints --source-b keynet_keypoints --out-a sift_keynet_pairs --out-b keynet_sift_pairs --tolerance 5.0`
-
-### ✅ Spatial Intersection Support
-Use the CLI `build-intersection` workflow to create 5px-overlap keypoint subsets:
 ```bash
-./keypoint_manager build-intersection \
-    --source-a sift_keypoints \
-    --source-b orb_keypoints \
-    --out-a sift_keypoints_orb5px \
-    --out-b orb_sift_intersection \
-    --tolerance 5.0
+# Generate SIFT keypoints
+./keypoint_manager generate-detector ../data sift sift_keypoints
 
-./keypoint_manager build-intersection \
-    --source-a sift_keypoints \
-    --source-b surf_keypoints \
-    --out-a sift_keypoints_surf5px \
-    --out-b surf_sift_intersection \
-    --tolerance 5.0
-
+# Create intersection sets
 ./keypoint_manager build-intersection \
     --source-a sift_keypoints \
     --source-b keynet_keypoints \
     --out-a sift_keynet_pairs \
     --out-b keynet_sift_pairs \
     --tolerance 5.0
+
+# List available sets
+./keypoint_manager list-sets
 ```
-The command populates both projected subsets so each detector keeps its native descriptor attributes while sharing the same spatially agreed locations.
 
-## Verification
+## Patch Pipeline (`patch_benchmarks/`)
 
-Check generated keypoint sets:
+Evaluates descriptors on pre-extracted 65x65 HPatches patches, isolating descriptor quality from keypoint detection.
+
+### Folder Structure
+
+```
+patch_benchmarks/
+├── baselines/                 # Single descriptor baselines
+│   ├── sift.yaml
+│   ├── hardnet.yaml
+│   └── ...
+├── patch_sift_full.yaml       # SIFT with all tasks
+├── patch_fusion_benchmark.yaml # Descriptor fusion comparison
+└── patch_baselines_all.yaml   # All baselines in one run
+```
+
+### Configuration Schema
+
+```yaml
+experiment:
+  name: "patch_benchmark_name"
+  description: "Human-readable description"
+
+patches:
+  path: "../hpatches-release-rebuilt-color/"
+  scenes: []          # Empty = all 116 scenes
+  color: true         # Load color patches (required for RGBSIFT, HoNC)
+  difficulty:
+    easy: true        # ~0.85 overlap
+    hard: true        # ~0.72 overlap
+    tough: true       # Additional difficulty
+
+tasks:
+  mode: "paper"       # Use paper-standard evaluation
+  matching:
+    enabled: true
+  verification:
+    enabled: true
+    num_positives: 200000
+    num_negatives: 1000000
+    negative_source: "both"
+  retrieval:
+    enabled: true
+    num_queries: 10000
+    num_distractors: 20000
+  preload_descriptors: true
+  random_seed: 1337
+
+descriptors:
+  # Single descriptor
+  - name: "sift_baseline"
+    type: "sift"
+    use_color: false
+
+  # Fusion descriptor
+  - name: "sift_hardnet_avg"
+    components: ["sift", "libtorch_hardnet"]
+    aggregation: "average"
+    use_color: false
+
+performance:
+  num_threads: 12
+  verbose: true
+
+output:
+  save_to_database: true
+  print_results: true
+```
+
+### Descriptor Options
+
+| Type | Dimension | Color Required | Notes |
+|------|-----------|----------------|-------|
+| `sift` | 128 | No | OpenCV SIFT |
+| `rgbsift` | 384 | Yes | 3x128 (R,G,B channels) |
+| `rgbsift_channel_avg` | 128 | Yes | Channel-averaged RGBSIFT |
+| `honc` | Variable | Yes | Histogram of Normalized Colors |
+| `dspsift_v2` | 128 | No | Domain-Size Pooled SIFT |
+| `surf` | 64/128 | No | SURF (extended=128) |
+| `libtorch_hardnet` | 128 | No | HardNet CNN |
+| `libtorch_sosnet` | 128 | No | SOSNet CNN |
+
+### Fusion Aggregation Methods
+
+| Method | Dimension | Requirement |
+|--------|-----------|-------------|
+| `average` | Same as components | Components must have same dimension |
+| `weighted_avg` | Same as components | Components must have same dimension |
+| `concatenate` | Sum of components | No dimension requirement |
+| `max` | Same as components | Components must have same dimension |
+| `min` | Same as components | Components must have same dimension |
+
+**L2 Normalization**: Both pipelines apply L2 normalization before and after fusion to ensure equal contribution from descriptors with different magnitude ranges (e.g., SIFT ~0-512 vs HardNet ~0-1).
+
+## Database Results
+
+Both pipelines store results in `build/experiments.db`:
 
 ```bash
-cd build
-./keypoint_manager list-scenes
-sqlite3 experiments.db "SELECT DISTINCT keypoint_set FROM locked_keypoints;"
+# View full image results
+sqlite3 experiments.db "SELECT descriptor_type, mean_average_precision FROM results ORDER BY mean_average_precision DESC;"
+
+# View patch benchmark results
+sqlite3 experiments.db "SELECT descriptor_name, map_overall, verification_same_overall, retrieval_overall FROM patch_benchmark_results ORDER BY map_overall DESC;"
 ```
 
-## Database Integration
+## Evaluation Metrics
 
-All experiments store results in `build/experiments.db` with:
-- Experiment configurations
-- Performance metrics (MAP, precision, recall)
-- Keypoint associations
+Both pipelines implement Bojanic et al. (2020) evaluation:
 
-Query results:
-```sql
-SELECT experiment_name, descriptor_name, map
-FROM experiments e
-JOIN results r ON e.id = r.experiment_id
-WHERE keypoint_set = 'sift_keypoints'
-ORDER BY map DESC;
-```
+| Metric | Description | SIFT Baseline |
+|--------|-------------|---------------|
+| Matching mAP | Image matching precision | ~23% (full) / ~42% (patch) |
+| Verification AP | Distractor-based discrimination | ~22% |
+| Retrieval AP | Three-tier ranking quality | ~27% |
 
-## Archive Folder
+### HP-V vs HP-I Breakdown
 
-The `_archive/` folder contains deprecated experiment files from previous organizational schemes. These files are kept for reference but should not be used for new experiments.
+Results automatically split by scene type:
+- **HP-V (Viewpoint)**: `v_*` scenes with geometric transformations
+- **HP-I (Illumination)**: `i_*` scenes with lighting changes
+
+## Archive
+
+The `experiments/_archive/` folder contains deprecated configuration files from previous organizational schemes. These are kept for reference but should not be used for new experiments.
+
+## Additional Resources
+
+- [YAML_CONFIGURATION_GUIDE.md](YAML_CONFIGURATION_GUIDE.md) - Complete full image pipeline reference
+- [skills/run-experiment/](../skills/run-experiment/) - Experiment running guide
+- [skills/patch-benchmark/](../skills/patch-benchmark/) - Patch benchmark guide
+- [skills/yaml-configuration/](../skills/yaml-configuration/) - YAML configuration help

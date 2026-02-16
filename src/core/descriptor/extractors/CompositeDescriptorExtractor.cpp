@@ -267,22 +267,54 @@ namespace thesis_project {
     cv::Mat CompositeDescriptorExtractor::aggregate(
         const std::vector<cv::Mat>& descriptors) const
     {
+        // L2 normalize each component BEFORE fusion to ensure equal contribution.
+        // This is critical for mixing descriptors with different magnitude scales
+        // (e.g., SIFT values range ~0-512 while HardNet/SOSNet are already unit normalized ~0-1).
+        // Without pre-normalization, high-magnitude descriptors dominate the fusion.
+        std::vector<cv::Mat> normalized_descs;
+        normalized_descs.reserve(descriptors.size());
+        for (const auto& desc : descriptors) {
+            cv::Mat normalized;
+            desc.convertTo(normalized, CV_32F);
+            for (int i = 0; i < normalized.rows; ++i) {
+                cv::Mat row = normalized.row(i);
+                cv::normalize(row, row, 1.0, 0.0, cv::NORM_L2);
+            }
+            normalized_descs.push_back(normalized);
+        }
+
+        cv::Mat result;
         switch (aggregation_method_) {
             case AggregationMethod::AVERAGE:
-                return aggregateAverage(descriptors);
+                result = aggregateAverage(normalized_descs);
+                break;
             case AggregationMethod::WEIGHTED_AVG:
-                return aggregateWeightedAverage(descriptors);
+                result = aggregateWeightedAverage(normalized_descs);
+                break;
             case AggregationMethod::MAX:
-                return aggregateMax(descriptors);
+                result = aggregateMax(normalized_descs);
+                break;
             case AggregationMethod::MIN:
-                return aggregateMin(descriptors);
+                result = aggregateMin(normalized_descs);
+                break;
             case AggregationMethod::CONCATENATE:
-                return aggregateConcatenate(descriptors);
+                result = aggregateConcatenate(normalized_descs);
+                break;
             case AggregationMethod::CHANNEL_WISE:
-                return aggregateChannelWise(descriptors);
+                result = aggregateChannelWise(normalized_descs);
+                break;
             default:
                 throw std::runtime_error("Unknown aggregation method");
         }
+
+        // L2 normalize the fused result to produce unit-norm descriptors.
+        // This ensures consistent magnitude for downstream matching regardless of fusion method.
+        for (int i = 0; i < result.rows; ++i) {
+            cv::Mat row = result.row(i);
+            cv::normalize(row, row, 1.0, 0.0, cv::NORM_L2);
+        }
+
+        return result;
     }
 
     cv::Mat CompositeDescriptorExtractor::aggregateAverage(

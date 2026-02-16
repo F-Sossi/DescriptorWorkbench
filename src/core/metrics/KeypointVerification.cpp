@@ -112,13 +112,16 @@ namespace thesis_project::metrics {
                     // Compute descriptor distance (L2 norm)
                     double distance = cv::norm(query_desc, cand_desc, cv::NORM_L2);
 
-                    // Determine label using homography
+                    // Determine label using homography.
+                    // The 3.0 pixel tolerance follows Bojanic et al. (2020) specification
+                    // for keypoint verification evaluation. This value is intentionally
+                    // hardcoded to ensure reproducibility with published benchmarks.
                     bool is_correct = isCorrectMatch(
                         query_kp.pt,
                         target_keypoints[cand_idx].pt,
                         homography,
                         target_keypoints,
-                        3.0  // tolerance_px
+                        3.0  // tolerance_px - Bojanic et al. (2020) standard
                     );
 
                     VerificationCandidate candidate;
@@ -416,13 +419,16 @@ namespace thesis_project::metrics {
                     // Compute descriptor distance (L2 norm)
                     double distance = cv::norm(query_desc, cand_desc, cv::NORM_L2);
 
-                    // Determine if this is geometrically correct using homography
+                    // Determine if this is geometrically correct using homography.
+                    // The 3.0 pixel tolerance follows Bojanic et al. (2020) specification
+                    // for keypoint retrieval evaluation. This value is intentionally
+                    // hardcoded to ensure reproducibility with published benchmarks.
                     bool is_correct = isCorrectMatch(
                         query_kp.pt,
                         target_keypoints[cand_idx].pt,
                         homography,
                         target_keypoints,
-                        3.0  // tolerance_px
+                        3.0  // tolerance_px - Bojanic et al. (2020) standard
                     );
 
                     // Assign three-tier label

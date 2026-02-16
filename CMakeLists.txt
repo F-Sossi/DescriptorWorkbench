@@ -1215,3 +1215,74 @@ if(TARGET test_yaml_schema_v1_gtest)
     target_include_directories(test_yaml_schema_v1_gtest PRIVATE src src/include ${OpenCV_INCLUDE_DIRS})
 endif()
 endif()
+
+# =============================================================================
+# Patch Pipeline Tests
+# =============================================================================
+
+# PatchLoader tests
+create_gtest_if_exists("tests/unit/patches/test_patch_loader_gtest.cpp" "test_patch_loader_gtest")
+if(TARGET test_patch_loader_gtest)
+    target_sources(test_patch_loader_gtest PRIVATE
+        src/core/patches/PatchLoader.cpp)
+    target_link_libraries(test_patch_loader_gtest ${OpenCV_LIBRARIES})
+    target_include_directories(test_patch_loader_gtest PRIVATE src src/include ${OpenCV_INCLUDE_DIRS})
+endif()
+
+# PatchTraditionalExtractor tests
+create_gtest_if_exists("tests/unit/patches/test_patch_traditional_extractor_gtest.cpp" "test_patch_traditional_extractor_gtest")
+if(TARGET test_patch_traditional_extractor_gtest)
+    target_sources(test_patch_traditional_extractor_gtest PRIVATE
+        src/core/patches/PatchLoader.cpp
+        src/core/patches/PatchTraditionalExtractor.cpp
+        src/core/descriptor/factories/DescriptorFactory.cpp
+        src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
+        src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/DSPRGBSIFTWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/DSPHoWHWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/DSPHoNCWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/RGBSIFTChannelAverageWrapper.cpp
+        src/core/descriptor/extractors/wrappers/VGGWrapper.cpp
+        src/core/descriptor/extractors/wrappers/ORBWrapper.cpp
+        src/core/descriptor/extractors/wrappers/SURFWrapper.cpp)
+    target_link_libraries(test_patch_traditional_extractor_gtest keypoints ${OpenCV_LIBRARIES})
+    target_include_directories(test_patch_traditional_extractor_gtest PRIVATE src src/include keypoints ${OpenCV_INCLUDE_DIRS})
+endif()
+
+# PatchFusionExtractor tests (critical - tests L2 normalization)
+create_gtest_if_exists("tests/unit/patches/test_patch_fusion_extractor_gtest.cpp" "test_patch_fusion_extractor_gtest")
+if(TARGET test_patch_fusion_extractor_gtest)
+    target_sources(test_patch_fusion_extractor_gtest PRIVATE
+        src/core/patches/PatchFusionExtractor.cpp)
+    target_link_libraries(test_patch_fusion_extractor_gtest ${OpenCV_LIBRARIES})
+    target_include_directories(test_patch_fusion_extractor_gtest PRIVATE src src/include ${OpenCV_INCLUDE_DIRS})
+endif()
+
+# PatchDescriptorFactory tests
+create_gtest_if_exists("tests/unit/patches/test_patch_descriptor_factory_gtest.cpp" "test_patch_descriptor_factory_gtest")
+if(TARGET test_patch_descriptor_factory_gtest)
+    target_sources(test_patch_descriptor_factory_gtest PRIVATE
+        src/core/patches/PatchLoader.cpp
+        src/core/patches/PatchTraditionalExtractor.cpp
+        src/core/patches/PatchFusionExtractor.cpp
+        src/core/patches/PatchDescriptorFactory.cpp
+        src/core/patches/PatchCNNExtractor.cpp
+        src/core/descriptor/factories/DescriptorFactory.cpp
+        src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
+        src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/DSPRGBSIFTWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/DSPHoWHWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/DSPHoNCWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/RGBSIFTChannelAverageWrapper.cpp
+        src/core/descriptor/extractors/wrappers/VGGWrapper.cpp
+        src/core/descriptor/extractors/wrappers/ORBWrapper.cpp
+        src/core/descriptor/extractors/wrappers/SURFWrapper.cpp)
+    target_link_libraries(test_patch_descriptor_factory_gtest keypoints ${OpenCV_LIBRARIES})
+    target_include_directories(test_patch_descriptor_factory_gtest PRIVATE src src/include keypoints ${OpenCV_INCLUDE_DIRS})
+endif()

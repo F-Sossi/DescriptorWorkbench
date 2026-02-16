@@ -2,6 +2,8 @@
 #include <stdexcept>
 #include <iostream>
 #include <cstring>
+#include <unistd.h>
+#include <climits>
 
 
 namespace thesis_project::patches {
@@ -39,7 +41,15 @@ PatchCNNExtractor::PatchCNNExtractor(const std::string& model_path,
         std::cout << "PatchCNNExtractor [" << name_ << "]: Loaded model from " << model_path << std::endl;
 
     } catch (const std::exception& e) {
-        throw std::runtime_error("PatchCNNExtractor: Failed to load model: " + std::string(e.what()));
+        // Provide helpful error message with path resolution hints
+        char cwd[PATH_MAX];
+        std::string cwd_str = getcwd(cwd, sizeof(cwd)) ? cwd : "<unknown>";
+        throw std::runtime_error(
+            "PatchCNNExtractor: Failed to load model '" + model_path + "'\n"
+            "  Working directory: " + cwd_str + "\n"
+            "  Resolved path: " + cwd_str + "/" + model_path + "\n"
+            "  Hint: Run from the build directory, or ensure models/ folder is accessible.\n"
+            "  LibTorch error: " + std::string(e.what()));
     }
 }
 

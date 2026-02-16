@@ -128,7 +128,9 @@ std::vector<cv::Mat> PatchLoader::resizeForCNN(const std::vector<cv::Mat>& patch
 }
 
 int PatchLoader::countPatches(const std::string& png_path) {
-    // Read only the header to get dimensions without loading full image
+    // Note: This loads the full image to get dimensions. OpenCV doesn't provide
+    // a header-only read for PNG files. For large patch stacks this may use
+    // significant memory briefly, but the image is released when this function returns.
     const cv::Mat img = cv::imread(png_path, cv::IMREAD_GRAYSCALE);
     if (img.empty()) {
         return 0;

@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <unistd.h>
+#include <climits>
 
 namespace thesis_project::wrappers {
 
@@ -45,7 +47,15 @@ namespace thesis_project::wrappers {
             std::cout << "LibTorch: Successfully loaded model from " << model_path << std::endl;
 
         } catch (const std::exception& e) {
-            throw std::runtime_error(std::string("LibTorch model loading failed: ") + e.what());
+            // Provide helpful error message with path resolution hints
+            char cwd[PATH_MAX];
+            std::string cwd_str = getcwd(cwd, sizeof(cwd)) ? cwd : "<unknown>";
+            throw std::runtime_error(
+                "LibTorchWrapper: Failed to load model '" + model_path + "'\n"
+                "  Working directory: " + cwd_str + "\n"
+                "  Resolved path: " + cwd_str + "/" + model_path + "\n"
+                "  Hint: Run from the build directory, or ensure models/ folder is accessible.\n"
+                "  LibTorch error: " + std::string(e.what()));
         }
     }
 
