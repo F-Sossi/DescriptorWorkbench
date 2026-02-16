@@ -1,0 +1,53 @@
+# HPatches Patch Benchmark: SIFT verification-only (official HPatches patches)
+# Run: ./patch_benchmark ../config/patch_benchmarks/patch_sift_verification_only.yaml
+
+experiment:
+  name: "patch_sift_verification_only"
+  description: "SIFT verification-only run to validate HPatches paper parity"
+
+patches:
+  path: "../hpatches-release/"
+  scenes: []
+  color: false
+  difficulty:
+    easy: true
+    hard: true
+    tough: true
+
+tasks:
+  mode: "paper"
+  task_source: "csv"
+  task_set: "hpatches_v1.1"
+  task_split: "full"
+  tasks_dir: "../config/patch_benchmarks/tasks"
+  matching:
+    enabled: false
+  verification:
+    enabled: true
+    num_positives: 200000
+    num_negatives: 1000000
+    negative_source: "both"
+  retrieval:
+    enabled: false
+    num_queries: 10000
+    num_distractors: 20000
+  preload_descriptors: true
+  preload_scope: "tasks"
+  store_descriptors_to_db: false
+  use_cached_descriptors: true
+  descriptor_cache_name: "hpatches_sift_full_official"
+  random_seed: 1337
+
+descriptors:
+  - name: "sift_full_official"
+    type: "sift"
+    use_color: false
+    patch_keypoint_size: 12.26
+
+performance:
+  num_threads: 12
+  verbose: true
+
+output:
+  save_to_database: true
+  print_results: true

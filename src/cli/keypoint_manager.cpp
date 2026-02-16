@@ -46,7 +46,7 @@ static void printUsage(const std::string& binaryName) {
     std::cout << "    generate-independent <data_folder> [name] - Generate keypoints using independent detection (realistic)" << std::endl;
     std::cout << "    generate <data_folder>                    - Legacy: Generate homography projected keypoints" << std::endl;
     std::cout << "  Advanced Detector Generation:" << std::endl;
-    std::cout << "    generate-detector <data_folder> <detector> [name] [--max-features N] [--overwrite]" << std::endl;
+    std::cout << "    generate-detector <data_folder> <detector> [name] [--max-features N] [--reference-only] [--overwrite]" << std::endl;
     std::cout << "                         Generate keypoints using specific detector (sift|harris|orb|surf)" << std::endl;
     std::cout << "    generate-non-overlapping <data_folder> <detector> <min_distance> [name] - Generate non-overlapping keypoints" << std::endl;
     std::cout << "    generate-kornia-keynet <data_folder> [set_name] [--max-features N] [--device cpu|cuda|auto] [--mode independent|projected] [--overwrite]" << std::endl;

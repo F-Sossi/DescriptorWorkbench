@@ -47,12 +47,17 @@ cv::Mat PatchTraditionalExtractor::extractFromPatches(
         const float center_x = static_cast<float>(patch.cols) / 2.0f;
         const float center_y = static_cast<float>(patch.rows) / 2.0f;
 
-        cv::KeyPoint kp(center_x, center_y, keypoint_size_, 0.0f);  // angle = 0 (upright)
+        const float kp_size = (params.patch_keypoint_size > 0.0f)
+            ? params.patch_keypoint_size
+            : keypoint_size_;
+        cv::KeyPoint kp(center_x, center_y, kp_size, 0.0f);  // angle = 0 (upright)
         std::vector<cv::KeyPoint> keypoints = {kp};
 
         cv::Mat input_patch = patch;
         if (force_color_ && patch.channels() == 1) {
             cv::cvtColor(patch, input_patch, cv::COLOR_GRAY2BGR);
+        } else if (!force_color_ && patch.channels() == 3) {
+            cv::cvtColor(patch, input_patch, cv::COLOR_BGR2GRAY);
         }
 
         // The base extractor expects an image - treat the patch as a small image
@@ -104,6 +109,11 @@ std::unique_ptr<IPatchDescriptorExtractor> createPatchHoNC() {
 
 std::unique_ptr<IPatchDescriptorExtractor> createPatchDSPSIFT() {
     auto dspsift = DescriptorFactory::create(DescriptorType::DSPSIFT_V2);
+    // NOTE: DSP (Domain Size Pooling) is designed for scale variation in full images.
+    // On pre-extracted 65x65 patches that are already scale-normalized, DSP multi-scale
+    // pooling doesn't provide meaningful benefit. Using keypoint_size=41.0 (same as SIFT)
+    // keeps extraction at octave 0 where the patch has full resolution.
+    // For proper DSP evaluation, use the full image experiment_runner pipeline.
     return std::make_unique<PatchTraditionalExtractor>(std::move(dspsift), 41.0f, false, DescriptorType::DSPSIFT_V2);
 }
 

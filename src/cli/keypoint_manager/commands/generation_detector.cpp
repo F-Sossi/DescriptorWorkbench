@@ -145,7 +145,7 @@ int generateKorniaKeynet(thesis_project::database::DatabaseManager& db, int argc
 
 int generateDetector(thesis_project::database::DatabaseManager& db, int argc, char** argv) {
     if (argc < 4) {
-        std::cerr << "Usage: " << argv[0] << " generate-detector <data_folder> <detector> [name] [--max-features N] [--overwrite]" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " generate-detector <data_folder> <detector> [name] [--max-features N] [--reference-only] [--overwrite]" << std::endl;
         std::cerr << "  Detectors: sift, harris, orb" << std::endl;
         return 1;
     }
@@ -162,6 +162,7 @@ int generateDetector(thesis_project::database::DatabaseManager& db, int argc, ch
 
     int max_features = 2000;
     bool overwrite = false;
+    bool reference_only = false;
 
     while (arg_index < argc) {
         std::string arg = argv[arg_index++];
@@ -171,6 +172,8 @@ int generateDetector(thesis_project::database::DatabaseManager& db, int argc, ch
                 return 1;
             }
             max_features = std::stoi(argv[arg_index++]);
+        } else if (arg == "--reference-only") {
+            reference_only = true;
         } else if (arg == "--overwrite") {
             overwrite = true;
         } else {
@@ -192,6 +195,7 @@ int generateDetector(thesis_project::database::DatabaseManager& db, int argc, ch
         LOG_INFO("Data folder: " + data_folder);
         LOG_INFO("Keypoint set name: " + set_name);
         LOG_INFO("Max features per image: " + std::to_string(max_features > 0 ? max_features : -1));
+        LOG_INFO(std::string("Reference-only: ") + (reference_only ? "true" : "false"));
 
         int set_id = db.getKeypointSetId(set_name);
         if (set_id >= 0) {
@@ -214,11 +218,11 @@ int generateDetector(thesis_project::database::DatabaseManager& db, int argc, ch
 
         } else {
             std::ostringstream desc;
-            desc << detector_str << " detector (independent)";
+            desc << detector_str << " detector (" << (reference_only ? "reference-only" : "independent") << ")";
             set_id = db.createKeypointSet(
                 set_name,
                 detector_str,
-                "independent_detection",
+                reference_only ? "reference_only_detection" : "independent_detection",
                 max_features,
                 data_folder,
                 desc.str(),
@@ -258,7 +262,9 @@ int generateDetector(thesis_project::database::DatabaseManager& db, int argc, ch
             std::string scene_name = scene_entry.path().filename().string();
             LOG_INFO("Processing scene: " + scene_name);
 
-            for (int i = 1; i <= 6; ++i) {
+            const int image_start = 1;
+            const int image_end = reference_only ? 1 : 6;
+            for (int i = image_start; i <= image_end; ++i) {
                 fs::path image_path = scene_entry.path() / (std::to_string(i) + ".ppm");
                 if (!fs::exists(image_path)) {
                     std::cerr << "Image not found: " << image_path.string() << std::endl;

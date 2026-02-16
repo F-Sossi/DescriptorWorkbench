@@ -1046,16 +1046,22 @@ option(BUILD_PATCH_BENCHMARK "Build patch benchmark CLI tool for HPatches evalua
 if(BUILD_PATCH_BENCHMARK)
     message(STATUS "Building patch benchmark CLI tool")
 
-    if(EXISTS "${CMAKE_SOURCE_DIR}/cli/patch_benchmark.cpp")
+    if(EXISTS "${CMAKE_SOURCE_DIR}/src/cli/patch_benchmark.cpp")
         add_executable(patch_benchmark
-            cli/patch_benchmark.cpp
+                src/cli/patch_benchmark.cpp
             src/core/patches/PatchLoader.cpp
             src/core/patches/PatchCNNExtractor.cpp
             src/core/patches/PatchTraditionalExtractor.cpp
             src/core/patches/PatchFusionExtractor.cpp
             src/core/patches/PatchDescriptorFactory.cpp
             src/core/benchmark/PatchMetrics.cpp
-            src/core/benchmark/HPatchesBenchmark.cpp
+            src/core/benchmark/PatchScope.cpp
+            src/core/benchmark/DescriptorBank.cpp
+            src/core/benchmark/PatchBenchmark.cpp
+            src/core/benchmark/metrics/APMetrics.cpp
+            src/core/benchmark/tasks/MatchingTask.cpp
+            src/core/benchmark/tasks/VerificationTask.cpp
+            src/core/benchmark/tasks/RetrievalTask.cpp
             src/core/descriptor/factories/DescriptorFactory.cpp
             src/core/database/DatabaseManager.cpp
             src/core/descriptor/extractors/CompositeDescriptorExtractor.cpp
@@ -1131,10 +1137,46 @@ if(BUILD_PATCH_BENCHMARK)
         message(STATUS "Patch benchmark CLI tool configured")
 
     else()
-        message(WARNING "patch_benchmark.cpp not found - skipping patch benchmark CLI")
+        message(WARNING "src/cli/patch_benchmark.cpp not found - skipping patch benchmark CLI")
     endif()
 else()
     message(STATUS "Patch benchmark disabled (use -DBUILD_PATCH_BENCHMARK=ON to enable)")
+endif()
+
+# Patch dataset builder CLI tool (rebuild HPatches patch dataset)
+option(BUILD_PATCH_DATASET_BUILDER "Build patch dataset builder CLI tool" ON)
+
+if(BUILD_PATCH_DATASET_BUILDER)
+    message(STATUS "Building patch dataset builder CLI tool")
+
+    if(EXISTS "${CMAKE_SOURCE_DIR}/src/cli/patch_dataset_builder.cpp")
+        add_executable(patch_dataset_builder
+            src/cli/patch_dataset_builder.cpp
+            src/core/database/DatabaseManager.cpp
+        )
+
+        target_compile_features(patch_dataset_builder PRIVATE cxx_std_17)
+
+        target_include_directories(patch_dataset_builder PRIVATE
+            ${CMAKE_SOURCE_DIR}
+            ${CMAKE_SOURCE_DIR}/src
+            ${CMAKE_SOURCE_DIR}/src/include
+        )
+
+        if(USE_CONAN)
+            target_link_libraries(patch_dataset_builder ${OpenCV_LIBS})
+            target_link_libraries(patch_dataset_builder ${SQLite3_LIBS})
+        else()
+            target_link_libraries(patch_dataset_builder ${OpenCV_LIBRARIES})
+            target_link_libraries(patch_dataset_builder ${SQLite3_LIBRARIES})
+        endif()
+
+        message(STATUS "Patch dataset builder CLI tool configured")
+    else()
+        message(WARNING "patch_dataset_builder.cpp not found - skipping patch dataset builder CLI")
+    endif()
+else()
+    message(STATUS "Patch dataset builder disabled (use -DBUILD_PATCH_DATASET_BUILDER=ON to enable)")
 endif()
 
 # Stage 7 migration system removed: new pipeline is the default
@@ -1172,4 +1214,75 @@ if(TARGET test_yaml_schema_v1_gtest)
     target_link_libraries(test_yaml_schema_v1_gtest ${OpenCV_LIBRARIES})
     target_include_directories(test_yaml_schema_v1_gtest PRIVATE src src/include ${OpenCV_INCLUDE_DIRS})
 endif()
+endif()
+
+# =============================================================================
+# Patch Pipeline Tests
+# =============================================================================
+
+# PatchLoader tests
+create_gtest_if_exists("tests/unit/patches/test_patch_loader_gtest.cpp" "test_patch_loader_gtest")
+if(TARGET test_patch_loader_gtest)
+    target_sources(test_patch_loader_gtest PRIVATE
+        src/core/patches/PatchLoader.cpp)
+    target_link_libraries(test_patch_loader_gtest ${OpenCV_LIBRARIES})
+    target_include_directories(test_patch_loader_gtest PRIVATE src src/include ${OpenCV_INCLUDE_DIRS})
+endif()
+
+# PatchTraditionalExtractor tests
+create_gtest_if_exists("tests/unit/patches/test_patch_traditional_extractor_gtest.cpp" "test_patch_traditional_extractor_gtest")
+if(TARGET test_patch_traditional_extractor_gtest)
+    target_sources(test_patch_traditional_extractor_gtest PRIVATE
+        src/core/patches/PatchLoader.cpp
+        src/core/patches/PatchTraditionalExtractor.cpp
+        src/core/descriptor/factories/DescriptorFactory.cpp
+        src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
+        src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/DSPRGBSIFTWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/DSPHoWHWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/DSPHoNCWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/RGBSIFTChannelAverageWrapper.cpp
+        src/core/descriptor/extractors/wrappers/VGGWrapper.cpp
+        src/core/descriptor/extractors/wrappers/ORBWrapper.cpp
+        src/core/descriptor/extractors/wrappers/SURFWrapper.cpp)
+    target_link_libraries(test_patch_traditional_extractor_gtest keypoints ${OpenCV_LIBRARIES})
+    target_include_directories(test_patch_traditional_extractor_gtest PRIVATE src src/include keypoints ${OpenCV_INCLUDE_DIRS})
+endif()
+
+# PatchFusionExtractor tests (critical - tests L2 normalization)
+create_gtest_if_exists("tests/unit/patches/test_patch_fusion_extractor_gtest.cpp" "test_patch_fusion_extractor_gtest")
+if(TARGET test_patch_fusion_extractor_gtest)
+    target_sources(test_patch_fusion_extractor_gtest PRIVATE
+        src/core/patches/PatchFusionExtractor.cpp)
+    target_link_libraries(test_patch_fusion_extractor_gtest ${OpenCV_LIBRARIES})
+    target_include_directories(test_patch_fusion_extractor_gtest PRIVATE src src/include ${OpenCV_INCLUDE_DIRS})
+endif()
+
+# PatchDescriptorFactory tests
+create_gtest_if_exists("tests/unit/patches/test_patch_descriptor_factory_gtest.cpp" "test_patch_descriptor_factory_gtest")
+if(TARGET test_patch_descriptor_factory_gtest)
+    target_sources(test_patch_descriptor_factory_gtest PRIVATE
+        src/core/patches/PatchLoader.cpp
+        src/core/patches/PatchTraditionalExtractor.cpp
+        src/core/patches/PatchFusionExtractor.cpp
+        src/core/patches/PatchDescriptorFactory.cpp
+        src/core/patches/PatchCNNExtractor.cpp
+        src/core/descriptor/factories/DescriptorFactory.cpp
+        src/core/descriptor/extractors/wrappers/SIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/RGBSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/HoNCWrapper.cpp
+        src/core/descriptor/extractors/wrappers/VSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/DSPSIFTWrapper.cpp
+        src/core/descriptor/extractors/wrappers/DSPRGBSIFTWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/DSPHoWHWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/DSPHoNCWrapperV2.cpp
+        src/core/descriptor/extractors/wrappers/RGBSIFTChannelAverageWrapper.cpp
+        src/core/descriptor/extractors/wrappers/VGGWrapper.cpp
+        src/core/descriptor/extractors/wrappers/ORBWrapper.cpp
+        src/core/descriptor/extractors/wrappers/SURFWrapper.cpp)
+    target_link_libraries(test_patch_descriptor_factory_gtest keypoints ${OpenCV_LIBRARIES})
+    target_include_directories(test_patch_descriptor_factory_gtest PRIVATE src src/include keypoints ${OpenCV_INCLUDE_DIRS})
 endif()

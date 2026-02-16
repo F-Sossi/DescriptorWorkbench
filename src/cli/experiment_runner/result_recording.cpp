@@ -112,10 +112,15 @@ void recordResults(
         }
     }
 
+    // Note: If recording fails, we log an error but continue execution so the user
+    // still sees the efficiency summary and category breakdown. The experiment data
+    // remains in memory and metrics are still computed correctly - only persistence
+    // to the database is affected. Users should check logs for "Failed to record"
+    // if database results seem missing.
     if (db.recordExperiment(results)) {
-        LOG_INFO("Results recorded");
+        LOG_INFO("Results recorded to database");
     } else {
-        LOG_ERROR("Failed to record results");
+        LOG_ERROR("Failed to record results to database - check database connection and schema");
     }
 
     auto format_ms = [](double value) {

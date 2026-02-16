@@ -1,0 +1,120 @@
+# HPatches Patch Benchmark: Baselines for all descriptors (no ORB)
+#
+# Run: ./patch_benchmark ../config/patch_benchmarks/patch_baselines_all.yaml
+
+experiment:
+  name: "patch_baselines_all"
+  description: "Baseline descriptors on rebuilt color HPatches patches"
+
+patches:
+  path: "../hpatches-release-rebuilt-color/"
+  scenes: []
+  color: true
+  difficulty:
+    easy: true
+    hard: true
+    tough: true
+
+tasks:
+  mode: "paper"
+  matching:
+    enabled: true
+  verification:
+    enabled: true
+    num_positives: 200000
+    num_negatives: 1000000
+    negative_source: "both"
+  retrieval:
+    enabled: true
+    num_queries: 10000
+    num_distractors: 20000
+  preload_descriptors: true
+  random_seed: 1337
+
+descriptors:
+  # CNN descriptors
+  - name: "hardnet_baseline"
+    type: "libtorch_hardnet"
+    device: "auto"
+    use_color: false
+
+  - name: "sosnet_baseline"
+    type: "libtorch_sosnet"
+    device: "auto"
+    use_color: false
+
+  # Traditional descriptors
+  - name: "sift_baseline"
+    type: "sift"
+    use_color: false
+
+  - name: "root_sift_baseline"
+    type: "sift"
+    use_color: false
+    rooting_stage: "post_scale"
+    norm_type: "l1"
+
+  - name: "rgbsift_baseline"
+    type: "rgbsift"
+    use_color: true
+
+  - name: "rgbsift_channel_avg_baseline"
+    type: "rgbsift_channel_avg"
+    use_color: true
+
+  - name: "honc_baseline"
+    type: "honc"
+    use_color: true
+
+  - name: "vsift_baseline"
+    type: "vsift"
+    use_color: false
+
+  - name: "surf_baseline"
+    type: "surf"
+    use_color: false
+
+  # DSP descriptors (v1 + v2)
+  - name: "dspsift_baseline"
+    type: "dspsift"
+    use_color: false
+
+  - name: "dspsift_v2_baseline"
+    type: "dspsift_v2"
+    use_color: false
+    pooling_aggregation: "max"
+    normalize_after_pooling: true
+    norm_type: "l2"
+    scales: [0.85, 1.075, 1.30]
+
+  - name: "dsprgbsift_v2_baseline"
+    type: "dsprgbsift_v2"
+    use_color: true
+    pooling_aggregation: "max"
+    normalize_after_pooling: true
+    norm_type: "l2"
+    scales: [0.85, 1.075, 1.30]
+
+  - name: "dsphowh_v2_baseline"
+    type: "dsphowh_v2"
+    use_color: true
+    pooling_aggregation: "max"
+    normalize_after_pooling: true
+    norm_type: "l2"
+    scales: [0.85, 1.075, 1.30]
+
+  - name: "dsphonc_v2_baseline"
+    type: "dsphonc_v2"
+    use_color: true
+    pooling_aggregation: "max"
+    normalize_after_pooling: true
+    norm_type: "l2"
+    scales: [0.85, 1.075, 1.30]
+
+performance:
+  num_threads: 12
+  verbose: true
+
+output:
+  save_to_database: true
+  print_results: true

@@ -8,6 +8,7 @@
 #include <tuple>
 #include <map>
 #include <unordered_map>
+#include <cstring>
 
 namespace thesis_project::database {
 
@@ -133,12 +134,128 @@ public:
                 map_illumination_hard REAL,
                 map_viewpoint_easy REAL,
                 map_viewpoint_hard REAL,
+                verification_same_overall REAL,
+                verification_same_easy REAL,
+                verification_same_hard REAL,
+                verification_same_tough REAL,
+                verification_same_illumination REAL,
+                verification_same_viewpoint REAL,
+                verification_same_illumination_easy REAL,
+                verification_same_illumination_hard REAL,
+                verification_same_viewpoint_easy REAL,
+                verification_same_viewpoint_hard REAL,
+                verification_diff_overall REAL,
+                verification_diff_easy REAL,
+                verification_diff_hard REAL,
+                verification_diff_tough REAL,
+                verification_diff_illumination REAL,
+                verification_diff_viewpoint REAL,
+                verification_diff_illumination_easy REAL,
+                verification_diff_illumination_hard REAL,
+                verification_diff_viewpoint_easy REAL,
+                verification_diff_viewpoint_hard REAL,
+                retrieval_overall REAL,
+                retrieval_easy REAL,
+                retrieval_hard REAL,
+                retrieval_tough REAL,
+                retrieval_illumination REAL,
+                retrieval_viewpoint REAL,
+                retrieval_illumination_easy REAL,
+                retrieval_illumination_hard REAL,
+                retrieval_viewpoint_easy REAL,
+                retrieval_viewpoint_hard REAL,
+                verification_negatives_per_query INTEGER DEFAULT 0,
+                retrieval_negatives_per_query INTEGER DEFAULT 0,
+                verification_negative_source TEXT DEFAULT 'both',
+                retrieval_negative_source TEXT DEFAULT 'diff_seq',
                 num_scenes INTEGER,
                 num_patches INTEGER,
                 processing_time_ms REAL,
                 metadata TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(experiment_id) REFERENCES experiments(id)
+            );
+        )";
+
+        const auto create_patch_benchmark_task_sets_table = R"(
+            CREATE TABLE IF NOT EXISTS patch_benchmark_task_sets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                source TEXT,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        )";
+
+        const auto create_patch_benchmark_descriptor_sets_table = R"(
+            CREATE TABLE IF NOT EXISTS patch_benchmark_descriptor_sets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                experiment_id INTEGER,
+                descriptor_name TEXT NOT NULL,
+                descriptor_dimension INTEGER DEFAULT 0,
+                patches_dir TEXT NOT NULL,
+                color INTEGER DEFAULT 0,
+                patch_keypoint_size REAL DEFAULT 0.0,
+                params_hash TEXT,
+                params_json TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(experiment_id) REFERENCES experiments(id)
+            );
+        )";
+
+        const auto create_patch_benchmark_descriptors_table = R"(
+            CREATE TABLE IF NOT EXISTS patch_benchmark_descriptors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                descriptor_set_id INTEGER NOT NULL,
+                scene_name TEXT NOT NULL,
+                difficulty TEXT NOT NULL,
+                target_key TEXT NOT NULL,
+                rows INTEGER NOT NULL,
+                cols INTEGER NOT NULL,
+                cv_type INTEGER NOT NULL,
+                data BLOB NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(descriptor_set_id) REFERENCES patch_benchmark_descriptor_sets(id),
+                UNIQUE(descriptor_set_id, scene_name, difficulty, target_key)
+            );
+        )";
+
+        const auto create_patch_benchmark_verification_pairs_table = R"(
+            CREATE TABLE IF NOT EXISTS patch_benchmark_verification_pairs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_set_id INTEGER NOT NULL,
+                split TEXT NOT NULL,
+                neg_type TEXT NOT NULL,
+                s1 TEXT NOT NULL,
+                t1 INTEGER NOT NULL,
+                idx1 INTEGER NOT NULL,
+                s2 TEXT NOT NULL,
+                t2 INTEGER NOT NULL,
+                idx2 INTEGER NOT NULL,
+                FOREIGN KEY(task_set_id) REFERENCES patch_benchmark_task_sets(id)
+            );
+        )";
+
+        const auto create_patch_benchmark_retrieval_queries_table = R"(
+            CREATE TABLE IF NOT EXISTS patch_benchmark_retrieval_queries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_set_id INTEGER NOT NULL,
+                split TEXT NOT NULL,
+                s TEXT NOT NULL,
+                idx INTEGER NOT NULL,
+                FOREIGN KEY(task_set_id) REFERENCES patch_benchmark_task_sets(id)
+            );
+        )";
+
+        const auto create_patch_benchmark_retrieval_distractors_table = R"(
+            CREATE TABLE IF NOT EXISTS patch_benchmark_retrieval_distractors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_set_id INTEGER NOT NULL,
+                split TEXT NOT NULL,
+                s TEXT NOT NULL,
+                idx INTEGER NOT NULL,
+                FOREIGN KEY(task_set_id) REFERENCES patch_benchmark_task_sets(id)
             );
         )";
 
@@ -277,6 +394,16 @@ public:
             CREATE INDEX IF NOT EXISTS idx_patch_benchmark_experiment ON patch_benchmark_results(experiment_id);
         )";
 
+        const auto create_patch_benchmark_task_indexes = R"(
+            CREATE INDEX IF NOT EXISTS idx_patch_benchmark_task_sets_name ON patch_benchmark_task_sets(name);
+            CREATE INDEX IF NOT EXISTS idx_patch_benchmark_verif_pairs ON patch_benchmark_verification_pairs(task_set_id, split, neg_type);
+            CREATE INDEX IF NOT EXISTS idx_patch_benchmark_retr_queries ON patch_benchmark_retrieval_queries(task_set_id, split);
+            CREATE INDEX IF NOT EXISTS idx_patch_benchmark_retr_distractors ON patch_benchmark_retrieval_distractors(task_set_id, split);
+            CREATE INDEX IF NOT EXISTS idx_patch_benchmark_descriptor_sets_name ON patch_benchmark_descriptor_sets(name);
+            CREATE INDEX IF NOT EXISTS idx_patch_benchmark_descriptors_lookup
+                ON patch_benchmark_descriptors(descriptor_set_id, scene_name, difficulty, target_key);
+        )";
+
         const auto create_descriptor_indexes = R"(
             CREATE INDEX IF NOT EXISTS idx_descriptors_experiment ON descriptors(experiment_id, processing_method);
             CREATE INDEX IF NOT EXISTS idx_descriptors_keypoint ON descriptors(scene_name, image_name, keypoint_x, keypoint_y);
@@ -314,6 +441,48 @@ public:
         int rc2b = sqlite3_exec(db, create_patch_benchmark_results_table, nullptr, nullptr, &error_msg);
         if (rc2b != SQLITE_OK) {
             std::cerr << "Failed to create patch_benchmark_results table: " << error_msg << std::endl;
+            sqlite3_free(error_msg);
+            return false;
+        }
+
+        int rc2c = sqlite3_exec(db, create_patch_benchmark_task_sets_table, nullptr, nullptr, &error_msg);
+        if (rc2c != SQLITE_OK) {
+            std::cerr << "Failed to create patch_benchmark_task_sets table: " << error_msg << std::endl;
+            sqlite3_free(error_msg);
+            return false;
+        }
+
+        int rc2c2 = sqlite3_exec(db, create_patch_benchmark_descriptor_sets_table, nullptr, nullptr, &error_msg);
+        if (rc2c2 != SQLITE_OK) {
+            std::cerr << "Failed to create patch_benchmark_descriptor_sets table: " << error_msg << std::endl;
+            sqlite3_free(error_msg);
+            return false;
+        }
+
+        int rc2c3 = sqlite3_exec(db, create_patch_benchmark_descriptors_table, nullptr, nullptr, &error_msg);
+        if (rc2c3 != SQLITE_OK) {
+            std::cerr << "Failed to create patch_benchmark_descriptors table: " << error_msg << std::endl;
+            sqlite3_free(error_msg);
+            return false;
+        }
+
+        int rc2d = sqlite3_exec(db, create_patch_benchmark_verification_pairs_table, nullptr, nullptr, &error_msg);
+        if (rc2d != SQLITE_OK) {
+            std::cerr << "Failed to create patch_benchmark_verification_pairs table: " << error_msg << std::endl;
+            sqlite3_free(error_msg);
+            return false;
+        }
+
+        int rc2e = sqlite3_exec(db, create_patch_benchmark_retrieval_queries_table, nullptr, nullptr, &error_msg);
+        if (rc2e != SQLITE_OK) {
+            std::cerr << "Failed to create patch_benchmark_retrieval_queries table: " << error_msg << std::endl;
+            sqlite3_free(error_msg);
+            return false;
+        }
+
+        int rc2f = sqlite3_exec(db, create_patch_benchmark_retrieval_distractors_table, nullptr, nullptr, &error_msg);
+        if (rc2f != SQLITE_OK) {
+            std::cerr << "Failed to create patch_benchmark_retrieval_distractors table: " << error_msg << std::endl;
             sqlite3_free(error_msg);
             return false;
         }
@@ -412,6 +581,13 @@ public:
         int rc6b = sqlite3_exec(db, create_patch_benchmark_indexes, nullptr, nullptr, &error_msg);
         if (rc6b != SQLITE_OK) {
             std::cerr << "Failed to create patch benchmark indexes: " << error_msg << std::endl;
+            sqlite3_free(error_msg);
+            return false;
+        }
+
+        int rc6c = sqlite3_exec(db, create_patch_benchmark_task_indexes, nullptr, nullptr, &error_msg);
+        if (rc6c != SQLITE_OK) {
+            std::cerr << "Failed to create patch benchmark task indexes: " << error_msg << std::endl;
             sqlite3_free(error_msg);
             return false;
         }
@@ -725,11 +901,30 @@ bool DatabaseManager::recordPatchBenchmarkResults(const PatchBenchmarkResults& r
             map_illumination, map_viewpoint,
             map_illumination_easy, map_illumination_hard,
             map_viewpoint_easy, map_viewpoint_hard,
+            verification_same_overall, verification_same_easy, verification_same_hard, verification_same_tough,
+            verification_same_illumination, verification_same_viewpoint,
+            verification_same_illumination_easy, verification_same_illumination_hard,
+            verification_same_viewpoint_easy, verification_same_viewpoint_hard,
+            verification_diff_overall, verification_diff_easy, verification_diff_hard, verification_diff_tough,
+            verification_diff_illumination, verification_diff_viewpoint,
+            verification_diff_illumination_easy, verification_diff_illumination_hard,
+            verification_diff_viewpoint_easy, verification_diff_viewpoint_hard,
+            retrieval_overall, retrieval_easy, retrieval_hard, retrieval_tough,
+            retrieval_illumination, retrieval_viewpoint,
+            retrieval_illumination_easy, retrieval_illumination_hard,
+            retrieval_viewpoint_easy, retrieval_viewpoint_hard,
+            verification_negatives_per_query, retrieval_negatives_per_query,
+            verification_negative_source, retrieval_negative_source,
             num_scenes, num_patches,
             processing_time_ms,
             metadata
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?);
     )";
 
     sqlite3_stmt* stmt = nullptr;
@@ -745,24 +940,59 @@ bool DatabaseManager::recordPatchBenchmarkResults(const PatchBenchmarkResults& r
     }
     const std::string metadata_str = metadata_ss.str();
 
-    sqlite3_bind_int(stmt, 1, results.experiment_id);
-    sqlite3_bind_text(stmt, 2, results.descriptor_name.c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_int(stmt, 3, results.descriptor_dimension);
-    sqlite3_bind_double(stmt, 4, results.map_overall);
-    sqlite3_bind_double(stmt, 5, results.accuracy_overall);
-    sqlite3_bind_double(stmt, 6, results.map_easy);
-    sqlite3_bind_double(stmt, 7, results.map_hard);
-    sqlite3_bind_double(stmt, 8, results.map_tough);
-    sqlite3_bind_double(stmt, 9, results.map_illumination);
-    sqlite3_bind_double(stmt, 10, results.map_viewpoint);
-    sqlite3_bind_double(stmt, 11, results.map_illumination_easy);
-    sqlite3_bind_double(stmt, 12, results.map_illumination_hard);
-    sqlite3_bind_double(stmt, 13, results.map_viewpoint_easy);
-    sqlite3_bind_double(stmt, 14, results.map_viewpoint_hard);
-    sqlite3_bind_int(stmt, 15, results.num_scenes);
-    sqlite3_bind_int(stmt, 16, results.num_patches);
-    sqlite3_bind_double(stmt, 17, results.processing_time_ms);
-    sqlite3_bind_text(stmt, 18, metadata_str.c_str(), -1, SQLITE_STATIC);
+    int idx = 1;
+    sqlite3_bind_int(stmt, idx++, results.experiment_id);
+    sqlite3_bind_text(stmt, idx++, results.descriptor_name.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, idx++, results.descriptor_dimension);
+    sqlite3_bind_double(stmt, idx++, results.map_overall);
+    sqlite3_bind_double(stmt, idx++, results.accuracy_overall);
+    sqlite3_bind_double(stmt, idx++, results.map_easy);
+    sqlite3_bind_double(stmt, idx++, results.map_hard);
+    sqlite3_bind_double(stmt, idx++, results.map_tough);
+    sqlite3_bind_double(stmt, idx++, results.map_illumination);
+    sqlite3_bind_double(stmt, idx++, results.map_viewpoint);
+    sqlite3_bind_double(stmt, idx++, results.map_illumination_easy);
+    sqlite3_bind_double(stmt, idx++, results.map_illumination_hard);
+    sqlite3_bind_double(stmt, idx++, results.map_viewpoint_easy);
+    sqlite3_bind_double(stmt, idx++, results.map_viewpoint_hard);
+    sqlite3_bind_double(stmt, idx++, results.verification_same_overall);
+    sqlite3_bind_double(stmt, idx++, results.verification_same_easy);
+    sqlite3_bind_double(stmt, idx++, results.verification_same_hard);
+    sqlite3_bind_double(stmt, idx++, results.verification_same_tough);
+    sqlite3_bind_double(stmt, idx++, results.verification_same_illumination);
+    sqlite3_bind_double(stmt, idx++, results.verification_same_viewpoint);
+    sqlite3_bind_double(stmt, idx++, results.verification_same_illumination_easy);
+    sqlite3_bind_double(stmt, idx++, results.verification_same_illumination_hard);
+    sqlite3_bind_double(stmt, idx++, results.verification_same_viewpoint_easy);
+    sqlite3_bind_double(stmt, idx++, results.verification_same_viewpoint_hard);
+    sqlite3_bind_double(stmt, idx++, results.verification_diff_overall);
+    sqlite3_bind_double(stmt, idx++, results.verification_diff_easy);
+    sqlite3_bind_double(stmt, idx++, results.verification_diff_hard);
+    sqlite3_bind_double(stmt, idx++, results.verification_diff_tough);
+    sqlite3_bind_double(stmt, idx++, results.verification_diff_illumination);
+    sqlite3_bind_double(stmt, idx++, results.verification_diff_viewpoint);
+    sqlite3_bind_double(stmt, idx++, results.verification_diff_illumination_easy);
+    sqlite3_bind_double(stmt, idx++, results.verification_diff_illumination_hard);
+    sqlite3_bind_double(stmt, idx++, results.verification_diff_viewpoint_easy);
+    sqlite3_bind_double(stmt, idx++, results.verification_diff_viewpoint_hard);
+    sqlite3_bind_double(stmt, idx++, results.retrieval_overall);
+    sqlite3_bind_double(stmt, idx++, results.retrieval_easy);
+    sqlite3_bind_double(stmt, idx++, results.retrieval_hard);
+    sqlite3_bind_double(stmt, idx++, results.retrieval_tough);
+    sqlite3_bind_double(stmt, idx++, results.retrieval_illumination);
+    sqlite3_bind_double(stmt, idx++, results.retrieval_viewpoint);
+    sqlite3_bind_double(stmt, idx++, results.retrieval_illumination_easy);
+    sqlite3_bind_double(stmt, idx++, results.retrieval_illumination_hard);
+    sqlite3_bind_double(stmt, idx++, results.retrieval_viewpoint_easy);
+    sqlite3_bind_double(stmt, idx++, results.retrieval_viewpoint_hard);
+    sqlite3_bind_int(stmt, idx++, results.verification_negatives_per_query);
+    sqlite3_bind_int(stmt, idx++, results.retrieval_negatives_per_query);
+    sqlite3_bind_text(stmt, idx++, results.verification_negative_source.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, idx++, results.retrieval_negative_source.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, idx++, results.num_scenes);
+    sqlite3_bind_int(stmt, idx++, results.num_patches);
+    sqlite3_bind_double(stmt, idx++, results.processing_time_ms);
+    sqlite3_bind_text(stmt, idx++, metadata_str.c_str(), -1, SQLITE_STATIC);
 
     rc = sqlite3_step(stmt);
     const bool success = (rc == SQLITE_DONE);
@@ -777,6 +1007,501 @@ bool DatabaseManager::recordPatchBenchmarkResults(const PatchBenchmarkResults& r
 
     sqlite3_finalize(stmt);
     return success;
+}
+
+int DatabaseManager::upsertPatchBenchmarkTaskSet(const std::string& name,
+                                                 const std::string& source,
+                                                 const std::string& notes) const {
+    if (!isEnabled()) return -1;
+
+    const auto select_sql = R"(
+        SELECT id FROM patch_benchmark_task_sets WHERE name = ?;
+    )";
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, select_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare task set lookup: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return -1;
+    }
+    sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_STATIC);
+    int task_id = -1;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        task_id = sqlite3_column_int(stmt, 0);
+    }
+    sqlite3_finalize(stmt);
+
+    if (task_id >= 0) {
+        return task_id;
+    }
+
+    const auto insert_sql = R"(
+        INSERT INTO patch_benchmark_task_sets (name, source, notes)
+        VALUES (?, ?, ?);
+    )";
+    rc = sqlite3_prepare_v2(impl_->db, insert_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare task set insert: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return -1;
+    }
+    sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, source.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, notes.c_str(), -1, SQLITE_STATIC);
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        std::cerr << "Failed to insert task set: " << sqlite3_errmsg(impl_->db) << std::endl;
+        sqlite3_finalize(stmt);
+        return -1;
+    }
+    sqlite3_finalize(stmt);
+    return static_cast<int>(sqlite3_last_insert_rowid(impl_->db));
+}
+
+int DatabaseManager::getPatchBenchmarkTaskSetId(const std::string& name) const {
+    if (!isEnabled()) return -1;
+    const auto select_sql = R"(
+        SELECT id FROM patch_benchmark_task_sets WHERE name = ?;
+    )";
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, select_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare task set lookup: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return -1;
+    }
+    sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_STATIC);
+    int task_id = -1;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        task_id = sqlite3_column_int(stmt, 0);
+    }
+    sqlite3_finalize(stmt);
+    return task_id;
+}
+
+bool DatabaseManager::storePatchBenchmarkVerificationPairs(
+    int task_set_id,
+    const std::string& split,
+    const std::string& neg_type,
+    const std::vector<PatchBenchmarkTaskPair>& pairs) const {
+    if (!isEnabled()) return true;
+    if (task_set_id < 0) return false;
+
+    const auto delete_sql = R"(
+        DELETE FROM patch_benchmark_verification_pairs
+        WHERE task_set_id = ? AND split = ? AND neg_type = ?;
+    )";
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, delete_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare verification delete: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+    sqlite3_bind_int(stmt, 1, task_set_id);
+    sqlite3_bind_text(stmt, 2, split.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, neg_type.c_str(), -1, SQLITE_STATIC);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    const auto insert_sql = R"(
+        INSERT INTO patch_benchmark_verification_pairs
+            (task_set_id, split, neg_type, s1, t1, idx1, s2, t2, idx2)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+    )";
+    rc = sqlite3_prepare_v2(impl_->db, insert_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare verification insert: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    sqlite3_exec(impl_->db, "BEGIN;", nullptr, nullptr, nullptr);
+    for (const auto& pair : pairs) {
+        sqlite3_bind_int(stmt, 1, task_set_id);
+        sqlite3_bind_text(stmt, 2, split.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 3, neg_type.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 4, pair.s1.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_int(stmt, 5, pair.t1);
+        sqlite3_bind_int(stmt, 6, pair.idx1);
+        sqlite3_bind_text(stmt, 7, pair.s2.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_int(stmt, 8, pair.t2);
+        sqlite3_bind_int(stmt, 9, pair.idx2);
+        rc = sqlite3_step(stmt);
+        if (rc != SQLITE_DONE) {
+            std::cerr << "Failed to insert verification pair: " << sqlite3_errmsg(impl_->db) << std::endl;
+            sqlite3_exec(impl_->db, "ROLLBACK;", nullptr, nullptr, nullptr);
+            sqlite3_finalize(stmt);
+            return false;
+        }
+        sqlite3_reset(stmt);
+    }
+    sqlite3_exec(impl_->db, "COMMIT;", nullptr, nullptr, nullptr);
+    sqlite3_finalize(stmt);
+    return true;
+}
+
+bool DatabaseManager::storePatchBenchmarkRetrievalQueries(
+    int task_set_id,
+    const std::string& split,
+    const std::vector<PatchBenchmarkTaskItem>& queries) const {
+    if (!isEnabled()) return true;
+    if (task_set_id < 0) return false;
+
+    const auto delete_sql = R"(
+        DELETE FROM patch_benchmark_retrieval_queries
+        WHERE task_set_id = ? AND split = ?;
+    )";
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, delete_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare retrieval queries delete: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+    sqlite3_bind_int(stmt, 1, task_set_id);
+    sqlite3_bind_text(stmt, 2, split.c_str(), -1, SQLITE_STATIC);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    const auto insert_sql = R"(
+        INSERT INTO patch_benchmark_retrieval_queries
+            (task_set_id, split, s, idx)
+        VALUES (?, ?, ?, ?);
+    )";
+    rc = sqlite3_prepare_v2(impl_->db, insert_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare retrieval queries insert: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    sqlite3_exec(impl_->db, "BEGIN;", nullptr, nullptr, nullptr);
+    for (const auto& item : queries) {
+        sqlite3_bind_int(stmt, 1, task_set_id);
+        sqlite3_bind_text(stmt, 2, split.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 3, item.s.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_int(stmt, 4, item.idx);
+        rc = sqlite3_step(stmt);
+        if (rc != SQLITE_DONE) {
+            std::cerr << "Failed to insert retrieval query: " << sqlite3_errmsg(impl_->db) << std::endl;
+            sqlite3_exec(impl_->db, "ROLLBACK;", nullptr, nullptr, nullptr);
+            sqlite3_finalize(stmt);
+            return false;
+        }
+        sqlite3_reset(stmt);
+    }
+    sqlite3_exec(impl_->db, "COMMIT;", nullptr, nullptr, nullptr);
+    sqlite3_finalize(stmt);
+    return true;
+}
+
+bool DatabaseManager::storePatchBenchmarkRetrievalDistractors(
+    int task_set_id,
+    const std::string& split,
+    const std::vector<PatchBenchmarkTaskItem>& distractors) const {
+    if (!isEnabled()) return true;
+    if (task_set_id < 0) return false;
+
+    const auto delete_sql = R"(
+        DELETE FROM patch_benchmark_retrieval_distractors
+        WHERE task_set_id = ? AND split = ?;
+    )";
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, delete_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare retrieval distractors delete: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+    sqlite3_bind_int(stmt, 1, task_set_id);
+    sqlite3_bind_text(stmt, 2, split.c_str(), -1, SQLITE_STATIC);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    const auto insert_sql = R"(
+        INSERT INTO patch_benchmark_retrieval_distractors
+            (task_set_id, split, s, idx)
+        VALUES (?, ?, ?, ?);
+    )";
+    rc = sqlite3_prepare_v2(impl_->db, insert_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare retrieval distractors insert: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+
+    sqlite3_exec(impl_->db, "BEGIN;", nullptr, nullptr, nullptr);
+    for (const auto& item : distractors) {
+        sqlite3_bind_int(stmt, 1, task_set_id);
+        sqlite3_bind_text(stmt, 2, split.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 3, item.s.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_int(stmt, 4, item.idx);
+        rc = sqlite3_step(stmt);
+        if (rc != SQLITE_DONE) {
+            std::cerr << "Failed to insert retrieval distractor: " << sqlite3_errmsg(impl_->db) << std::endl;
+            sqlite3_exec(impl_->db, "ROLLBACK;", nullptr, nullptr, nullptr);
+            sqlite3_finalize(stmt);
+            return false;
+        }
+        sqlite3_reset(stmt);
+    }
+    sqlite3_exec(impl_->db, "COMMIT;", nullptr, nullptr, nullptr);
+    sqlite3_finalize(stmt);
+    return true;
+}
+
+std::vector<DatabaseManager::PatchBenchmarkTaskPair> DatabaseManager::loadPatchBenchmarkVerificationPairs(
+    int task_set_id,
+    const std::string& split,
+    const std::string& neg_type) const {
+    std::vector<PatchBenchmarkTaskPair> pairs;
+    if (!isEnabled() || task_set_id < 0) return pairs;
+
+    const auto select_sql = R"(
+        SELECT s1, t1, idx1, s2, t2, idx2
+        FROM patch_benchmark_verification_pairs
+        WHERE task_set_id = ? AND split = ? AND neg_type = ?;
+    )";
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, select_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare verification select: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return pairs;
+    }
+    sqlite3_bind_int(stmt, 1, task_set_id);
+    sqlite3_bind_text(stmt, 2, split.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, neg_type.c_str(), -1, SQLITE_STATIC);
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        PatchBenchmarkTaskPair pair;
+        pair.s1 = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        pair.t1 = sqlite3_column_int(stmt, 1);
+        pair.idx1 = sqlite3_column_int(stmt, 2);
+        pair.s2 = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+        pair.t2 = sqlite3_column_int(stmt, 4);
+        pair.idx2 = sqlite3_column_int(stmt, 5);
+        pairs.push_back(std::move(pair));
+    }
+    sqlite3_finalize(stmt);
+    return pairs;
+}
+
+std::vector<DatabaseManager::PatchBenchmarkTaskItem> DatabaseManager::loadPatchBenchmarkRetrievalQueries(
+    int task_set_id,
+    const std::string& split) const {
+    std::vector<PatchBenchmarkTaskItem> items;
+    if (!isEnabled() || task_set_id < 0) return items;
+
+    const auto select_sql = R"(
+        SELECT s, idx
+        FROM patch_benchmark_retrieval_queries
+        WHERE task_set_id = ? AND split = ?;
+    )";
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, select_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare retrieval queries select: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return items;
+    }
+    sqlite3_bind_int(stmt, 1, task_set_id);
+    sqlite3_bind_text(stmt, 2, split.c_str(), -1, SQLITE_STATIC);
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        PatchBenchmarkTaskItem item;
+        item.s = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        item.idx = sqlite3_column_int(stmt, 1);
+        items.push_back(std::move(item));
+    }
+    sqlite3_finalize(stmt);
+    return items;
+}
+
+std::vector<DatabaseManager::PatchBenchmarkTaskItem> DatabaseManager::loadPatchBenchmarkRetrievalDistractors(
+    int task_set_id,
+    const std::string& split) const {
+    std::vector<PatchBenchmarkTaskItem> items;
+    if (!isEnabled() || task_set_id < 0) return items;
+
+    const auto select_sql = R"(
+        SELECT s, idx
+        FROM patch_benchmark_retrieval_distractors
+        WHERE task_set_id = ? AND split = ?;
+    )";
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, select_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare retrieval distractors select: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return items;
+    }
+    sqlite3_bind_int(stmt, 1, task_set_id);
+    sqlite3_bind_text(stmt, 2, split.c_str(), -1, SQLITE_STATIC);
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        PatchBenchmarkTaskItem item;
+        item.s = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        item.idx = sqlite3_column_int(stmt, 1);
+        items.push_back(std::move(item));
+    }
+    sqlite3_finalize(stmt);
+    return items;
+}
+
+int DatabaseManager::upsertPatchBenchmarkDescriptorSet(const std::string& name,
+                                                       int experiment_id,
+                                                       const std::string& descriptor_name,
+                                                       int descriptor_dimension,
+                                                       const std::string& patches_dir,
+                                                       bool color,
+                                                       float patch_keypoint_size,
+                                                       const std::string& params_hash,
+                                                       const std::string& params_json) const {
+    if (!isEnabled()) return -1;
+
+    const auto select_sql = R"(
+        SELECT id FROM patch_benchmark_descriptor_sets WHERE name = ?;
+    )";
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, select_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare descriptor set lookup: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return -1;
+    }
+    sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_STATIC);
+    int set_id = -1;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        set_id = sqlite3_column_int(stmt, 0);
+    }
+    sqlite3_finalize(stmt);
+
+    if (set_id >= 0) {
+        return set_id;
+    }
+
+    const auto insert_sql = R"(
+        INSERT INTO patch_benchmark_descriptor_sets
+            (name, experiment_id, descriptor_name, descriptor_dimension, patches_dir,
+             color, patch_keypoint_size, params_hash, params_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+    )";
+    rc = sqlite3_prepare_v2(impl_->db, insert_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare descriptor set insert: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return -1;
+    }
+    sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_STATIC);
+    if (experiment_id >= 0) {
+        sqlite3_bind_int(stmt, 2, experiment_id);
+    } else {
+        sqlite3_bind_null(stmt, 2);
+    }
+    sqlite3_bind_text(stmt, 3, descriptor_name.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 4, descriptor_dimension);
+    sqlite3_bind_text(stmt, 5, patches_dir.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 6, color ? 1 : 0);
+    sqlite3_bind_double(stmt, 7, patch_keypoint_size);
+    sqlite3_bind_text(stmt, 8, params_hash.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 9, params_json.c_str(), -1, SQLITE_STATIC);
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        std::cerr << "Failed to insert descriptor set: " << sqlite3_errmsg(impl_->db) << std::endl;
+        sqlite3_finalize(stmt);
+        return -1;
+    }
+    sqlite3_finalize(stmt);
+    return static_cast<int>(sqlite3_last_insert_rowid(impl_->db));
+}
+
+int DatabaseManager::getPatchBenchmarkDescriptorSetId(const std::string& name) const {
+    if (!isEnabled()) return -1;
+    const auto select_sql = R"(
+        SELECT id FROM patch_benchmark_descriptor_sets WHERE name = ?;
+    )";
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, select_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare descriptor set lookup: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return -1;
+    }
+    sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_STATIC);
+    int set_id = -1;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        set_id = sqlite3_column_int(stmt, 0);
+    }
+    sqlite3_finalize(stmt);
+    return set_id;
+}
+
+bool DatabaseManager::storePatchBenchmarkDescriptor(int descriptor_set_id,
+                                                    const std::string& scene_name,
+                                                    const std::string& difficulty,
+                                                    const std::string& target_key,
+                                                    const cv::Mat& descriptors) const {
+    if (!isEnabled()) return true;
+    if (descriptor_set_id < 0) return false;
+    if (descriptors.empty()) return false;
+
+    const cv::Mat dense = descriptors.isContinuous() ? descriptors : descriptors.clone();
+    const size_t byte_size = dense.total() * dense.elemSize();
+
+    const auto insert_sql = R"(
+        INSERT OR REPLACE INTO patch_benchmark_descriptors
+            (descriptor_set_id, scene_name, difficulty, target_key, rows, cols, cv_type, data)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+    )";
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, insert_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare descriptor insert: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return false;
+    }
+    sqlite3_bind_int(stmt, 1, descriptor_set_id);
+    sqlite3_bind_text(stmt, 2, scene_name.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, difficulty.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 4, target_key.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 5, dense.rows);
+    sqlite3_bind_int(stmt, 6, dense.cols);
+    sqlite3_bind_int(stmt, 7, dense.type());
+    sqlite3_bind_blob(stmt, 8, dense.data, static_cast<int>(byte_size), SQLITE_STATIC);
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        std::cerr << "Failed to insert patch benchmark descriptor: " << sqlite3_errmsg(impl_->db) << std::endl;
+        sqlite3_finalize(stmt);
+        return false;
+    }
+    sqlite3_finalize(stmt);
+    return true;
+}
+
+std::optional<cv::Mat> DatabaseManager::loadPatchBenchmarkDescriptor(int descriptor_set_id,
+                                                                     const std::string& scene_name,
+                                                                     const std::string& difficulty,
+                                                                     const std::string& target_key) const {
+    if (!isEnabled()) return std::nullopt;
+    if (descriptor_set_id < 0) return std::nullopt;
+
+    const auto select_sql = R"(
+        SELECT rows, cols, cv_type, data
+        FROM patch_benchmark_descriptors
+        WHERE descriptor_set_id = ? AND scene_name = ? AND difficulty = ? AND target_key = ?;
+    )";
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(impl_->db, select_sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare descriptor select: " << sqlite3_errmsg(impl_->db) << std::endl;
+        return std::nullopt;
+    }
+    sqlite3_bind_int(stmt, 1, descriptor_set_id);
+    sqlite3_bind_text(stmt, 2, scene_name.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, difficulty.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 4, target_key.c_str(), -1, SQLITE_STATIC);
+
+    std::optional<cv::Mat> result;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        const int rows = sqlite3_column_int(stmt, 0);
+        const int cols = sqlite3_column_int(stmt, 1);
+        const int cv_type = sqlite3_column_int(stmt, 2);
+        const void* blob = sqlite3_column_blob(stmt, 3);
+        const int blob_size = sqlite3_column_bytes(stmt, 3);
+        if (rows > 0 && cols > 0 && blob && blob_size > 0) {
+            cv::Mat mat(rows, cols, cv_type);
+            std::memcpy(mat.data, blob, static_cast<size_t>(blob_size));
+            result = mat;
+        }
+    }
+    sqlite3_finalize(stmt);
+    return result;
 }
 
 std::vector<ExperimentResults> DatabaseManager::getRecentResults(int limit) const {

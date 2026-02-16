@@ -1,0 +1,58 @@
+# HPatches Patch Benchmark: SIFT all metrics (using cached descriptors)
+# Run: ./patch_benchmark ../config/patch_benchmarks/patch_sift_all_metrics.yaml
+#
+# Runs matching, verification, and retrieval tasks to validate against HPatches paper:
+#   - Matching mAP
+#   - Verification mAP: ~65.12% expected for SIFT
+#   - Retrieval mAP: ~31.98% expected for SIFT
+
+experiment:
+  name: "patch_sift_all_metrics"
+  description: "SIFT all metrics validation against HPatches paper"
+
+patches:
+  path: "../hpatches-release/"
+  scenes: []
+  color: false
+  difficulty:
+    easy: true
+    hard: true
+    tough: true
+
+tasks:
+  mode: "paper"
+  task_source: "csv"
+  task_set: "hpatches_v1.1"
+  task_split: "full"
+  tasks_dir: "../config/patch_benchmarks/tasks"
+  matching:
+    enabled: true
+  verification:
+    enabled: true
+    num_positives: 200000
+    num_negatives: 1000000
+    negative_source: "both"
+  retrieval:
+    enabled: true
+    num_queries: 10000
+    num_distractors: 20000
+  preload_descriptors: true
+  preload_scope: "tasks"
+  store_descriptors_to_db: false
+  use_cached_descriptors: true
+  descriptor_cache_name: "hpatches_sift_full_official"
+  random_seed: 1337
+
+descriptors:
+  - name: "sift_full_official"
+    type: "sift"
+    use_color: false
+    patch_keypoint_size: 12.26
+
+performance:
+  num_threads: 12
+  verbose: true
+
+output:
+  save_to_database: true
+  print_results: true

@@ -1,0 +1,58 @@
+# HPatches Patch Benchmark: SIFT on color patches
+# Run: ./patch_benchmark ../config/patch_benchmarks/patch_sift_color.yaml
+#
+# Tests SIFT descriptor on the rebuilt color patch dataset.
+# Uses task files generated for the color dataset (different patch counts than original).
+#
+# Expected results should be similar to grayscale SIFT since SIFT converts to grayscale internally.
+
+experiment:
+  name: "patch_sift_color"
+  description: "SIFT on rebuilt color HPatches dataset"
+
+patches:
+  path: "../hpatches-release-rebuilt-color/"
+  scenes: []
+  color: true  # Load patches as color (3-channel)
+  difficulty:
+    easy: true
+    hard: true
+    tough: true
+
+tasks:
+  mode: "paper"
+  task_source: "csv"
+  task_set: "hpatches_color_v1"  # Identifier for the color task set in database
+  task_split: "full"
+  tasks_dir: "../config/patch_benchmarks/tasks/color_tasks"  # Points to color-specific task files
+  matching:
+    enabled: true
+  verification:
+    enabled: true
+    num_positives: 200000
+    num_negatives: 1000000
+    negative_source: "both"
+  retrieval:
+    enabled: true
+    num_queries: 10000
+    num_distractors: 20000
+  preload_descriptors: true
+  preload_scope: "tasks"
+  store_descriptors_to_db: true  # Cache descriptors for future runs
+  use_cached_descriptors: false  # First run - compute fresh
+  descriptor_cache_name: "hpatches_sift_color"
+  random_seed: 1337
+
+descriptors:
+  - name: "sift_color"
+    type: "sift"
+    use_color: false  # SIFT converts to grayscale internally
+    patch_keypoint_size: 12.26
+
+performance:
+  num_threads: 12
+  verbose: true
+
+output:
+  save_to_database: true
+  print_results: true

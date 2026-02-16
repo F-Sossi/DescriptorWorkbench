@@ -7,7 +7,7 @@
 namespace thesis_project {
 namespace patches {
 
-PatchLoader::PatchSet PatchLoader::loadStackedPNG(const std::string& png_path) {
+PatchLoader::PatchSet PatchLoader::loadStackedPNG(const std::string& png_path, bool color) {
     PatchSet result;
 
     // Extract name from path (e.g., "e1" from "/path/to/scene/e1.png")
@@ -19,8 +19,8 @@ PatchLoader::PatchSet PatchLoader::loadStackedPNG(const std::string& png_path) {
         result.scene_name = p.parent_path().filename().string();
     }
 
-    // Load the stacked PNG as grayscale
-    cv::Mat stacked_img = cv::imread(png_path, cv::IMREAD_GRAYSCALE);
+    // Load the stacked PNG
+    cv::Mat stacked_img = cv::imread(png_path, color ? cv::IMREAD_COLOR : cv::IMREAD_GRAYSCALE);
     if (stacked_img.empty()) {
         throw std::runtime_error("Failed to load patch file: " + png_path);
     }
@@ -59,7 +59,7 @@ std::vector<cv::Mat> PatchLoader::extractPatches(const cv::Mat& stacked_img) {
     return patches;
 }
 
-PatchLoader::ScenePatches PatchLoader::loadScene(const std::string& scene_dir) {
+PatchLoader::ScenePatches PatchLoader::loadScene(const std::string& scene_dir, bool color) {
     ScenePatches scene;
 
     std::filesystem::path dir(scene_dir);
@@ -68,7 +68,7 @@ PatchLoader::ScenePatches PatchLoader::loadScene(const std::string& scene_dir) {
     // Load reference patches
     std::string ref_path = (dir / "ref.png").string();
     if (std::filesystem::exists(ref_path)) {
-        scene.ref = loadStackedPNG(ref_path);
+        scene.ref = loadStackedPNG(ref_path, color);
     } else {
         throw std::runtime_error("Reference patches not found: " + ref_path);
     }
@@ -78,7 +78,7 @@ PatchLoader::ScenePatches PatchLoader::loadScene(const std::string& scene_dir) {
         std::string key = "e" + std::to_string(i);
         std::string path = (dir / (key + ".png")).string();
         if (std::filesystem::exists(path)) {
-            scene.easy[key] = loadStackedPNG(path);
+            scene.easy[key] = loadStackedPNG(path, color);
         }
     }
 
@@ -87,7 +87,7 @@ PatchLoader::ScenePatches PatchLoader::loadScene(const std::string& scene_dir) {
         std::string key = "h" + std::to_string(i);
         std::string path = (dir / (key + ".png")).string();
         if (std::filesystem::exists(path)) {
-            scene.hard[key] = loadStackedPNG(path);
+            scene.hard[key] = loadStackedPNG(path, color);
         }
     }
 
@@ -96,7 +96,7 @@ PatchLoader::ScenePatches PatchLoader::loadScene(const std::string& scene_dir) {
         std::string key = "t" + std::to_string(i);
         std::string path = (dir / (key + ".png")).string();
         if (std::filesystem::exists(path)) {
-            scene.tough[key] = loadStackedPNG(path);
+            scene.tough[key] = loadStackedPNG(path, color);
         }
     }
 
@@ -128,8 +128,10 @@ std::vector<cv::Mat> PatchLoader::resizeForCNN(const std::vector<cv::Mat>& patch
 }
 
 int PatchLoader::countPatches(const std::string& png_path) {
-    // Read only the header to get dimensions without loading full image
-    cv::Mat img = cv::imread(png_path, cv::IMREAD_GRAYSCALE);
+    // Note: This loads the full image to get dimensions. OpenCV doesn't provide
+    // a header-only read for PNG files. For large patch stacks this may use
+    // significant memory briefly, but the image is released when this function returns.
+    const cv::Mat img = cv::imread(png_path, cv::IMREAD_GRAYSCALE);
     if (img.empty()) {
         return 0;
     }
@@ -145,9 +147,9 @@ std::vector<std::string> PatchLoader::listScenes(const std::string& dataset_path
 
     for (const auto& entry : std::filesystem::directory_iterator(dataset_path)) {
         if (entry.is_directory()) {
-            std::string name = entry.path().filename().string();
             // Only include i_* and v_* directories
-            if (name.size() > 2 && (name[0] == 'i' || name[0] == 'v') && name[1] == '_') {
+            if (std::string name = entry.path().filename().string();
+                name.size() > 2 && (name[0] == 'i' || name[0] == 'v') && name[1] == '_') {
                 scenes.push_back(entry.path().string());
             }
         }
