@@ -39,13 +39,15 @@ public:
      * @param method Fusion method
      * @param weights Optional weights for weighted average
      * @param name Custom name for the fusion descriptor
+     * @param normalize_before_fusion L2-normalize each component before fusion
      * @return Unique pointer to the fusion extractor
      */
     static std::unique_ptr<IPatchDescriptorExtractor> createFusion(
         const std::vector<DescriptorType>& component_types,
         PatchFusionMethod method = PatchFusionMethod::CONCATENATE,
         const std::vector<float>& weights = {},
-        const std::string& name = "");
+        const std::string& name = "",
+        bool normalize_before_fusion = false);
 
     /**
      * @brief Create a fusion extractor from component type name strings
@@ -53,13 +55,15 @@ public:
      * @param method_name Fusion method name string
      * @param weights Optional weights
      * @param name Custom name
+     * @param normalize_before_fusion L2-normalize each component before fusion
      * @return Unique pointer to the fusion extractor
      */
     static std::unique_ptr<IPatchDescriptorExtractor> createFusion(
         const std::vector<std::string>& component_names,
         const std::string& method_name = "concatenate",
         const std::vector<float>& weights = {},
-        const std::string& name = "");
+        const std::string& name = "",
+        bool normalize_before_fusion = false);
 
     /**
      * @brief Check if a descriptor type is supported for patches

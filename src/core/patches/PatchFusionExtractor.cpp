@@ -12,10 +12,12 @@ PatchFusionExtractor::PatchFusionExtractor(
     std::vector<std::unique_ptr<IPatchDescriptorExtractor>> components,
     PatchFusionMethod method,
     const std::vector<float>& weights,
-    const std::string& name_override)
+    const std::string& name_override,
+    bool normalize_before_fusion)
     : components_(std::move(components)),
       method_(method),
-      weights_(weights) {
+      weights_(weights),
+      normalize_before_fusion_(normalize_before_fusion) {
 
     if (components_.empty()) {
         throw std::invalid_argument("PatchFusionExtractor: at least one component required");
@@ -88,59 +90,61 @@ cv::Mat PatchFusionExtractor::fuseDescriptors(const std::vector<cv::Mat>& compon
         }
     }
 
-    // L2 normalize each component BEFORE fusion to ensure equal contribution
-    // This is critical for mixing descriptors with different magnitude scales
-    // (e.g., SIFT ~0-512 vs HardNet ~0-1)
-    std::vector<cv::Mat> normalized_descs;
-    normalized_descs.reserve(component_descs.size());
+    // Optionally L2 normalize each component BEFORE fusion to ensure equal contribution.
+    // This helps when mixing descriptors with different magnitude scales
+    // (e.g., SIFT ~0-512 vs HardNet ~0-1), but can hurt fusions where raw magnitudes
+    // carry discriminative information.
+    std::vector<cv::Mat> prepared_descs;
+    prepared_descs.reserve(component_descs.size());
     for (const auto& desc : component_descs) {
-        cv::Mat normalized;
-        desc.convertTo(normalized, CV_32F);  // Ensure float type
-        for (int i = 0; i < normalized.rows; ++i) {
-            cv::Mat row = normalized.row(i);
-            cv::normalize(row, row, 1.0, 0.0, cv::NORM_L2);
+        cv::Mat prepared;
+        desc.convertTo(prepared, CV_32F);  // Ensure float type
+        if (normalize_before_fusion_) {
+            for (int i = 0; i < prepared.rows; ++i) {
+                cv::Mat row = prepared.row(i);
+                cv::normalize(row, row, 1.0, 0.0, cv::NORM_L2);
+            }
         }
-        normalized_descs.push_back(normalized);
+        prepared_descs.push_back(prepared);
     }
 
     cv::Mat result;
 
     switch (method_) {
         case PatchFusionMethod::CONCATENATE: {
-            // Horizontal concatenation of pre-normalized descriptors
-            cv::hconcat(normalized_descs, result);
+            cv::hconcat(prepared_descs, result);
             break;
         }
 
         case PatchFusionMethod::AVERAGE: {
-            result = cv::Mat::zeros(num_patches, normalized_descs[0].cols, CV_32F);
-            for (const auto& desc : normalized_descs) {
+            result = cv::Mat::zeros(num_patches, prepared_descs[0].cols, CV_32F);
+            for (const auto& desc : prepared_descs) {
                 result += desc;
             }
-            result /= static_cast<float>(normalized_descs.size());
+            result /= static_cast<float>(prepared_descs.size());
             break;
         }
 
         case PatchFusionMethod::WEIGHTED_AVG: {
-            result = cv::Mat::zeros(num_patches, normalized_descs[0].cols, CV_32F);
-            for (size_t i = 0; i < normalized_descs.size(); ++i) {
-                result += weights_[i] * normalized_descs[i];
+            result = cv::Mat::zeros(num_patches, prepared_descs[0].cols, CV_32F);
+            for (size_t i = 0; i < prepared_descs.size(); ++i) {
+                result += weights_[i] * prepared_descs[i];
             }
             break;
         }
 
         case PatchFusionMethod::MAX: {
-            result = normalized_descs[0].clone();
-            for (size_t i = 1; i < normalized_descs.size(); ++i) {
-                cv::max(result, normalized_descs[i], result);
+            result = prepared_descs[0].clone();
+            for (size_t i = 1; i < prepared_descs.size(); ++i) {
+                cv::max(result, prepared_descs[i], result);
             }
             break;
         }
 
         case PatchFusionMethod::MIN: {
-            result = normalized_descs[0].clone();
-            for (size_t i = 1; i < normalized_descs.size(); ++i) {
-                cv::min(result, normalized_descs[i], result);
+            result = prepared_descs[0].clone();
+            for (size_t i = 1; i < prepared_descs.size(); ++i) {
+                cv::min(result, prepared_descs[i], result);
             }
             break;
         }
@@ -150,15 +154,15 @@ cv::Mat PatchFusionExtractor::fuseDescriptors(const std::vector<cv::Mat>& compon
             // This averages corresponding channels across descriptors
 
             // Find the minimum dimension among components
-            int min_dim = normalized_descs[0].cols;
-            for (const auto& desc : normalized_descs) {
+            int min_dim = prepared_descs[0].cols;
+            for (const auto& desc : prepared_descs) {
                 min_dim = std::min(min_dim, desc.cols);
             }
 
             // Use minimum dimension as output (typically 128D)
             result = cv::Mat::zeros(num_patches, min_dim, CV_32F);
 
-            for (const auto& desc : normalized_descs) {
+            for (const auto& desc : prepared_descs) {
                 // For 384D descriptors, average 3 channels into 1
                 if (desc.cols == 3 * min_dim) {
                     for (int r = 0; r < num_patches; ++r) {
@@ -176,7 +180,7 @@ cv::Mat PatchFusionExtractor::fuseDescriptors(const std::vector<cv::Mat>& compon
             }
 
             // Average across components
-            result /= static_cast<float>(normalized_descs.size());
+            result /= static_cast<float>(prepared_descs.size());
             break;
         }
     }
@@ -260,7 +264,8 @@ std::unique_ptr<IPatchDescriptorExtractor> PatchFusionExtractor::clone() const {
         std::move(components),
         method_,
         weights_,
-        name_);
+        name_,
+        normalize_before_fusion_);
 }
 
 } // namespace patches

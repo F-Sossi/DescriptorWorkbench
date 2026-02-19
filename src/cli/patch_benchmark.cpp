@@ -58,6 +58,7 @@ struct DescriptorConfig {
     bool use_color = false;
     bool use_color_specified = false;
     bool scales_specified = false;
+    bool normalize_before_fusion = false;
     thesis_project::DescriptorParams params;
 
     bool isFusion() const {
@@ -493,6 +494,10 @@ DescriptorConfig parseDescriptorConfig(const YAML::Node& node) {
         if (vgg["scale_factor"]) desc.params.vgg_scale_factor = vgg["scale_factor"].as<float>();
         if (vgg["dsc_normalize"]) desc.params.vgg_dsc_normalize = vgg["dsc_normalize"].as<bool>();
     }
+    if (node["normalize_before_fusion"]) {
+        desc.normalize_before_fusion = node["normalize_before_fusion"].as<bool>();
+    }
+
     if (node["weights"]) {
         if (!node["weights"].IsSequence()) {
             throw std::runtime_error("descriptor.weights must be a sequence");
@@ -790,7 +795,8 @@ int main(int argc, char* argv[]) {
                         desc_config.components,
                         desc_config.method,
                         desc_config.weights,
-                        desc_config.name);
+                        desc_config.name,
+                        desc_config.normalize_before_fusion);
                 } else {
                     extractor = PatchDescriptorFactory::create(desc_config.type);
                     if (!desc_config.name.empty()) {
@@ -862,6 +868,8 @@ int main(int argc, char* argv[]) {
                     if (desc_config.isFusion()) {
                         exp_config.parameters["fusion_method"] = desc_config.method;
                         exp_config.parameters["components"] = joinStrings(desc_config.components, "+");
+                        exp_config.parameters["normalize_before_fusion"] =
+                            desc_config.normalize_before_fusion ? "true" : "false";
                         if (!desc_config.weights.empty()) {
                             std::vector<std::string> weight_strings;
                             weight_strings.reserve(desc_config.weights.size());

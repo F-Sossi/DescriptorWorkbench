@@ -862,7 +862,8 @@ static std::pair<::ExperimentMetrics, ThreadLocalProfiling> processSingleScene(
             extractor = std::make_unique<thesis_project::CompositeDescriptorExtractor>(
                 component_configs,
                 aggregation,
-                output_mode);
+                output_mode,
+                desc_config.normalize_before_fusion);
 
             LOG_INFO("CompositeDescriptorExtractor created successfully: " + extractor->name());
         } else {

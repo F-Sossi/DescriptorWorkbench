@@ -356,6 +356,11 @@ namespace thesis_project::config {
                 if (vgg["dsc_normalize"]) desc_config.params.vgg_dsc_normalize = vgg["dsc_normalize"].as<bool>();
             }
 
+            // Pre-fusion normalization flag (for composite/fusion descriptors)
+            if (desc_node["normalize_before_fusion"]) {
+                desc_config.normalize_before_fusion = desc_node["normalize_before_fusion"].as<bool>();
+            }
+
             // Composite descriptor configuration (optional)
             if (desc_node["aggregation"]) {
                 desc_config.aggregation_method = desc_node["aggregation"].as<std::string>();

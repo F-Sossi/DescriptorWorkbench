@@ -28,6 +28,10 @@ DescriptorRunResult runDescriptor(
         dbConfig.max_features = yaml_config.keypoints.params.max_features;
         dbConfig.parameters["experiment_name"] = yaml_config.experiment.name;
         dbConfig.parameters["descriptor_type"] = toString(desc_config.type);
+        if (desc_config.type == DescriptorType::COMPOSITE) {
+            dbConfig.parameters["normalize_before_fusion"] =
+                desc_config.normalize_before_fusion ? "true" : "false";
+        }
         dbConfig.parameters["pooling_strategy"] = toString(desc_config.params.pooling);
         dbConfig.parameters["norm_type"] = std::to_string(desc_config.params.norm_type);
         dbConfig.execution_device = execution_device;

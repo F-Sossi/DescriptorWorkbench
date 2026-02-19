@@ -58,6 +58,7 @@ namespace thesis_project::config {
             std::string aggregation_method;            // "average", "weighted_avg", "max", "min", "concatenate", "channel_wise"
             std::string output_dimension;              // "128" or "384" for channel_wise fusion (default: "128")
             double weight = 1.0;                       // Weight for this component in weighted averaging
+            bool normalize_before_fusion = false;      // L2-normalize components before fusion (default: off)
         };
         std::vector<DescriptorConfig> descriptors;
 

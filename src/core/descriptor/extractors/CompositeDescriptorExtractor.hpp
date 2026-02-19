@@ -86,11 +86,13 @@ namespace thesis_project {
          * @param components Vector of component descriptor configurations
          * @param aggregation Aggregation method to use
          * @param output_mode Output dimension mode (only used for CHANNEL_WISE aggregation)
+         * @param normalize_before_fusion L2-normalize each component before fusion
          */
         CompositeDescriptorExtractor(
             std::vector<ComponentConfig> components,
             AggregationMethod aggregation,
-            OutputDimensionMode output_mode = OutputDimensionMode::COLLAPSE_GRAY
+            OutputDimensionMode output_mode = OutputDimensionMode::COLLAPSE_GRAY,
+            bool normalize_before_fusion = false
         );
 
         /**
@@ -209,6 +211,7 @@ namespace thesis_project {
         std::vector<std::unique_ptr<IDescriptorExtractor>> extractors_; ///< Component extractors
         AggregationMethod aggregation_method_;                       ///< Aggregation method
         OutputDimensionMode output_mode_;                            ///< Output dimension mode (for CHANNEL_WISE)
+        bool normalize_before_fusion_ = false;                       ///< L2-normalize components before fusion
         mutable int cached_descriptor_size_ = -1;                    ///< Cached descriptor size
 
         struct ThreadLocalContext {

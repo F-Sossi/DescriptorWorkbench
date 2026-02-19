@@ -21,10 +21,12 @@ namespace thesis_project {
     CompositeDescriptorExtractor::CompositeDescriptorExtractor(
         std::vector<ComponentConfig> components,
         AggregationMethod aggregation,
-        OutputDimensionMode output_mode)
+        OutputDimensionMode output_mode,
+        bool normalize_before_fusion)
         : components_(std::move(components))
         , aggregation_method_(aggregation)
         , output_mode_(output_mode)
+        , normalize_before_fusion_(normalize_before_fusion)
     {
         // Validate we have at least 2 components
         if (components_.size() < 2) {
@@ -267,41 +269,43 @@ namespace thesis_project {
     cv::Mat CompositeDescriptorExtractor::aggregate(
         const std::vector<cv::Mat>& descriptors) const
     {
-        // L2 normalize each component BEFORE fusion to ensure equal contribution.
-        // This is critical for mixing descriptors with different magnitude scales
+        // Optionally L2 normalize each component BEFORE fusion to ensure equal contribution.
+        // This helps when mixing descriptors with different magnitude scales
         // (e.g., SIFT values range ~0-512 while HardNet/SOSNet are already unit normalized ~0-1).
-        // Without pre-normalization, high-magnitude descriptors dominate the fusion.
-        std::vector<cv::Mat> normalized_descs;
-        normalized_descs.reserve(descriptors.size());
+        // However, it can hurt fusions where raw magnitudes carry discriminative information.
+        std::vector<cv::Mat> prepared_descs;
+        prepared_descs.reserve(descriptors.size());
         for (const auto& desc : descriptors) {
-            cv::Mat normalized;
-            desc.convertTo(normalized, CV_32F);
-            for (int i = 0; i < normalized.rows; ++i) {
-                cv::Mat row = normalized.row(i);
-                cv::normalize(row, row, 1.0, 0.0, cv::NORM_L2);
+            cv::Mat prepared;
+            desc.convertTo(prepared, CV_32F);
+            if (normalize_before_fusion_) {
+                for (int i = 0; i < prepared.rows; ++i) {
+                    cv::Mat row = prepared.row(i);
+                    cv::normalize(row, row, 1.0, 0.0, cv::NORM_L2);
+                }
             }
-            normalized_descs.push_back(normalized);
+            prepared_descs.push_back(prepared);
         }
 
         cv::Mat result;
         switch (aggregation_method_) {
             case AggregationMethod::AVERAGE:
-                result = aggregateAverage(normalized_descs);
+                result = aggregateAverage(prepared_descs);
                 break;
             case AggregationMethod::WEIGHTED_AVG:
-                result = aggregateWeightedAverage(normalized_descs);
+                result = aggregateWeightedAverage(prepared_descs);
                 break;
             case AggregationMethod::MAX:
-                result = aggregateMax(normalized_descs);
+                result = aggregateMax(prepared_descs);
                 break;
             case AggregationMethod::MIN:
-                result = aggregateMin(normalized_descs);
+                result = aggregateMin(prepared_descs);
                 break;
             case AggregationMethod::CONCATENATE:
-                result = aggregateConcatenate(normalized_descs);
+                result = aggregateConcatenate(prepared_descs);
                 break;
             case AggregationMethod::CHANNEL_WISE:
-                result = aggregateChannelWise(normalized_descs);
+                result = aggregateChannelWise(prepared_descs);
                 break;
             default:
                 throw std::runtime_error("Unknown aggregation method");

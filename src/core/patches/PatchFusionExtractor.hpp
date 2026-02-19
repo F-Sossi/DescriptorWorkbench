@@ -28,12 +28,14 @@ public:
      * @param method Fusion method to apply
      * @param weights Optional weights for WEIGHTED_AVG (must match component count)
      * @param name_override Optional custom name (otherwise auto-generated)
+     * @param normalize_before_fusion L2-normalize each component before fusion
      */
     explicit PatchFusionExtractor(
         std::vector<std::unique_ptr<IPatchDescriptorExtractor>> components,
         PatchFusionMethod method = PatchFusionMethod::CONCATENATE,
         const std::vector<float>& weights = {},
-        const std::string& name_override = "");
+        const std::string& name_override = "",
+        bool normalize_before_fusion = false);
 
     ~PatchFusionExtractor() override = default;
 
@@ -89,6 +91,7 @@ private:
     std::vector<float> weights_;
     std::string name_;
     int output_dim_;
+    bool normalize_before_fusion_ = false;
 };
 
 } // namespace patches
