@@ -106,7 +106,7 @@ MatchingResults MatchingTask::run(
                     if (target_desc.empty() || target_desc.rows != ref_desc.rows) continue;
 
                     float accuracy = 0.0f;
-                    float mAP = computeSceneMAP(ref_desc, target_desc, &accuracy);
+                    float mAP = computeSceneMAP(ref_desc, target_desc, config.matching, &accuracy);
                     int patches = ref_desc.rows;
 
                     t_overall.add(mAP, accuracy, patches);
@@ -181,7 +181,7 @@ MatchingResults MatchingTask::run(
                 if (target_desc.empty() || target_desc.rows != ref_desc.rows) continue;
 
                 float accuracy = 0.0f;
-                float mAP = computeSceneMAP(ref_desc, target_desc, &accuracy);
+                float mAP = computeSceneMAP(ref_desc, target_desc, config.matching, &accuracy);
                 int patches = ref_desc.rows;
 
                 overall.add(mAP, accuracy, patches);
@@ -235,6 +235,7 @@ MatchingResults MatchingTask::run(
 float MatchingTask::computeSceneMAP(
     const cv::Mat& ref_desc,
     const cv::Mat& target_desc,
+    const MatchingConfig& matching_config,
     float* accuracy_out) {
 
     if (ref_desc.empty() || target_desc.empty()) {

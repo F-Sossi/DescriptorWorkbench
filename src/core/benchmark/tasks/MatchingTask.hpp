@@ -75,12 +75,14 @@ private:
      *
      * @param ref_desc Reference descriptors [N x D]
      * @param target_desc Target descriptors [N x D]
+     * @param matching_config Matching configuration
      * @param accuracy_out Output: matching accuracy (correct NN / total)
      * @return Average Precision score
      */
     static float computeSceneMAP(
         const cv::Mat& ref_desc,
         const cv::Mat& target_desc,
+        const MatchingConfig& matching_config,
         float* accuracy_out = nullptr);
 
     /**
