@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <opencv2/core.hpp>
 
 namespace thesis_project::benchmark {
 
@@ -47,6 +48,23 @@ struct RetrievalTaskItem {
 };
 
 /**
+ * @brief Matching method for patch benchmark evaluation
+ */
+enum class PatchMatchingMethod {
+    NEAREST_NEIGHBOR,  ///< 1-NN: find single closest match per query
+    RATIO_TEST         ///< Lowe's ratio test: reject if d1/d2 >= threshold
+};
+
+/**
+ * @brief Configuration for descriptor matching in patch benchmark
+ */
+struct MatchingConfig {
+    PatchMatchingMethod method = PatchMatchingMethod::NEAREST_NEIGHBOR;
+    float ratio_threshold = 0.8f;  ///< Ratio test threshold (only for RATIO_TEST)
+    int norm_type = cv::NORM_L2;   ///< OpenCV norm type (NORM_L2 or NORM_L1)
+};
+
+/**
  * @brief Configuration for patch benchmark
  */
 struct Config {
@@ -62,6 +80,7 @@ struct Config {
 
     // Tasks to run
     bool matching_enabled = true;
+    MatchingConfig matching;
     bool verification_enabled = true;
     bool verification_same_seq = true;   ///< Same-sequence negatives
     bool verification_diff_seq = true;   ///< Different-sequence negatives
