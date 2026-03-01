@@ -1,6 +1,7 @@
 #include "MatchingTask.hpp"
 #include "../metrics/APMetrics.hpp"
 #include <opencv2/core.hpp>
+#include <opencv2/features2d.hpp>
 #include <algorithm>
 #include <filesystem>
 #include <limits>
@@ -250,52 +251,70 @@ float MatchingTask::computeSceneMAP(
 
     const int N = ref_desc.rows;
 
-    // HPatches matching protocol (global per-scene AP):
-    // 1. For each query i, find nearest neighbor in target
-    // 2. Check if NN index == query index (ground truth)
-    // 3. Compute single AP over all N queries with numpos=N
-    //    (expecting all N queries to find their correct match)
-
-    std::vector<float> nn_scores;  // -distance to NN for each query
-    std::vector<int> nn_labels;    // 1 if NN is correct, 0 otherwise
+    std::vector<float> nn_scores;
+    std::vector<int> nn_labels;
     nn_scores.reserve(N);
     nn_labels.reserve(N);
 
     int correct = 0;
 
-    for (int q = 0; q < N; ++q) {
-        cv::Mat query = ref_desc.row(q);
+    cv::BFMatcher matcher(matching_config.norm_type, false);
 
-        // Find nearest neighbor
-        float min_dist = std::numeric_limits<float>::max();
-        int nn_idx = -1;
+    if (matching_config.method == PatchMatchingMethod::NEAREST_NEIGHBOR) {
+        // 1-NN: find single best match per query
+        std::vector<cv::DMatch> matches;
+        matcher.match(ref_desc, target_desc, matches);
 
-        for (int t = 0; t < target_desc.rows; ++t) {
-            float dist = metrics::l2Distance(query, target_desc.row(t));
-            if (dist < min_dist) {
-                min_dist = dist;
-                nn_idx = t;
+        for (const auto& match : matches) {
+            bool is_correct = (match.trainIdx == match.queryIdx);
+            if (is_correct) correct++;
+
+            nn_scores.push_back(-match.distance);
+            nn_labels.push_back(is_correct ? 1 : 0);
+        }
+    } else if (matching_config.method == PatchMatchingMethod::RATIO_TEST) {
+        // kNN with k=2, apply Lowe's ratio test
+        std::vector<std::vector<cv::DMatch>> knn_matches;
+        matcher.knnMatch(ref_desc, target_desc, knn_matches, 2);
+
+        for (int q = 0; q < N; ++q) {
+            const auto& match_pair = knn_matches[q];
+
+            if (match_pair.size() >= 2) {
+                float ratio = match_pair[0].distance / match_pair[1].distance;
+
+                if (ratio < matching_config.ratio_threshold) {
+                    // Match accepted
+                    bool is_correct = (match_pair[0].trainIdx == q);
+                    if (is_correct) correct++;
+
+                    nn_scores.push_back(-match_pair[0].distance);
+                    nn_labels.push_back(is_correct ? 1 : 0);
+                } else {
+                    // Match rejected by ratio test - counts as incorrect
+                    nn_scores.push_back(-match_pair[0].distance);
+                    nn_labels.push_back(0);
+                }
+            } else if (match_pair.size() == 1) {
+                // Only one match available, can't apply ratio test
+                // Accept it (no second neighbor to compare)
+                bool is_correct = (match_pair[0].trainIdx == q);
+                if (is_correct) correct++;
+
+                nn_scores.push_back(-match_pair[0].distance);
+                nn_labels.push_back(is_correct ? 1 : 0);
+            } else {
+                // No match found
+                nn_scores.push_back(-std::numeric_limits<float>::max());
+                nn_labels.push_back(0);
             }
         }
-
-        // Check if NN is correct (ground truth: query i should match target i)
-        bool is_correct = (nn_idx == q);
-        if (is_correct) {
-            correct++;
-        }
-
-        // Store score and label for global AP computation
-        // Score = -distance (higher = more similar)
-        nn_scores.push_back(-min_dist);
-        nn_labels.push_back(is_correct ? 1 : 0);
     }
 
     if (accuracy_out) {
         *accuracy_out = static_cast<float>(correct) / static_cast<float>(N);
     }
 
-    // Compute global AP with numpos=N (expect all queries to find correct match)
-    // This matches the HPatches reference: pr,rc,ap = metrics.pr(-m_d, m_l, numpos=m_l.shape[0])
     return metrics::computeAPTrapz(nn_scores, nn_labels, N);
 }
 
