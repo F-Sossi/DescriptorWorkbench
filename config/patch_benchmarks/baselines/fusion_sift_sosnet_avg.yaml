@@ -2,7 +2,7 @@
 # Run: ./patch_benchmark ../config/patch_benchmarks/baselines/fusion_sift_sosnet_avg.yaml
 
 experiment:
-  name: "fusion_sift_sosnet_avg"
+  name: "fusion_sift_sosnet_avg_v3"
   description: "SIFT + SOSNet average fusion on color HPatches patches"
 
 patches:
@@ -44,6 +44,7 @@ descriptors:
       - "sift"
       - "sosnet"
     method: "average"
+    normalize_before_fusion: true
 
 performance:
   num_threads: 12

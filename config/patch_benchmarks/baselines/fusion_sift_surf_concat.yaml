@@ -1,6 +1,6 @@
 # SIFT + SURF CONCAT Fusion
 experiment:
-  name: "fusion_sift_surf_concat"
+  name: "fusion_sift_surf_concat_v2"
   description: "SIFT + SURF concat fusion"
 
 patches:

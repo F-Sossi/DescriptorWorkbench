@@ -51,7 +51,8 @@ struct RetrievalTaskItem {
  * @brief Matching method for patch benchmark evaluation
  */
 enum class PatchMatchingMethod {
-    NEAREST_NEIGHBOR,  ///< 1-NN: find single closest match per query
+    NEAREST_NEIGHBOR,  ///< 1-NN via cv::BFMatcher
+    MANUAL_NN,         ///< 1-NN via manual row-by-row L2 distance loop
     RATIO_TEST         ///< Lowe's ratio test: reject if d1/d2 >= threshold
 };
 

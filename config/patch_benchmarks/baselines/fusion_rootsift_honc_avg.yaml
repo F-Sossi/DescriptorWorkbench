@@ -1,6 +1,6 @@
 # RootSIFT + HONC AVG Fusion
 experiment:
-  name: "fusion_rootsift_honc_avg"
+  name: "fusion_rootsift_honc_avg_v2"
   description: "RootSIFT + HONC avg fusion"
 
 patches:

@@ -2,7 +2,7 @@
 # Run: ./patch_benchmark ../config/patch_benchmarks/baselines/rgbsift_baseline.yaml
 
 experiment:
-  name: "rgbsift_baseline_color"
+  name: "rgbsift_baseline_color_v2"
   description: "RGBSIFT baseline on color HPatches patches"
 
 patches:
@@ -41,7 +41,6 @@ descriptors:
   - name: "rgbsift"
     type: "rgbsift"
     use_color: true
-    patch_keypoint_size: 12.26
 
 performance:
   num_threads: 12

@@ -1,6 +1,6 @@
 # RGBSIFT + SURF CONCAT Fusion
 experiment:
-  name: "fusion_rgbsift_surf_concat"
+  name: "fusion_rgbsift_surf_concat_v2"
   description: "RGBSIFT + SURF concat fusion"
 
 patches:

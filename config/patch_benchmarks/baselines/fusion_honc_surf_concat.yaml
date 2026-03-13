@@ -1,6 +1,6 @@
 # HONC + SURF CONCAT Fusion
 experiment:
-  name: "fusion_honc_surf_concat"
+  name: "fusion_honc_surf_concat_v2"
   description: "HONC + SURF concat fusion"
 
 patches:

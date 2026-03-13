@@ -5,7 +5,7 @@
 # This typically improves performance on matching tasks.
 
 experiment:
-  name: "rootsift_baseline_color"
+  name: "rootsift_baseline_color_v2"
   description: "RootSIFT baseline on color HPatches patches"
 
 patches:
@@ -44,7 +44,6 @@ descriptors:
   - name: "rootsift"
     type: "sift"
     use_color: false
-    patch_keypoint_size: 12.26
     rooting_stage: "after_pooling"  # L1 norm + sqrt = RootSIFT
 
 performance:

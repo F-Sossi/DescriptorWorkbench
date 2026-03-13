@@ -2,7 +2,7 @@
 # Run: ./patch_benchmark ../config/patch_benchmarks/baselines/fusion_sift_honc_avg.yaml
 
 experiment:
-  name: "fusion_sift_honc_avg"
+  name: "fusion_sift_honc_avg_v2"
   description: "SIFT + HoNC average fusion on color HPatches patches"
 
 patches:

@@ -1,6 +1,6 @@
 # RGBSIFT_CHANNEL_AVG + SURF CONCAT Fusion
 experiment:
-  name: "fusion_rgbsift_channel_avg_surf_concat"
+  name: "fusion_rgbsift_channel_avg_surf_concat_v2"
   description: "RGBSIFT_CHANNEL_AVG + SURF concat fusion"
 
 patches:

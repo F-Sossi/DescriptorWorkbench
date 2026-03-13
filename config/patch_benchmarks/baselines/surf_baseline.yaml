@@ -2,7 +2,7 @@
 # Run: ./patch_benchmark ../config/patch_benchmarks/baselines/surf_baseline.yaml
 
 experiment:
-  name: "surf_baseline_color"
+  name: "surf_baseline_color_v2"
   description: "SURF baseline on color HPatches patches"
 
 patches:
@@ -42,7 +42,6 @@ descriptors:
     type: "surf"
     use_color: false
     extended: true           # Use 128D descriptors instead of 64D
-    patch_keypoint_size: 26.0  # Larger support region for better coverage
 
 performance:
   num_threads: 12

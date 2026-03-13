@@ -5,19 +5,23 @@
 #include <algorithm>
 #include <sstream>
 
-namespace thesis_project {
-namespace patches {
+
+namespace thesis_project::patches {
 
 PatchFusionExtractor::PatchFusionExtractor(
     std::vector<std::unique_ptr<IPatchDescriptorExtractor>> components,
     PatchFusionMethod method,
     const std::vector<float>& weights,
     const std::string& name_override,
-    bool normalize_before_fusion)
+    bool normalize_before_fusion,
+    bool normalize_after_fusion,
+    bool root_after_fusion)
     : components_(std::move(components)),
       method_(method),
       weights_(weights),
-      normalize_before_fusion_(normalize_before_fusion) {
+      normalize_before_fusion_(normalize_before_fusion),
+      normalize_after_fusion_(normalize_after_fusion),
+      root_after_fusion_(root_after_fusion) {
 
     if (components_.empty()) {
         throw std::invalid_argument("PatchFusionExtractor: at least one component required");
@@ -185,10 +189,21 @@ cv::Mat PatchFusionExtractor::fuseDescriptors(const std::vector<cv::Mat>& compon
         }
     }
 
-    // L2 normalize the fused descriptors
-    for (int i = 0; i < result.rows; ++i) {
-        cv::Mat row = result.row(i);
-        cv::normalize(row, row, 1.0, 0.0, cv::NORM_L2);
+    // Optional post-fusion normalization (off by default to avoid hidden transforms)
+    if (normalize_after_fusion_) {
+        for (int i = 0; i < result.rows; ++i) {
+            cv::Mat row = result.row(i);
+            cv::normalize(row, row, 1.0, 0.0, cv::NORM_L2);
+        }
+    }
+
+    // Optional RootSIFT transform: L1-normalize then element-wise sqrt
+    if (root_after_fusion_) {
+        for (int i = 0; i < result.rows; ++i) {
+            cv::Mat row = result.row(i);
+            cv::normalize(row, row, 1.0, 0.0, cv::NORM_L1);
+            cv::sqrt(row, row);
+        }
     }
 
     return result;
@@ -265,8 +280,10 @@ std::unique_ptr<IPatchDescriptorExtractor> PatchFusionExtractor::clone() const {
         method_,
         weights_,
         name_,
-        normalize_before_fusion_);
+        normalize_before_fusion_,
+        normalize_after_fusion_,
+        root_after_fusion_);
 }
 
-} // namespace patches
-} // namespace thesis_project
+} // namespace thesis_project::patches
+

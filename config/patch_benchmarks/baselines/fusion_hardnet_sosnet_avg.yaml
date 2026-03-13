@@ -2,7 +2,7 @@
 # Run: ./patch_benchmark ../config/patch_benchmarks/baselines/fusion_hardnet_sosnet_avg.yaml
 
 experiment:
-  name: "fusion_hardnet_sosnet_avg"
+  name: "fusion_hardnet_sosnet_avg_v2"
   description: "HardNet + SOSNet average fusion on color HPatches patches"
 
 patches:

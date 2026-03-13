@@ -85,41 +85,57 @@ std::unique_ptr<IPatchDescriptorExtractor> PatchTraditionalExtractor::clone() co
 }
 
 // Factory functions
+//
+// Default keypoint size = 12.26 for 65x65 patches.
+// Derived from the official HPatches benchmark reference implementation:
+//   references/hpatches-benchmark/python/extract_opencv_sift.py, line 47:
+//     center_kp.size = 2*c/5.303  (where c = patch_size/2 = 32.5)
+//     => size = 65 / 5.303 = 12.258 ≈ 12.26
+// The constant 5.303 maps OpenCV SIFT's keypoint size to a sampling region that
+// fills the 65x65 patch. Larger values (e.g. 41.0) cause SIFT to sample beyond
+// the patch boundary, producing degraded descriptors from border padding artifacts.
+constexpr float kDefaultPatchKeypointSize = 12.26f;
+
 std::unique_ptr<IPatchDescriptorExtractor> createPatchSIFT() {
     auto sift = DescriptorFactory::create(DescriptorType::SIFT);
-    // Keypoint size of 41 gives good coverage of 65x65 patch
-    // (41/2 = 20.5 radius, SIFT uses ~4x radius = ~82px, scaled down)
-    return std::make_unique<PatchTraditionalExtractor>(std::move(sift), 41.0f, false, DescriptorType::SIFT);
+    return std::make_unique<PatchTraditionalExtractor>(std::move(sift), kDefaultPatchKeypointSize, false, DescriptorType::SIFT);
 }
 
 std::unique_ptr<IPatchDescriptorExtractor> createPatchRGBSIFT() {
     auto rgbsift = DescriptorFactory::create(DescriptorType::RGBSIFT);
-    return std::make_unique<PatchTraditionalExtractor>(std::move(rgbsift), 41.0f, true, DescriptorType::RGBSIFT);
+    return std::make_unique<PatchTraditionalExtractor>(std::move(rgbsift), kDefaultPatchKeypointSize, true, DescriptorType::RGBSIFT);
 }
 
 std::unique_ptr<IPatchDescriptorExtractor> createPatchRGBSIFTChannelAvg() {
     auto rgbsift_avg = DescriptorFactory::create(DescriptorType::RGBSIFT_CHANNEL_AVG);
-    return std::make_unique<PatchTraditionalExtractor>(std::move(rgbsift_avg), 41.0f, true, DescriptorType::RGBSIFT_CHANNEL_AVG);
+    return std::make_unique<PatchTraditionalExtractor>(std::move(rgbsift_avg), kDefaultPatchKeypointSize, true, DescriptorType::RGBSIFT_CHANNEL_AVG);
 }
 
 std::unique_ptr<IPatchDescriptorExtractor> createPatchHoNC() {
     auto honc = DescriptorFactory::create(DescriptorType::HoNC);
-    return std::make_unique<PatchTraditionalExtractor>(std::move(honc), 41.0f, true, DescriptorType::HoNC);
+    return std::make_unique<PatchTraditionalExtractor>(std::move(honc), kDefaultPatchKeypointSize, true, DescriptorType::HoNC);
 }
 
 std::unique_ptr<IPatchDescriptorExtractor> createPatchDSPSIFT() {
     auto dspsift = DescriptorFactory::create(DescriptorType::DSPSIFT_V2);
     // NOTE: DSP (Domain Size Pooling) is designed for scale variation in full images.
     // On pre-extracted 65x65 patches that are already scale-normalized, DSP multi-scale
-    // pooling doesn't provide meaningful benefit. Using keypoint_size=41.0 (same as SIFT)
-    // keeps extraction at octave 0 where the patch has full resolution.
-    // For proper DSP evaluation, use the full image experiment_runner pipeline.
-    return std::make_unique<PatchTraditionalExtractor>(std::move(dspsift), 41.0f, false, DescriptorType::DSPSIFT_V2);
+    // pooling doesn't provide meaningful benefit. For proper DSP evaluation, use the
+    // full image experiment_runner pipeline.
+    return std::make_unique<PatchTraditionalExtractor>(std::move(dspsift), kDefaultPatchKeypointSize, false, DescriptorType::DSPSIFT_V2);
 }
+
+// SURF keypoint size for 65x65 patches.
+// Derived from OpenCV SURF source (opencv_contrib/modules/xfeatures2d/src/surf.cpp):
+//   s = size * 1.2 / 9.0
+//   win_size = (PATCH_SZ + 1) * s = 21 * size * 1.2 / 9.0 = 2.8 * size
+// The window extends win_size/2 from center, must fit within 32.5px (half of 65):
+//   size <= 65 / 2.8 = 23.21
+constexpr float kSurfPatchKeypointSize = 23.21f;
 
 std::unique_ptr<IPatchDescriptorExtractor> createPatchSURF() {
     auto surf = DescriptorFactory::create(DescriptorType::SURF);
-    return std::make_unique<PatchTraditionalExtractor>(std::move(surf), 41.0f, false, DescriptorType::SURF);
+    return std::make_unique<PatchTraditionalExtractor>(std::move(surf), kSurfPatchKeypointSize, false, DescriptorType::SURF);
 }
 
 } // namespace patches

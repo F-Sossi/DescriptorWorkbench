@@ -2,7 +2,7 @@
 # Run: ./patch_benchmark ../config/patch_benchmarks/baselines/fusion_sift_honc_concat.yaml
 
 experiment:
-  name: "fusion_sift_honc_concat"
+  name: "fusion_sift_honc_concat_v2"
   description: "SIFT + HoNC concatenate fusion on color HPatches patches"
 
 patches:

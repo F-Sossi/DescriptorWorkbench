@@ -2,7 +2,7 @@
 # Run: ./patch_benchmark ../config/patch_benchmarks/baselines/sift_baseline.yaml
 
 experiment:
-  name: "sift_baseline_color"
+  name: "sift_baseline_color_v2"
   description: "SIFT baseline on color HPatches patches"
 
 patches:
@@ -41,7 +41,6 @@ descriptors:
   - name: "sift"
     type: "sift"
     use_color: false
-    patch_keypoint_size: 12.26
 
 performance:
   num_threads: 12

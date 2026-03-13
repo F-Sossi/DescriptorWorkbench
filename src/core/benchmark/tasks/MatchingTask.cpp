@@ -258,10 +258,31 @@ float MatchingTask::computeSceneMAP(
 
     int correct = 0;
 
-    cv::BFMatcher matcher(matching_config.norm_type, false);
+    if (matching_config.method == PatchMatchingMethod::MANUAL_NN) {
+        // Manual row-by-row 1-NN using cv::norm (original HPatches protocol)
+        for (int q = 0; q < N; ++q) {
+            cv::Mat query = ref_desc.row(q);
 
-    if (matching_config.method == PatchMatchingMethod::NEAREST_NEIGHBOR) {
-        // 1-NN: find single best match per query
+            float min_dist = std::numeric_limits<float>::max();
+            int nn_idx = -1;
+
+            for (int t = 0; t < target_desc.rows; ++t) {
+                float dist = metrics::l2Distance(query, target_desc.row(t));
+                if (dist < min_dist) {
+                    min_dist = dist;
+                    nn_idx = t;
+                }
+            }
+
+            bool is_correct = (nn_idx == q);
+            if (is_correct) correct++;
+
+            nn_scores.push_back(-min_dist);
+            nn_labels.push_back(is_correct ? 1 : 0);
+        }
+    } else if (matching_config.method == PatchMatchingMethod::NEAREST_NEIGHBOR) {
+        // 1-NN via cv::BFMatcher
+        cv::BFMatcher matcher(matching_config.norm_type, false);
         std::vector<cv::DMatch> matches;
         matcher.match(ref_desc, target_desc, matches);
 
@@ -274,8 +295,9 @@ float MatchingTask::computeSceneMAP(
         }
     } else if (matching_config.method == PatchMatchingMethod::RATIO_TEST) {
         // kNN with k=2, apply Lowe's ratio test
+        cv::BFMatcher ratio_matcher(matching_config.norm_type, false);
         std::vector<std::vector<cv::DMatch>> knn_matches;
-        matcher.knnMatch(ref_desc, target_desc, knn_matches, 2);
+        ratio_matcher.knnMatch(ref_desc, target_desc, knn_matches, 2);
 
         for (int q = 0; q < N; ++q) {
             const auto& match_pair = knn_matches[q];

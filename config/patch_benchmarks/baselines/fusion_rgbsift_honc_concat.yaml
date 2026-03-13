@@ -1,6 +1,6 @@
 # RGBSIFT + HONC CONCAT Fusion
 experiment:
-  name: "fusion_rgbsift_honc_concat"
+  name: "fusion_rgbsift_honc_concat_v2"
   description: "RGBSIFT + HONC concat fusion"
 
 patches:

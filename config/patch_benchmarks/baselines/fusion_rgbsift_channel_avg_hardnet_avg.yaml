@@ -1,6 +1,6 @@
 # RGBSIFT_CHANNEL_AVG + HARDNET AVG Fusion
 experiment:
-  name: "fusion_rgbsift_channel_avg_hardnet_avg"
+  name: "fusion_rgbsift_channel_avg_hardnet_avg_v3"
   description: "RGBSIFT_CHANNEL_AVG + HARDNET avg fusion"
 
 patches:
@@ -29,6 +29,7 @@ descriptors:
     type: "fusion"
     components: ["rgbsift_channel_avg", "hardnet"]
     method: "average"
+    normalize_before_fusion: true
 
 performance: { num_threads: 12, verbose: true }
 output: { save_to_database: true, print_results: true }

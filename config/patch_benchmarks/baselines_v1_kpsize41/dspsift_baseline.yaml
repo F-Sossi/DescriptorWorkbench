@@ -1,0 +1,59 @@
+# DSPSIFT V2 Baseline - Color Patches
+# Run: ./patch_benchmark ../config/patch_benchmarks/baselines/dspsift_baseline.yaml
+#
+# Domain-Size Pooled SIFT extracts SIFT at multiple scales and aggregates.
+# This is the pyramid-aware implementation matching the full image pipeline.
+
+experiment:
+  name: "dspsift_baseline_color"
+  description: "DSPSIFT V2 baseline on color HPatches patches"
+
+patches:
+  path: "../hpatches-release-rebuilt-color/"
+  scenes: []
+  color: false
+  difficulty:
+    easy: true
+    hard: true
+    tough: true
+
+tasks:
+  mode: "paper"
+  task_source: "csv"
+  task_set: "hpatches_color_v1"
+  task_split: "full"
+  tasks_dir: "../config/patch_benchmarks/tasks/color_tasks"
+  matching:
+    enabled: true
+  verification:
+    enabled: true
+    num_positives: 200000
+    num_negatives: 1000000
+    negative_source: "both"
+  retrieval:
+    enabled: true
+    num_queries: 10000
+    num_distractors: 20000
+  preload_descriptors: true
+  preload_scope: "tasks"
+  store_descriptors_to_db: false
+  use_cached_descriptors: false
+  random_seed: 1337
+
+descriptors:
+  - name: "dspsift_v2"
+    type: "dspsift_v2"
+    use_color: false
+    patch_keypoint_size: 12.26
+    pooling_aggregation: "max"
+    normalize_after_pooling: true
+    norm_type: "l2"
+    scales: [0.85, 1.075, 1.30]
+
+performance:
+  num_threads: 12
+  verbose: true
+
+output:
+  save_to_database: true
+  print_results: true

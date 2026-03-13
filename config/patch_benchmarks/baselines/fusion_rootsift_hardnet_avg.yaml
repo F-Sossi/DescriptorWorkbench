@@ -1,6 +1,6 @@
 # RootSIFT + HARDNET AVG Fusion
 experiment:
-  name: "fusion_rootsift_hardnet_avg"
+  name: "fusion_rootsift_hardnet_avg_v3"
   description: "RootSIFT + HARDNET avg fusion"
 
 patches:
@@ -29,6 +29,7 @@ descriptors:
     type: "fusion"
     components: ["sift", "hardnet"]
     method: "average"
+    normalize_before_fusion: true
     rooting_stage: "after_pooling"  # Apply RootSIFT transformation
 
 performance: { num_threads: 12, verbose: true }

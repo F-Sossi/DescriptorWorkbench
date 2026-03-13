@@ -1,0 +1,48 @@
+experiment:
+  name: fusion_rootsift_honc_avg_v2_manual_nn
+  description: RootSIFT + HONC avg fusion (manual NN matching)
+patches:
+  path: ../hpatches-release-rebuilt-color/
+  scenes: []
+  color: true
+  difficulty:
+    easy: true
+    hard: true
+    tough: true
+tasks:
+  mode: paper
+  task_source: csv
+  task_set: hpatches_color_v1
+  task_split: full
+  tasks_dir: ../config/patch_benchmarks/tasks/color_tasks
+  matching:
+    enabled: true
+    method: manual
+  verification:
+    enabled: true
+    num_positives: 200000
+    num_negatives: 1000000
+    negative_source: both
+  retrieval:
+    enabled: true
+    num_queries: 10000
+    num_distractors: 20000
+  preload_descriptors: true
+  preload_scope: tasks
+  store_descriptors_to_db: false
+  use_cached_descriptors: false
+  random_seed: 1337
+descriptors:
+- name: rootsift_honc_avg_manual_nn
+  type: fusion
+  components:
+  - sift
+  - honc
+  method: average
+  rooting_stage: after_pooling
+performance:
+  num_threads: 12
+  verbose: true
+output:
+  save_to_database: true
+  print_results: true

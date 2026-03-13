@@ -1,6 +1,6 @@
 # RGBSIFT_CHANNEL_AVG + HONC CONCAT Fusion
 experiment:
-  name: "fusion_rgbsift_channel_avg_honc_concat"
+  name: "fusion_rgbsift_channel_avg_honc_concat_v2"
   description: "RGBSIFT_CHANNEL_AVG + HONC concat fusion"
 
 patches:

@@ -1,6 +1,6 @@
 # RootSIFT + RGBSIFT AVG Fusion
 experiment:
-  name: "fusion_rootsift_rgbsift_avg"
+  name: "fusion_rootsift_rgbsift_avg_v2"
   description: "RootSIFT + RGBSIFT avg fusion"
 
 patches:

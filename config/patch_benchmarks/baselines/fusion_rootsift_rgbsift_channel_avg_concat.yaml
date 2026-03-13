@@ -1,6 +1,6 @@
 # RootSIFT + RGBSIFT_CHANNEL_AVG CONCAT Fusion
 experiment:
-  name: "fusion_rootsift_rgbsift_channel_avg_concat"
+  name: "fusion_rootsift_rgbsift_channel_avg_concat_v2"
   description: "RootSIFT + RGBSIFT_CHANNEL_AVG concat fusion"
 
 patches:

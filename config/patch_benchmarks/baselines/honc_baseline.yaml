@@ -2,7 +2,7 @@
 # Run: ./patch_benchmark ../config/patch_benchmarks/baselines/honc_baseline.yaml
 
 experiment:
-  name: "honc_baseline_color"
+  name: "honc_baseline_color_v2"
   description: "HoNC baseline on color HPatches patches"
 
 patches:
@@ -41,7 +41,6 @@ descriptors:
   - name: "honc"
     type: "honc"
     use_color: true
-    patch_keypoint_size: 12.26
 
 performance:
   num_threads: 12

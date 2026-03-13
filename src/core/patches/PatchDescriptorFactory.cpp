@@ -54,7 +54,9 @@ std::unique_ptr<IPatchDescriptorExtractor> PatchDescriptorFactory::createFusion(
     PatchFusionMethod method,
     const std::vector<float>& weights,
     const std::string& name,
-    bool normalize_before_fusion) {
+    bool normalize_before_fusion,
+    bool normalize_after_fusion,
+    bool root_after_fusion) {
 
     std::vector<std::unique_ptr<IPatchDescriptorExtractor>> components;
     components.reserve(component_types.size());
@@ -64,7 +66,8 @@ std::unique_ptr<IPatchDescriptorExtractor> PatchDescriptorFactory::createFusion(
     }
 
     return std::make_unique<PatchFusionExtractor>(
-        std::move(components), method, weights, name, normalize_before_fusion);
+        std::move(components), method, weights, name,
+        normalize_before_fusion, normalize_after_fusion, root_after_fusion);
 }
 
 std::unique_ptr<IPatchDescriptorExtractor> PatchDescriptorFactory::createFusion(
@@ -72,7 +75,9 @@ std::unique_ptr<IPatchDescriptorExtractor> PatchDescriptorFactory::createFusion(
     const std::string& method_name,
     const std::vector<float>& weights,
     const std::string& name,
-    bool normalize_before_fusion) {
+    bool normalize_before_fusion,
+    bool normalize_after_fusion,
+    bool root_after_fusion) {
 
     std::vector<std::unique_ptr<IPatchDescriptorExtractor>> components;
     components.reserve(component_names.size());
@@ -84,7 +89,8 @@ std::unique_ptr<IPatchDescriptorExtractor> PatchDescriptorFactory::createFusion(
     PatchFusionMethod method = stringToFusionMethod(method_name);
 
     return std::make_unique<PatchFusionExtractor>(
-        std::move(components), method, weights, name, normalize_before_fusion);
+        std::move(components), method, weights, name,
+        normalize_before_fusion, normalize_after_fusion, root_after_fusion);
 }
 
 bool PatchDescriptorFactory::isSupported(DescriptorType type) {

@@ -2,7 +2,7 @@
 # Run: ./patch_benchmark ../config/patch_benchmarks/baselines/sosnet_baseline.yaml
 
 experiment:
-  name: "sosnet_baseline_color"
+3  name: "sosnet_baseline_color_v2"
   description: "SOSNet CNN baseline on color HPatches patches"
 
 patches:

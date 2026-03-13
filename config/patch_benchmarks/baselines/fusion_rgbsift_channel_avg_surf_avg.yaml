@@ -1,6 +1,6 @@
 # RGBSIFT_CHANNEL_AVG + SURF AVG Fusion
 experiment:
-  name: "fusion_rgbsift_channel_avg_surf_avg"
+  name: "fusion_rgbsift_channel_avg_surf_avg_v2"
   description: "RGBSIFT_CHANNEL_AVG + SURF avg fusion"
 
 patches:

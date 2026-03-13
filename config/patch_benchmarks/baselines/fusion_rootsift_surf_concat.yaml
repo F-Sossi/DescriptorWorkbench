@@ -1,6 +1,6 @@
 # RootSIFT + SURF CONCAT Fusion
 experiment:
-  name: "fusion_rootsift_surf_concat"
+  name: "fusion_rootsift_surf_concat_v2"
   description: "RootSIFT + SURF concat fusion"
 
 patches:

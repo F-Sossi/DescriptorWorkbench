@@ -5,7 +5,7 @@
 # This is the pyramid-aware implementation matching the full image pipeline.
 
 experiment:
-  name: "dspsift_baseline_color"
+  name: "dspsift_baseline_color_v2"
   description: "DSPSIFT V2 baseline on color HPatches patches"
 
 patches:
@@ -44,7 +44,6 @@ descriptors:
   - name: "dspsift_v2"
     type: "dspsift_v2"
     use_color: false
-    patch_keypoint_size: 12.26
     pooling_aggregation: "max"
     normalize_after_pooling: true
     norm_type: "l2"

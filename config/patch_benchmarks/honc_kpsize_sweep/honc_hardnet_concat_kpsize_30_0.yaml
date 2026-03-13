@@ -1,0 +1,36 @@
+# HoNC+HardNet concat fusion - keypoint size sweep: honc_kp_size=30.0
+experiment:
+  name: "fusion_honc_hardnet_concat_kpsize_30.0"
+  description: "HoNC(kp=30.0) + HardNet concat fusion"
+
+patches:
+  path: "../hpatches-release-rebuilt-color/"
+  scenes: []
+  color: true
+  difficulty: { easy: true, hard: true, tough: true }
+
+tasks:
+  mode: "paper"
+  task_source: "csv"
+  task_set: "hpatches_color_v1"
+  task_split: "full"
+  tasks_dir: "../config/patch_benchmarks/tasks/color_tasks"
+  matching: { enabled: true }
+  verification: { enabled: true, num_positives: 200000, num_negatives: 1000000, negative_source: "both" }
+  retrieval: { enabled: true, num_queries: 10000, num_distractors: 20000 }
+  preload_descriptors: true
+  preload_scope: "tasks"
+  store_descriptors_to_db: false
+  use_cached_descriptors: false
+  random_seed: 1337
+
+descriptors:
+  - name: "honc_hardnet_concat_kp30_0"
+    type: "fusion"
+    components: ["honc", "hardnet"]
+    method: "concatenate"
+    normalize_before_fusion: true
+    patch_keypoint_size: 30.0
+
+performance: { num_threads: 12, verbose: true }
+output: { save_to_database: true, print_results: true }

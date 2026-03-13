@@ -1,6 +1,6 @@
 # SIFT + SURF AVG Fusion
 experiment:
-  name: "fusion_sift_surf_avg"
+  name: "fusion_sift_surf_avg_v2"
   description: "SIFT + SURF avg fusion"
 
 patches:

@@ -1,6 +1,6 @@
 # RootSIFT + RGBSIFT CONCAT Fusion
 experiment:
-  name: "fusion_rootsift_rgbsift_concat"
+  name: "fusion_rootsift_rgbsift_concat_v2"
   description: "RootSIFT + RGBSIFT concat fusion"
 
 patches:

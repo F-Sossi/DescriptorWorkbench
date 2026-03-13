@@ -2,7 +2,7 @@
 # Run: ./patch_benchmark ../config/patch_benchmarks/baselines/fusion_rgbsift_hardnet_concat.yaml
 
 experiment:
-  name: "fusion_rgbsift_hardnet_concat"
+  name: "fusion_rgbsift_hardnet_concat_v3"
   description: "RGBSIFT + HardNet concatenate fusion on color HPatches patches"
 
 patches:
@@ -44,6 +44,7 @@ descriptors:
       - "rgbsift"
       - "hardnet"
     method: "concatenate"
+    normalize_before_fusion: true
 
 performance:
   num_threads: 12

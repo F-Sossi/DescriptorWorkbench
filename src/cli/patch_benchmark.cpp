@@ -59,6 +59,8 @@ struct DescriptorConfig {
     bool use_color_specified = false;
     bool scales_specified = false;
     bool normalize_before_fusion = false;
+    bool normalize_after_fusion = false;
+    bool root_after_fusion = false;
     thesis_project::DescriptorParams params;
 
     bool isFusion() const {
@@ -227,6 +229,18 @@ std::string toLowerCopy(const std::string& input) {
     std::transform(value.begin(), value.end(), value.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return value;
+}
+
+thesis_project::benchmark::PatchMatchingMethod parseMatchingMethod(const std::string& str) {
+    std::string lower = toLowerCopy(str);
+    if (lower == "ratio_test" || lower == "ratio" || lower == "snn") {
+        return thesis_project::benchmark::PatchMatchingMethod::RATIO_TEST;
+    }
+    if (lower == "manual" || lower == "manual_nn" || lower == "loop") {
+        return thesis_project::benchmark::PatchMatchingMethod::MANUAL_NN;
+    }
+    // Default to nearest neighbor (cv::BFMatcher)
+    return thesis_project::benchmark::PatchMatchingMethod::NEAREST_NEIGHBOR;
 }
 
 std::vector<std::string> splitCsvLine(const std::string& line) {
@@ -497,6 +511,12 @@ DescriptorConfig parseDescriptorConfig(const YAML::Node& node) {
     if (node["normalize_before_fusion"]) {
         desc.normalize_before_fusion = node["normalize_before_fusion"].as<bool>();
     }
+    if (node["normalize_after_fusion"]) {
+        desc.normalize_after_fusion = node["normalize_after_fusion"].as<bool>();
+    }
+    if (node["root_after_fusion"]) {
+        desc.root_after_fusion = node["root_after_fusion"].as<bool>();
+    }
 
     if (node["weights"]) {
         if (!node["weights"].IsSequence()) {
@@ -613,6 +633,23 @@ BenchmarkConfig loadConfig(const std::string& path) {
         }
         if (tasks["matching"]) {
             config.benchmark.matching_enabled = parseEnabled(tasks["matching"], config.benchmark.matching_enabled);
+            if (tasks["matching"].IsMap()) {
+                const auto& matching = tasks["matching"];
+                if (matching["method"]) {
+                    config.benchmark.matching.method = parseMatchingMethod(matching["method"].as<std::string>());
+                }
+                if (matching["ratio_threshold"]) {
+                    config.benchmark.matching.ratio_threshold = matching["ratio_threshold"].as<float>();
+                }
+                if (matching["norm"]) {
+                    std::string norm_str = toLowerCopy(matching["norm"].as<std::string>());
+                    if (norm_str == "l1") {
+                        config.benchmark.matching.norm_type = cv::NORM_L1;
+                    } else {
+                        config.benchmark.matching.norm_type = cv::NORM_L2;
+                    }
+                }
+            }
         }
         if (tasks["verification"]) {
             const auto& ver = tasks["verification"];
@@ -796,7 +833,9 @@ int main(int argc, char* argv[]) {
                         desc_config.method,
                         desc_config.weights,
                         desc_config.name,
-                        desc_config.normalize_before_fusion);
+                        desc_config.normalize_before_fusion,
+                        desc_config.normalize_after_fusion,
+                        desc_config.root_after_fusion);
                 } else {
                     extractor = PatchDescriptorFactory::create(desc_config.type);
                     if (!desc_config.name.empty()) {
@@ -870,6 +909,10 @@ int main(int argc, char* argv[]) {
                         exp_config.parameters["components"] = joinStrings(desc_config.components, "+");
                         exp_config.parameters["normalize_before_fusion"] =
                             desc_config.normalize_before_fusion ? "true" : "false";
+                        exp_config.parameters["normalize_after_fusion"] =
+                            desc_config.normalize_after_fusion ? "true" : "false";
+                        exp_config.parameters["root_after_fusion"] =
+                            desc_config.root_after_fusion ? "true" : "false";
                         if (!desc_config.weights.empty()) {
                             std::vector<std::string> weight_strings;
                             weight_strings.reserve(desc_config.weights.size());

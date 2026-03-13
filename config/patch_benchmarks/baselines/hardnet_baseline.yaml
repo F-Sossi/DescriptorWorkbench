@@ -2,7 +2,7 @@
 # Run: ./patch_benchmark ../config/patch_benchmarks/baselines/hardnet_baseline.yaml
 
 experiment:
-  name: "hardnet_baseline_color"
+  name: "hardnet_baseline_color_v2"
   description: "HardNet CNN baseline on color HPatches patches"
 
 patches:

@@ -2,7 +2,7 @@
 # Run: ./patch_benchmark ../config/patch_benchmarks/baselines/rgbsift_avg_baseline.yaml
 
 experiment:
-  name: "rgbsift_avg_baseline_color"
+  name: "rgbsift_avg_baseline_color_v2"
   description: "RGBSIFT channel average baseline on color HPatches patches"
 
 patches:
@@ -41,7 +41,6 @@ descriptors:
   - name: "rgbsift_channel_avg"
     type: "rgbsift_channel_avg"
     use_color: true
-    patch_keypoint_size: 12.26
 
 performance:
   num_threads: 12

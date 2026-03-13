@@ -1,6 +1,6 @@
 # SURF + SOSNET CONCAT Fusion
 experiment:
-  name: "fusion_surf_sosnet_concat"
+  name: "fusion_surf_sosnet_concat_v3"
   description: "SURF + SOSNET concat fusion"
 
 patches:
@@ -29,6 +29,7 @@ descriptors:
     type: "fusion"
     components: ["surf", "sosnet"]
     method: "concatenate"
+    normalize_before_fusion: true
     extended: true
 
 performance: { num_threads: 12, verbose: true }

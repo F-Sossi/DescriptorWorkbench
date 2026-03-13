@@ -1,6 +1,6 @@
 # HONC + HARDNET CONCAT Fusion
 experiment:
-  name: "fusion_honc_hardnet_concat"
+  name: "fusion_honc_hardnet_concat_v3"
   description: "HONC + HARDNET concat fusion"
 
 patches:
@@ -29,6 +29,7 @@ descriptors:
     type: "fusion"
     components: ["honc", "hardnet"]
     method: "concatenate"
+    normalize_before_fusion: true
 
 performance: { num_threads: 12, verbose: true }
 output: { save_to_database: true, print_results: true }

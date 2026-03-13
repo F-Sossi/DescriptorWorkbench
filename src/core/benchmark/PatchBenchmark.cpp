@@ -81,10 +81,6 @@ Results PatchBenchmark::run(
                 if (progress) {
                     progress(current, total, "Extracting: " + msg);
                 }
-                if (config.verbose && current % 10 == 0) {
-                    std::cout << "\n [PatchBenchmark] Extraction progress: "
-                              << current << "/" << total << std::endl;
-                }
             });
     }
 
@@ -99,6 +95,10 @@ Results PatchBenchmark::run(
     }
 
     // PHASE 3: Run tasks
+    if (config.verbose) {
+        std::cout << std::endl;  // Newline after carriage-return progress output
+    }
+
     if (config.matching_enabled) {
         if (config.verbose) {
             std::cout << "[PatchBenchmark] Running matching task..." << std::endl;
@@ -114,7 +114,7 @@ Results PatchBenchmark::run(
         mergeMatchingResults(results, matching);
 
         if (config.verbose) {
-            std::cout << "[PatchBenchmark] Matching mAP: "
+            std::cout << "\n[PatchBenchmark] Matching mAP: "
                       << (results.mAP_overall * 100.0f) << "%" << std::endl;
         }
     }

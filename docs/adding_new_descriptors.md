@@ -371,6 +371,31 @@ Different descriptors have different keypoint requirements:
 
 Add validation in your wrapper's `extract()` method to ensure keypoint compatibility.
 
+### Patch Pipeline: Keypoint Size Matters
+
+When adding a descriptor to the **patch benchmark pipeline** (`PatchTraditionalExtractor`), you must
+derive the correct `keypoint_size` for 65x65 patches. Each descriptor has its own internal
+magnification — using the wrong size causes the descriptor to sample beyond the patch boundary,
+silently producing degraded results from border padding artifacts.
+
+**How to derive the correct value:**
+
+1. Find how your descriptor maps `KeyPoint.size` to its internal sampling window in the OpenCV
+   source code (or the library you are wrapping).
+2. Compute the maximum `KeyPoint.size` such that the sampling window fits within 65 pixels
+   (i.e., the window half-extent must be ≤ 32.5px from center).
+
+**Known correct values** (derived from OpenCV source and the official HPatches benchmark):
+
+| Descriptor | Keypoint Size | Source / Derivation |
+|------------|--------------|---------------------|
+| **SIFT** | 12.26 | Official HPatches benchmark: `size = 65 / 5.303` ([`references/hpatches-benchmark/python/extract_opencv_sift.py`](../references/hpatches-benchmark/python/extract_opencv_sift.py), line 47). The constant 5.303 maps OpenCV SIFT's keypoint size to a sampling region that fills the 65x65 patch. |
+| **SURF** | 23.21 | From OpenCV SURF source (`opencv_contrib/modules/xfeatures2d/src/surf.cpp`): `s = size * 1.2 / 9.0`, window = `(PATCH_SZ+1) * s = 21s = 2.8 * size`. Solving `2.8 * size = 65` gives `size = 23.21`. |
+
+**For new descriptors**, you must perform a similar analysis. Do NOT guess or reuse another
+descriptor's value — the internal magnification factors differ between descriptors. See
+`src/core/patches/PatchTraditionalExtractor.cpp` for the implementation and derivation comments.
+
 ### Error Handling
 
 Always include error handling in your descriptor wrapper:

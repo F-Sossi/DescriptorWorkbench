@@ -1,6 +1,6 @@
 # RootSIFT + SOSNET CONCAT Fusion
 experiment:
-  name: "fusion_rootsift_sosnet_concat"
+  name: "fusion_rootsift_sosnet_concat_v3"
   description: "RootSIFT + SOSNET concat fusion"
 
 patches:
@@ -29,6 +29,7 @@ descriptors:
     type: "fusion"
     components: ["sift", "sosnet"]
     method: "concatenate"
+    normalize_before_fusion: true
     rooting_stage: "after_pooling"  # Apply RootSIFT transformation
 
 performance: { num_threads: 12, verbose: true }

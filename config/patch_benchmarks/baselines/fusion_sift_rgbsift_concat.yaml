@@ -1,6 +1,6 @@
 # SIFT + RGBSIFT Concatenate Fusion
 experiment:
-  name: "fusion_sift_rgbsift_concat"
+  name: "fusion_sift_rgbsift_concat_v2"
   description: "SIFT + RGBSIFT concatenate fusion"
 
 patches:

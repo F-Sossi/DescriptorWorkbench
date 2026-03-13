@@ -1,6 +1,6 @@
 # SURF + HARDNET CONCAT Fusion
 experiment:
-  name: "fusion_surf_hardnet_concat"
+  name: "fusion_surf_hardnet_concat_v3"
   description: "SURF + HARDNET concat fusion"
 
 patches:
@@ -29,6 +29,7 @@ descriptors:
     type: "fusion"
     components: ["surf", "hardnet"]
     method: "concatenate"
+    normalize_before_fusion: true
     extended: true
 
 performance: { num_threads: 12, verbose: true }
